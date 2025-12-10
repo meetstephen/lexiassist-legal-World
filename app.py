@@ -19,8 +19,8 @@ st.set_page_config(
     layout="wide",
     initial_sidebar_state="expanded",
     menu_items={
-        'Get Help': 'https://github.com/meetstephen/lexiassist-legal-World.git',
-        'Report a bug': 'https://github.com/meetstephen/lexi-assist/issues',
+        'Get Help': 'https://github.com/yourusername/lexi-assist',
+        'Report a bug': 'https://github.com/yourusername/lexi-assist/issues',
         'About': '# LexiAssist\nAI-Powered Legal Practice Management System for Nigerian Lawyers'
     }
 )
@@ -805,7 +805,7 @@ def configure_gemini(api_key: str) -> bool:
     try:
         genai.configure(api_key=api_key)
         # Test the configuration
-        model = genai.GenerativeModel('gemini-1.5-flash')
+        model = genai.GenerativeModel('gemini-1.5-flash-001')
         response = model.generate_content("Say 'API configured successfully' in one line.")
         st.session_state.api_configured = True
         st.session_state.api_key = api_key
@@ -841,7 +841,7 @@ Task Type: {TASK_TYPES.get(task_type, {}).get('label', 'General Query')}
 User Request: {prompt}"""
     
     try:
-        model = genai.GenerativeModel('gemini-1.5-flash')
+        model = genai.GenerativeModel('gemini-1.5-flash-001')
         response = model.generate_content(
             system_prompt,
             generation_config=genai.types.GenerationConfig(
@@ -903,7 +903,7 @@ Please provide detailed legal research including:
 Format your response with clear headings and subheadings. If you are uncertain about specific case citations or statute numbers, clearly state this and provide the general principle instead."""
     
     try:
-        model = genai.GenerativeModel('gemini-1.5-flash')
+        model = genai.GenerativeModel('gemini-1.5-flash-001')
         response = model.generate_content(
             research_prompt,
             generation_config=genai.types.GenerationConfig(
@@ -1195,7 +1195,7 @@ def render_sidebar():
         - 🎈 Streamlit
         - 🐍 Python
         
-        © 2025 LexiAssist
+        © 2024 LexiAssist
         """)
 
 # ============================================================
@@ -1869,4 +1869,3 @@ def main():
 # ============================================================
 if __name__ == "__main__":
     main()
-
