@@ -19,8 +19,8 @@ st.set_page_config(
     layout="wide",
     initial_sidebar_state="expanded",
     menu_items={
-        'Get Help': 'https://github.com/yourusername/lexi-assist',
-        'Report a bug': 'https://github.com/yourusername/lexi-assist/issues',
+        'Get Help': 'https://github.com/meetstephen/lexiassist-legal-World.git',
+        'Report a bug': 'https://github.com/meetstephen/lexi-assist/issues',
         'About': '# LexiAssist\nAI-Powered Legal Practice Management System for Nigerian Lawyers'
     }
 )
@@ -1869,3 +1869,4 @@ def main():
 # ============================================================
 if __name__ == "__main__":
     main()
+
