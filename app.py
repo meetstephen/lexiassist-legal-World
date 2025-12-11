@@ -11,32 +11,6 @@ import uuid
 import io
 import os
 
-def check_models():
-    try:
-        # Assuming the key is set via secrets/environment
-        # Get the list of models
-        models = genai.list_models()
-        
-        # Print a success message and list the models
-        st.success("API Key is working! Available Models:")
-        available_models = [m.name for m in models if 'generateContent' in m.supported_generation_methods]
-        
-        for model_name in available_models:
-            st.code(model_name.replace("models/", ""))
-            
-    except Exception as e:
-        st.error(f"Error checking models: {e}")
-
-# Automatically configure Gemini if secret is available
-if "GEMINI_API_KEY" in st.secrets:
-    os.environ["GOOGLE_API_KEY"] = st.secrets["GEMINI_API_KEY"]
-    genai.configure()
-    st.session_state.api_configured = True
-    # Optionally call check_models() here if you want to run it automatically
-    # check_models()
-else:
-    st.session_state.api_configured = False
-
 # ============================================================
 # PAGE CONFIGURATION
 # ============================================================
@@ -832,7 +806,7 @@ def configure_gemini(api_key: str) -> bool:
     try:
         genai.configure(api_key=api_key)
         # Test the configuration
-        model = genai.GenerativeModel('gemini-1.5-flash')
+        model = genai.GenerativeModel('gemini-2.5-flash')
         response = model.generate_content("Say 'API configured successfully' in one line.")
         st.session_state.api_configured = True
         st.session_state.api_key = api_key
@@ -868,7 +842,7 @@ Task Type: {TASK_TYPES.get(task_type, {}).get('label', 'General Query')}
 User Request: {prompt}"""
     
     try:
-        model = genai.GenerativeModel('gemini-1.5-flash')
+        model = genai.GenerativeModel('gemini-2.5-flash')
         response = model.generate_content(
             system_prompt,
             generation_config=genai.types.GenerationConfig(
@@ -930,7 +904,7 @@ Please provide detailed legal research including:
 Format your response with clear headings and subheadings. If you are uncertain about specific case citations or statute numbers, clearly state this and provide the general principle instead."""
     
     try:
-        model = genai.GenerativeModel('gemini-1.5-flash')
+        model = genai.GenerativeModel('gemini-2.5-flash')
         response = model.generate_content(
             research_prompt,
             generation_config=genai.types.GenerationConfig(
@@ -1135,28 +1109,11 @@ def render_sidebar():
     """Render the sidebar."""
     with st.sidebar:
         st.markdown("### ⚙️ Configuration")
-        # API Key Configuration
-        st.markdown("#### 🔑 Gemini API Key")
-        api_key = st.text_input(
-            "Enter your API key",
-            type="password",
-            value=st.session_state.api_key,
-            help="Get your API key from https://makersuite.google.com/app/apikey"
-        )
-        if st.button("Configure API", type="primary"):
-            if api_key:
-                with st.spinner("Configuring API..."):
-                    if configure_gemini(api_key):
-                        st.success("✅ API configured successfully!")
-                        check_models(api_key)  # Call the temporary function here
-                    else:
-                        st.error("❌ Failed to configure API")
-            else:
-                st.warning("Please enter an API key")
+        # No user input for API key; using secrets
         if st.session_state.api_configured:
             st.success("✅ API is configured")
         else:
-            st.warning("⚠️ API not configured")
+            st.warning("⚠️ API not configured. Please set GEMINI_API_KEY in secrets.")
         # ============================================================
         # CUSTOM CSS STYLING
         # ============================================================
@@ -1165,7 +1122,7 @@ def render_sidebar():
         1. Go to [Google AI Studio](https://makersuite.google.com/app/apikey)
         2. Sign in with Google
         3. Create an API key
-        4. Paste it above
+        4. Add it to your Streamlit secrets
         """)
         st.divider()
         # Data Export/Import
@@ -1888,7 +1845,7 @@ def main():
     <div style="text-align: center; color: #64748b; font-size: 0.875rem;">
         <p>⚖️ <strong>LexiAssist</strong> - AI-Powered Legal Practice Management System</p>
         <p>Designed for Nigerian Lawyers | Powered by Google Gemini</p>
-        <p>© 2026 LexiAssist. All rights reserved.</p>
+        <p>© 2025 LexiAssist. All rights reserved.</p>
     </div>
     """, unsafe_allow_html=True)
 
