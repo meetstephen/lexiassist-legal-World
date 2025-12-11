@@ -11,11 +11,9 @@ import uuid
 import io
 import os
 
-def check_models(api_key):
+def check_models():
     try:
-        # Client initialized with the user's API key
-        genai.configure(api_key=api_key)
-        
+        # Assuming the key is set via secrets/environment
         # Get the list of models
         models = genai.list_models()
         
@@ -28,6 +26,16 @@ def check_models(api_key):
             
     except Exception as e:
         st.error(f"Error checking models: {e}")
+
+# Automatically configure Gemini if secret is available
+if "GEMINI_API_KEY" in st.secrets:
+    os.environ["GOOGLE_API_KEY"] = st.secrets["GEMINI_API_KEY"]
+    genai.configure()
+    st.session_state.api_configured = True
+    # Optionally call check_models() here if you want to run it automatically
+    # check_models()
+else:
+    st.session_state.api_configured = False
 
 # ============================================================
 # PAGE CONFIGURATION
@@ -1880,7 +1888,7 @@ def main():
     <div style="text-align: center; color: #64748b; font-size: 0.875rem;">
         <p>⚖️ <strong>LexiAssist</strong> - AI-Powered Legal Practice Management System</p>
         <p>Designed for Nigerian Lawyers | Powered by Google Gemini</p>
-        <p>© 2025 LexiAssist. All rights reserved.</p>
+        <p>© 2026 LexiAssist. All rights reserved.</p>
     </div>
     """, unsafe_allow_html=True)
 
