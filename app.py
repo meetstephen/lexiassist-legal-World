@@ -11,24 +11,6 @@ import uuid
 import io
 import os
 
-def check_models(api_key):
-    try:
-        # Client initialized with the user's API key
-        genai.configure(api_key=api_key)
-        
-        # Get the list of models
-        models = genai.list_models()
-        
-        # Print a success message and list the models
-        st.success("API Key is working! Available Models:")
-        available_models = [m.name for m in models if 'generateContent' in m.supported_generation_methods]
-        
-        for model_name in available_models:
-            st.code(model_name.replace("models/", ""))
-            
-    except Exception as e:
-        st.error(f"Error checking models: {e}")
-
 # ============================================================
 # PAGE CONFIGURATION
 # ============================================================
@@ -43,6 +25,47 @@ st.set_page_config(
         'About': '# LexiAssist\nAI-Powered Legal Practice Management System for Nigerian Lawyers'
     }
 )
+
+# ============================================================
+# HELPER: API CHECKER
+# ============================================================
+def check_models(api_key):
+    """
+    Robust model checker that forces REST transport to avoid
+    Streamlit Cloud gRPC timeout issues.
+    """
+    try:
+        # CRITICAL FIX: transport='rest' helps on Streamlit Cloud
+        genai.configure(api_key=api_key, transport='rest')
+        
+        # Get the list of models
+        models = genai.list_models()
+        
+        # Print a success message and list the models
+        st.success("API Key is working! Connection established via REST.")
+        
+        # Filter for generateContent supported models
+        available_models = []
+        for m in models:
+            if 'generateContent' in m.supported_generation_methods:
+                available_models.append(m.name)
+        
+        if not available_models:
+            st.warning("Key works, but no 'generateContent' models found. Check API permissions.")
+        else:
+            with st.expander("View Available Models"):
+                for model_name in available_models:
+                    st.code(model_name.replace("models/", ""))
+            
+    except Exception as e:
+        st.error(f"Error checking models: {e}")
+        # Helpful debugging info for the user
+        if "403" in str(e):
+            st.warning("Error 403: This usually means the API key is invalid or lacks permission.")
+        elif "429" in str(e):
+            st.warning("Error 429: You have exceeded the rate limit or quota.")
+        elif "503" in str(e):
+            st.warning("Error 503: The service is temporarily overloaded.")
 
 # ============================================================
 # CUSTOM CSS STYLING
@@ -822,15 +845,20 @@ init_session_state()
 def configure_gemini(api_key: str) -> bool:
     """Configure the Gemini API."""
     try:
-        genai.configure(api_key=api_key)
-        # Test the configuration
+        # CRITICAL FIX: transport='rest' for Streamlit Cloud
+        genai.configure(api_key=api_key, transport='rest')
+        
+        # Test the configuration with a lightweight model call
         model = genai.GenerativeModel('gemini-1.5-flash')
         response = model.generate_content("Say 'API configured successfully' in one line.")
+        
         st.session_state.api_configured = True
         st.session_state.api_key = api_key
         return True
     except Exception as e:
         st.error(f"Failed to configure API: {str(e)}")
+        if "403" in str(e):
+             st.warning("Hint: Your API key might be invalid or copied with spaces. Check Google AI Studio.")
         return False
 
 def generate_legal_response(prompt: str, task_type: str) -> str:
@@ -860,6 +888,7 @@ Task Type: {TASK_TYPES.get(task_type, {}).get('label', 'General Query')}
 User Request: {prompt}"""
     
     try:
+        # Ensure we are still using REST transport
         model = genai.GenerativeModel('gemini-1.5-flash')
         response = model.generate_content(
             system_prompt,
@@ -922,6 +951,7 @@ Please provide detailed legal research including:
 Format your response with clear headings and subheadings. If you are uncertain about specific case citations or statute numbers, clearly state this and provide the general principle instead."""
     
     try:
+        # Ensure we are still using REST transport
         model = genai.GenerativeModel('gemini-1.5-flash')
         response = model.generate_content(
             research_prompt,
@@ -1129,18 +1159,21 @@ def render_sidebar():
         st.markdown("### ⚙️ Configuration")
         # API Key Configuration
         st.markdown("#### 🔑 Gemini API Key")
-        api_key = st.text_input(
+        api_key_input = st.text_input(
             "Enter your API key",
             type="password",
             value=st.session_state.api_key,
-            help="Get your API key from https://makersuite.google.com/app/apikey"
+            help="Get your API key from https://aistudio.google.com/app/apikey"
         )
+        
         if st.button("Configure API", type="primary"):
-            if api_key:
-                with st.spinner("Configuring API..."):
-                    if configure_gemini(api_key):
+            if api_key_input:
+                # Strip spaces from the key which is a common copy-paste error
+                clean_key = api_key_input.strip()
+                with st.spinner("Configuring API (Transport: REST)..."):
+                    if configure_gemini(clean_key):
                         st.success("✅ API configured successfully!")
-                        check_models(api_key)  # Call the temporary function here
+                        check_models(clean_key)  # Call the temporary function here
                     else:
                         st.error("❌ Failed to configure API")
             else:
@@ -1154,7 +1187,7 @@ def render_sidebar():
         # ============================================================
         st.markdown("""
         **Get your free API key:**
-        1. Go to [Google AI Studio](https://makersuite.google.com/app/apikey)
+        1. Go to [Google AI Studio](https://aistudio.google.com/app/apikey)
         2. Sign in with Google
         3. Create an API key
         4. Paste it above
@@ -1207,7 +1240,7 @@ def render_sidebar():
         # About
         st.markdown("#### ℹ️ About")
         st.markdown("""
-        **LexiAssist v1.0**
+        **LexiAssist v1.1**
         AI-Powered Legal Practice Management System designed for Nigerian Lawyers.
         
         Built with:
@@ -1215,7 +1248,7 @@ def render_sidebar():
         - 🎈 Streamlit
         - 🐍 Python
         
-        © 2024 LexiAssist
+        © 2026 LexiAssist
         """)
 
 # ============================================================
