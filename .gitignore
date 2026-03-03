@@ -1,65 +1,59 @@
-# Python
+# ── Python ───────────────────────────────────────────────────
 __pycache__/
 *.py[cod]
 *$py.class
 *.so
-.Python
-build/
-develop-eggs/
-dist/
-downloads/
-eggs/
-.eggs/
-lib/
-lib64/
-parts/
-sdist/
-var/
-wheels/
-*.egg-info/
-.installed.cfg
 *.egg
+*.egg-info/
+dist/
+build/
+*.whl
 
-# Virtual Environment
+# ── Virtual Environments ─────────────────────────────────────
+.venv/
 venv/
 env/
 ENV/
-.venv
 
-# IDE
+# ── IDE & Editors ────────────────────────────────────────────
 .vscode/
+!.vscode/settings.json
+!.vscode/extensions.json
 .idea/
 *.swp
 *.swo
 *~
 .DS_Store
-
-# Streamlit
-.streamlit/secrets.toml
-.streamlit/config.toml
-
-# Environment variables
-.env
-.env.local
-
-# Logs
-*.log
-
-# Database
-*.db
-*.sqlite
-*.sqlite3
-
-# API Keys (never commit these!)
-*api_key*
-*API_KEY*
-secrets.toml
-
-# Temporary files
-*.tmp
-*.temp
-.cache/
-
-# OS
 Thumbs.db
-.DS_Store
+
+# ── Streamlit ────────────────────────────────────────────────
+.streamlit/secrets.toml
+
+# ── Environment & Secrets ────────────────────────────────────
+.env
+*.pem
+*.key
+
+# ── Data & Backups ───────────────────────────────────────────
+*.json
+!.devcontainer/devcontainer.json
+data/
+backups/
+lexiassist_backup_*.json
+
+# ── Logs ─────────────────────────────────────────────────────
+*.log
+logs/
+
+# ── Testing ──────────────────────────────────────────────────
+.pytest_cache/
+htmlcov/
+.coverage
+.coverage.*
+.tox/
+.nox/
+
+# ── Misc ─────────────────────────────────────────────────────
+*.bak
+*.tmp
+
