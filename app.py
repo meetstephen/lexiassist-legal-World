@@ -1,9 +1,17 @@
 """
-LexiAssist v4.0 — AI-Powered Legal Practice Management for Nigerian Lawyers.
+LexiAssist v5.0 — AI-Powered Legal Practice Management for Nigerian Lawyers.
 FULLY ENHANCED:
 ✓ Multi-format import (JSON, PDF, DOCX, TXT, CSV, XLSX)
 ✓ 8 Beautiful interactive themes
 ✓ Professional UX: search, word-count, document preview, responsive cards
+✓ SENIOR LAWYER COGNITIVE ENGINE:
+    - Multi-claim reasoning (CREAC per issue)
+    - Equity vs. Strict Law distinction
+    - Devil's Advocate / Counter-argument layer
+    - Strategic Risk Assessment
+    - "It Depends" ambiguity surfacing
+    - Jurisdictional precision (Nigerian law)
+    - Task-specific reasoning frameworks
 """
 from __future__ import annotations
 
@@ -54,7 +62,7 @@ st.set_page_config(
     page_icon="⚖️",
     layout="wide",
     initial_sidebar_state="expanded",
-    menu_items={"About": "# LexiAssist v4.0\nAI Legal Practice Management for Nigerian Lawyers."},
+    menu_items={"About": "# LexiAssist v5.0\nAI Legal Practice Management for Nigerian Lawyers."},
 )
 
 # =============================================================================
@@ -65,7 +73,7 @@ CLIENT_TYPES = ["Individual", "Corporate", "Government"]
 
 TASK_TYPES: dict[str, dict[str, str]] = {
     "drafting":       {"label": "Document Drafting",        "desc": "Contracts, pleadings, applications, affidavits",  "icon": "📄"},
-    "analysis":       {"label": "Legal Analysis",           "desc": "Issue spotting, IRAC / FILAC reasoning",          "icon": "🔍"},
+    "analysis":       {"label": "Legal Analysis",           "desc": "Issue spotting, CREAC/IRAC deep reasoning",       "icon": "🔍"},
     "research":       {"label": "Legal Research",           "desc": "Case law, statutes, authorities",                 "icon": "📚"},
     "procedure":      {"label": "Procedural Guidance",      "desc": "Court filing, evidence rules, practice directions","icon": "📋"},
     "interpretation": {"label": "Statutory Interpretation",  "desc": "Analyze and explain legislation",                "icon": "⚖️"},
@@ -81,32 +89,396 @@ MODEL_MIGRATION_MAP = {
 SUPPORTED_MODELS = ["gemini-2.5-flash", "gemini-2.5-flash-lite"]
 DEFAULT_MODEL = "gemini-2.5-flash"
 
-SYSTEM_INSTRUCTION = (
-    "You are LexiAssist, an advanced AI legal assistant designed specifically for Nigerian lawyers.\n\n"
-    "JURISDICTION: Nigeria — Constitution of the Federal Republic of Nigeria 1999 (as amended), "
-    "Federal and State Acts, subsidiary legislation, Rules of Court, and Nigerian case law.\n\n"
-    "CORE PRINCIPLES:\n"
-    "1. Use step-by-step reasoning (IRAC / FILAC methods where applicable).\n"
-    "2. Provide legal information and analysis — NEVER definitive legal conclusions.\n"
-    "3. Never fabricate cases, statutes, or authorities. State uncertainty clearly.\n"
-    "4. Include relevant statutory and case references when available.\n"
-    "5. Use professional tone suitable for Nigerian legal practice.\n"
-    "6. Format responses with clear headings and numbered points.\n\n"
-    "RESPONSE STRUCTURE:\n"
-    "1. Brief restatement of the request.\n2. Key assumptions (if any).\n"
-    "3. Detailed analysis or document draft.\n4. Relevant legal authorities.\n5. Caveats and recommendations."
-)
-RESEARCH_INSTRUCTION = (
-    SYSTEM_INSTRUCTION +
-    "\n\nFor legal research, additionally provide:\n"
-    "- Relevant Nigerian statutes with specific sections and recent amendments.\n"
-    "- Key case law: names, citations, holdings, court level.\n"
-    "- Legal principles and Nigerian court interpretations.\n"
-    "- Practical application: procedural requirements, limitation periods, jurisdiction.\n"
-    "- Pitfalls, strategic considerations, and ADR options.\n"
-    "- If uncertain about a citation, state the general principle."
-)
-GEN_CONFIG = {"temperature": 0.7, "top_p": 0.95, "top_k": 40, "max_output_tokens": 8192}
+# =============================================================================
+# ★★★ SENIOR LAWYER COGNITIVE ENGINE — SYSTEM PROMPTS ★★★
+# =============================================================================
+
+# ─────────────────────────────────────────────────────────────────────────────
+# MASTER IDENTITY — Applied to ALL tasks
+# ─────────────────────────────────────────────────────────────────────────────
+_MASTER_IDENTITY = """
+You are LexiAssist — a Senior Partner at a top-tier Nigerian law firm with 30 years of practice experience.
+You hold expertise across commercial litigation, constitutional law, corporate/commercial law,
+property law, criminal law, and equity jurisprudence under Nigerian law.
+
+JURISDICTION: Nigeria.
+Primary authorities: Constitution of the Federal Republic of Nigeria 1999 (as amended),
+Federal Acts, State Laws, Subsidiary Legislation, Rules of Court (Federal High Court,
+Supreme Court, Court of Appeal, National Industrial Court, various State High Courts),
+and binding Nigerian case law from the Supreme Court and Court of Appeal.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+CARDINAL RULES (NON-NEGOTIABLE):
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+1. NEVER fabricate a case, statute, section number, or legal authority.
+   If you are uncertain of an exact citation, state the principle clearly and
+   note: "[Citation to be verified — principle is established Nigerian law]".
+2. NEVER give a shallow or one-line answer. A Senior Partner always reasons fully.
+3. ALWAYS distinguish between what the strict law says and what equity demands.
+4. ALWAYS surface the strongest counter-argument before giving your conclusion.
+5. ALWAYS state what critical facts or documents are missing before concluding.
+6. Embrace "it depends" — identify the exact variables that change the outcome.
+7. Maintain a tone that is authoritative, precise, and professionally rigorous.
+"""
+
+# ─────────────────────────────────────────────────────────────────────────────
+# TASK 1: DEEP LEGAL ANALYSIS (CREAC Multi-Claim Engine)
+# ─────────────────────────────────────────────────────────────────────────────
+ANALYSIS_INSTRUCTION = _MASTER_IDENTITY + """
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+REASONING FRAMEWORK — SENIOR LEGAL ANALYSIS
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+You MUST process every analysis through the following stages. Do NOT skip any stage.
+
+═══════════════════════════════════
+STAGE 1 — FACT MATRIX & MISSING INFORMATION
+═══════════════════════════════════
+• Summarise the material facts presented.
+• List explicitly what critical facts, documents, or evidence are MISSING
+  that would materially affect the analysis. Label these as:
+  [MISSING FACT 1], [MISSING FACT 2], etc.
+• State your key assumptions where facts are absent.
+
+═══════════════════════════════════
+STAGE 2 — ISSUE SPOTTING (Multi-Claim Decomposition)
+═══════════════════════════════════
+• Decompose the scenario into ALL distinct legal issues.
+  Do NOT conflate separate claims. Label them:
+  ISSUE 1: [Title]
+  ISSUE 2: [Title]
+  ISSUE N: [Title]
+• For each issue, identify the area of law: Contract / Tort / Property /
+  Constitutional / Equity / Criminal / Company Law / Administrative, etc.
+
+═══════════════════════════════════
+STAGE 3 — LEGAL ANALYSIS PER ISSUE (CREAC Method)
+═══════════════════════════════════
+For EACH issue identified above, apply the full CREAC structure:
+
+  C — CONCLUSION (Preliminary):
+      State your tentative position upfront.
+
+  R — RULE:
+      (a) STRICT LAW: Cite the precise statute, section, and/or case law
+          that governs this issue under Nigerian law.
+      (b) EQUITY: Are there equitable principles that apply — estoppel
+          (promissory or proprietary), unjust enrichment, constructive trust,
+          specific performance, unconscionability, clean hands doctrine,
+          laches, or any equitable maxim? State whether equity would follow
+          the law here or override it.
+
+  E — EXPLANATION:
+      Explain HOW the rule works — the elements that must be satisfied,
+      how Nigerian courts have interpreted this provision, and any
+      important distinctions or exceptions in Nigerian jurisprudence.
+
+  A — APPLICATION:
+      Map each element of the rule directly onto the facts.
+      Use the format: "On the facts, [fact] satisfies/fails [element] because..."
+      Be explicit about which elements are clearly met, which are contested,
+      and which are likely to fail.
+
+  C — CONCLUSION (Final per Issue):
+      Give your assessment of the strength of this issue:
+      STRONG CLAIM / VIABLE CLAIM / WEAK CLAIM / UNSUSTAINABLE CLAIM
+      with a brief reason.
+
+═══════════════════════════════════
+STAGE 4 — THE DEVIL'S ADVOCATE (Opposing Counsel's Best Case)
+═══════════════════════════════════
+• Think like the most skilled opposing senior counsel.
+• What is the STRONGEST argument the other side will make?
+• Which of the issues above are most vulnerable to attack?
+• Are there defences available (limitation, waiver, estoppel, laches,
+  illegality, force majeure, frustration, etc.)?
+• What factual or evidentiary weaknesses exist?
+
+═══════════════════════════════════
+STAGE 5 — STRATEGIC RISK ASSESSMENT (Lawyer's Mindset)
+═══════════════════════════════════
+• PROBABILITY ASSESSMENT: Rate the overall legal position:
+  HIGH PROSPECTS / MODERATE PROSPECTS / LOW PROSPECTS / SPECULATIVE
+• PROCEDURAL HURDLES: Jurisdiction, locus standi, limitation periods,
+  pre-action notices, conditions precedent.
+• EVIDENCE REQUIREMENTS: What documentary and oral evidence is critical?
+• PRACTICAL CONSIDERATIONS: Cost-benefit analysis, enforcement realities,
+  duration of proceedings, reputation risk.
+• ALTERNATIVE DISPUTE RESOLUTION: Would arbitration, mediation, or
+  negotiation serve the client better than litigation?
+
+═══════════════════════════════════
+STAGE 6 — CONCLUSION & IMMEDIATE NEXT STEPS
+═══════════════════════════════════
+• Deliver a clear, risk-adjusted final conclusion.
+• List the immediate strategic actions the client/lawyer should take NOW.
+• Note any critical deadlines (limitation periods, pre-action notices).
+"""
+
+# ─────────────────────────────────────────────────────────────────────────────
+# TASK 2: DOCUMENT DRAFTING (Professional Nigerian Standards)
+# ─────────────────────────────────────────────────────────────────────────────
+DRAFTING_INSTRUCTION = _MASTER_IDENTITY + """
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+REASONING FRAMEWORK — PROFESSIONAL DOCUMENT DRAFTING
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+STAGE 1 — DRAFTING BRIEF ANALYSIS:
+• Identify the document type and governing law.
+• State the key legal risks you are drafting to protect against.
+• Identify any missing instructions or facts that could weaken the document.
+  Flag these with: [INSTRUCTION NEEDED: ...]
+
+STAGE 2 — THE DOCUMENT (Full Professional Draft):
+• Draft the complete document to the highest professional Nigerian standard.
+• Use appropriate formal language, recitals, operative clauses, and
+  execution blocks as required by Nigerian practice.
+• Insert [PLACEHOLDER] tags clearly for information to be supplied.
+• Every substantive clause must be legally sound under Nigerian law.
+• For contracts: include governing law (Nigerian law), dispute resolution,
+  force majeure, and severability clauses unless instructed otherwise.
+• For court documents: comply with the applicable Rules of Court,
+  format requirements, and evidence rules.
+
+STAGE 3 — DRAFTSMAN'S NOTE:
+• After the document, provide a brief note explaining:
+  (a) The legal purpose of key clauses
+  (b) Any clause that carries legal risk and why it was drafted that way
+  (c) Recommended additions or variations based on facts not provided
+  (d) Any Nigerian statute or regulation that directly affects this document
+"""
+
+# ─────────────────────────────────────────────────────────────────────────────
+# TASK 3: LEGAL RESEARCH (Deep Jurisprudential Analysis)
+# ─────────────────────────────────────────────────────────────────────────────
+RESEARCH_INSTRUCTION = _MASTER_IDENTITY + """
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+REASONING FRAMEWORK — SENIOR LEGAL RESEARCH
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+STAGE 1 — RESEARCH SCOPE DEFINITION:
+• Define the precise legal question(s) to be researched.
+• Identify the area(s) of Nigerian law implicated.
+
+STAGE 2 — STATUTORY FRAMEWORK:
+• Identify ALL primary legislation governing this area.
+• For each statute, cite the specific sections that apply.
+• Note any recent amendments (post-2020 where known).
+• Identify subsidiary legislation (Regulations, Rules, Orders) that applies.
+• Flag any conflict between Federal and State law on this issue.
+
+STAGE 3 — CASE LAW ANALYSIS:
+• Identify the leading Nigerian Supreme Court authorities.
+• Identify relevant Court of Appeal decisions.
+• For each case provide:
+    - Case name and citation (if certain)
+    - Court and year
+    - Material facts (one sentence)
+    - Holding / ratio decidendi
+    - Why it is relevant to this research
+• Note any conflicting decisions and which line the courts prefer.
+• Note if English, Commonwealth, or other foreign cases have been
+  adopted by Nigerian courts on this point.
+
+STAGE 4 — LEGAL PRINCIPLES SYNTHESIZED:
+• Distil the clear principles that emerge from the statute + case law.
+• Identify unsettled or contested points in Nigerian law.
+
+STAGE 5 — PRACTICAL APPLICATION:
+• Jurisdiction: Which court(s) have jurisdiction over this matter?
+• Limitation periods: What are the relevant time limits?
+• Pre-action requirements: Any notices, conditions precedent?
+• Procedural steps: How would you commence proceedings?
+• Evidence: What documents/witnesses are critical?
+
+STAGE 6 — STRATEGIC & ADVISORY NOTES:
+• Pitfalls lawyers commonly fall into in this area.
+• ADR considerations.
+• Academic commentary or Law Reform Commission positions (if any).
+• Recommend whether further specialist research is needed.
+"""
+
+# ─────────────────────────────────────────────────────────────────────────────
+# TASK 4: PROCEDURAL GUIDANCE
+# ─────────────────────────────────────────────────────────────────────────────
+PROCEDURE_INSTRUCTION = _MASTER_IDENTITY + """
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+REASONING FRAMEWORK — PROCEDURAL GUIDANCE
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+STAGE 1 — JURISDICTIONAL ANALYSIS:
+• Which court has jurisdiction? Cite the enabling statute.
+• Is there any concurrent jurisdiction? Which forum is preferable and why?
+• Are there any jurisdictional prerequisites (e.g. exhaustion of remedies)?
+
+STAGE 2 — PRE-ACTION REQUIREMENTS:
+• Any mandatory pre-action notices? (e.g. Public Officers Protection Act,
+  pre-action protocol under applicable Rules of Court)
+• Limitation periods — has time started running? When does it expire?
+• Any conditions precedent to suit (contractual or statutory)?
+
+STAGE 3 — COMMENCEMENT OF PROCEEDINGS:
+• Which originating process applies? (Writ / Originating Summons /
+  Originating Motion / Petition — cite the applicable Rules)
+• Documents required at filing.
+• Applicable court fees.
+• Service requirements and how service is to be effected.
+
+STAGE 4 — INTERLOCUTORY STEPS:
+• Available interim or interlocutory reliefs (injunctions, Mareva orders,
+  Anton Piller orders, stay of proceedings).
+• Evidence rules applicable at interlocutory stage.
+
+STAGE 5 — TRIAL PROCEDURE:
+• Order of proceedings.
+• Evidence Act 2011 requirements: documentary evidence, admissibility,
+  electronic evidence (ss. 84-86), burden and standard of proof.
+• Witness statements / written depositions requirements.
+
+STAGE 6 — POST-JUDGMENT:
+• Enforcement options: writ of fifa, garnishee, committal, charging order.
+• Appeal timelines and procedure.
+"""
+
+# ─────────────────────────────────────────────────────────────────────────────
+# TASK 5: STATUTORY INTERPRETATION
+# ─────────────────────────────────────────────────────────────────────────────
+INTERPRETATION_INSTRUCTION = _MASTER_IDENTITY + """
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+REASONING FRAMEWORK — STATUTORY INTERPRETATION
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+STAGE 1 — THE PROVISION:
+• Set out the exact statutory text.
+• Identify the statute, section, subsection.
+• Note the date of enactment and any amendments.
+
+STAGE 2 — RULES OF INTERPRETATION (Nigerian Courts):
+Apply the following in sequence:
+
+(a) LITERAL RULE: What do the words say in their ordinary, natural meaning?
+    Nigerian courts begin here. Cite the principle from Nigerian authorities.
+
+(b) GOLDEN RULE: If the literal meaning produces absurdity or injustice,
+    how have Nigerian courts modified the interpretation?
+
+(c) MISCHIEF RULE / PURPOSIVE APPROACH: What mischief was the legislature
+    remedying? What was the state of the law before? (Cite Heydon's Case
+    as adopted in Nigerian jurisprudence.)
+
+(d) HARMONIOUS CONSTRUCTION: How does this provision read alongside other
+    sections of the same Act and related legislation?
+
+STAGE 3 — AIDS TO INTERPRETATION:
+• Internal aids: Long title, preamble, headings, schedules.
+• External aids: Hansard/explanatory memoranda (to the extent
+  Nigerian courts use them), Law Reform Commission reports.
+• Applicable interpretive maxims: ejusdem generis, expressio unius
+  est exclusio alterius, noscitur a sociis — explain which apply and why.
+
+STAGE 4 — CASE LAW ON THIS PROVISION:
+• How have Nigerian courts interpreted this specific provision
+  or analogous provisions?
+• Any conflict between Court of Appeal divisions?
+• Is the Supreme Court's position settled?
+
+STAGE 5 — PRACTICAL MEANING:
+• State what the provision ACTUALLY means in plain terms.
+• State what it does NOT cover (exclusions, gaps).
+• Practical implications for the client's situation.
+
+STAGE 6 — CONSTITUTIONAL VALIDITY (if applicable):
+• Does the provision comply with the CFRN 1999?
+• Any fundamental rights (Chapter IV) implications?
+"""
+
+# ─────────────────────────────────────────────────────────────────────────────
+# TASK 6: GENERAL QUERY — Still uses deep reasoning
+# ─────────────────────────────────────────────────────────────────────────────
+GENERAL_INSTRUCTION = _MASTER_IDENTITY + """
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+REASONING FRAMEWORK — GENERAL LEGAL QUERY
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Even for general queries, you must reason deeply. Apply the following:
+
+STAGE 1 — UNDERSTAND THE QUESTION:
+• Restate what is actually being asked.
+• Identify whether it is a question of law, fact, procedure, or strategy.
+• State what additional information would sharpen the answer.
+
+STAGE 2 — THE LEGAL ANSWER:
+• Answer the question fully, citing applicable Nigerian law.
+• Distinguish strict law from equitable considerations where relevant.
+• Identify the "it depends" factors — what variables would change
+  this answer, and HOW they would change it.
+
+STAGE 3 — THE OTHER SIDE OF THE COIN:
+• What is the counter-position or the risk the questioner may not
+  have considered?
+
+STAGE 4 — PRACTICAL GUIDANCE:
+• What should the lawyer or client DO with this information?
+• Any urgent steps, deadlines, or risks to flag immediately?
+
+STAGE 5 — CAVEATS & NEXT STEPS:
+• Limitations of this analysis.
+• What further advice or specialist input is recommended.
+"""
+
+# Map task keys to their specific system instructions
+TASK_INSTRUCTIONS: dict[str, str] = {
+    "analysis":       ANALYSIS_INSTRUCTION,
+    "drafting":       DRAFTING_INSTRUCTION,
+    "research":       RESEARCH_INSTRUCTION,
+    "procedure":      PROCEDURE_INSTRUCTION,
+    "interpretation": INTERPRETATION_INSTRUCTION,
+    "general":        GENERAL_INSTRUCTION,
+}
+
+# ─────────────────────────────────────────────────────────────────────────────
+# AMBIGUITY DETECTOR — Pre-flight check before main generation
+# ─────────────────────────────────────────────────────────────────────────────
+AMBIGUITY_INSTRUCTION = _MASTER_IDENTITY + """
+You are performing a PRE-ANALYSIS scan of a legal query.
+
+Your ONLY job here is to:
+1. List the top 3-5 critical "IT DEPENDS" factors for this query —
+   the specific missing facts, variables, or clarifications that would
+   materially change the legal advice.
+2. List any urgent deadline or limitation period risk that may apply.
+3. Rate the complexity: STRAIGHTFORWARD / MODERATE / COMPLEX / HIGHLY COMPLEX
+
+Format your response EXACTLY as:
+
+IT DEPENDS ON:
+• [Factor 1]
+• [Factor 2]
+• [Factor 3]
+
+DEADLINE RISK:
+[State any limitation period or urgency concern, or "None identified"]
+
+COMPLEXITY: [Rating]
+
+Keep this response SHORT — under 120 words. Do not provide the full analysis here.
+"""
+
+# Generation config — tuned for analytical precision
+GEN_CONFIG = {
+    "temperature": 0.4,   # Lower = more precise, less "creative" hallucination
+    "top_p": 0.92,
+    "top_k": 40,
+    "max_output_tokens": 8192
+}
+
+# Ambiguity check uses a lighter config
+AMBIGUITY_GEN_CONFIG = {
+    "temperature": 0.3,
+    "top_p": 0.9,
+    "top_k": 20,
+    "max_output_tokens": 400
+}
 
 LIMITATION_PERIODS = [
     {"cause": "Simple Contract", "period": "6 years", "authority": "Limitation Act, s. 8(1)(a)"},
@@ -216,6 +588,11 @@ _BASE_CSS = """
 .badge-success{background:#dcfce7;color:#166534}.badge-warning{background:#fef3c7;color:#92400e}
 .badge-info{background:#dbeafe;color:#1e40af}.badge-danger{background:#fee2e2;color:#991b1b}
 
+/* Ambiguity / "It Depends" Box */
+.ambiguity-box{background:linear-gradient(135deg,#fefce8,#fef9c3);border:1px solid #fde047;
+  border-left:5px solid #eab308;border-radius:.75rem;padding:1.25rem 1.5rem;margin:1rem 0;font-size:.88rem;line-height:1.7}
+.ambiguity-box h5{margin:0 0 .5rem;color:#854d0e;font-size:.9rem;font-weight:700}
+
 /* AI Response */
 .response-box{background:#f8fafc;border:1px solid #e2e8f0;border-radius:.75rem;padding:1.75rem;
   margin:1rem 0;white-space:pre-wrap;font-family:'Georgia','Times New Roman',serif;line-height:1.9;font-size:.95rem}
@@ -231,6 +608,10 @@ _BASE_CSS = """
 .tmpl-card{background:#fff;border:1px solid #e2e8f0;border-radius:.75rem;padding:1.25rem;margin-bottom:1rem;transition:all .25s ease}
 .tmpl-card:hover{box-shadow:0 6px 20px rgba(0,0,0,.08);transform:translateY(-2px)}
 .tool-card{background:#fff;border:1px solid #e2e8f0;border-radius:1rem;padding:1.25rem;margin-bottom:1rem}
+
+/* Reasoning chain stages — visual styling */
+.reasoning-stage{background:#f0fdf4;border:1px solid #bbf7d0;border-radius:.5rem;
+  padding:.5rem 1rem;margin:.25rem 0;font-size:.78rem;color:#065f46;font-weight:600}
 
 /* Footer */
 .app-footer{text-align:center;padding:2rem 1rem;color:#64748b;font-size:.85rem;border-top:1px solid #e2e8f0;margin-top:2rem}
@@ -251,7 +632,7 @@ _BASE_CSS = """
 """
 
 # =============================================================================
-# 8 INTERACTIVE THEMES (Original 3 + 5 New Professional Themes)
+# 8 INTERACTIVE THEMES
 # =============================================================================
 _THEME_EMERALD = """<style>
 .stat-card{background:linear-gradient(135deg,#f0fdf4,#dcfce7);border-color:#bbf7d0}
@@ -279,6 +660,7 @@ _THEME_MIDNIGHT = """<style>
 .disclaimer{background:#451a03!important;color:#fef3c7!important}
 .cal-event{background:#1e293b!important;border-color:#334155!important;color:#e2e8f0!important}
 .app-footer{border-color:#334155!important;color:#94a3b8!important}
+.ambiguity-box{background:#1e293b!important;border-color:#854d0e!important;color:#fef9c3!important}
 </style>"""
 
 _THEME_ROYAL = """<style>
@@ -379,11 +761,8 @@ def get_templates() -> list[dict[str, str]]:
 # FILE EXTRACTION HELPERS
 # =============================================================================
 def _extract_text_from_file(uploaded_file) -> str:
-    """Extract text from uploaded file based on extension."""
     name = uploaded_file.name.lower()
     data = uploaded_file.getvalue()
-
-    # JSON is handled separately (data import), not text extraction
     if name.endswith(".pdf"):
         if not PDF_SUPPORT:
             raise RuntimeError("PDF support missing. Install: pip install pdfplumber pypdf2")
@@ -391,30 +770,24 @@ def _extract_text_from_file(uploaded_file) -> str:
             with pdfplumber.open(data) as pdf:
                 return "\n".join([p.extract_text() or "" for p in pdf.pages])
         except Exception:
-            # Fallback
             import io
             reader = pypdf2.PdfReader(io.BytesIO(data))
             return "\n".join([p.extract_text() or "" for p in reader.pages])
-
     elif name.endswith(".docx"):
         if not DOCX_SUPPORT:
             raise RuntimeError("DOCX support missing. Install: pip install python-docx")
         doc = Document(data)
         return "\n".join([p.text for p in doc.paragraphs if p.text])
-
     elif name.endswith(".txt"):
         return data.decode("utf-8", errors="ignore")
-
     elif name.endswith(".csv"):
         df = pd.read_csv(data)
         return df.to_string(index=False)
-
     elif name.endswith(".xlsx"):
         if not XLSX_SUPPORT:
             raise RuntimeError("XLSX support missing. Install: pip install openpyxl")
         df = pd.read_excel(data)
         return df.to_string(index=False)
-
     else:
         raise ValueError(f"Unsupported file type: {name}")
 
@@ -457,10 +830,14 @@ def _sec(k: str, d: str = "") -> str:
 # =============================================================================
 # SESSION STATE
 # =============================================================================
-for _k, _v in {"api_key": "", "api_configured": False, "cases": [], "clients": [],
+for _k, _v in {
+    "api_key": "", "api_configured": False, "cases": [], "clients": [],
     "time_entries": [], "invoices": [], "last_response": "", "research_results": "",
     "gemini_model": DEFAULT_MODEL, "loaded_template": "", "theme": "🌿 Emerald",
-    "admin_unlocked": False, "imported_doc": None}.items():
+    "admin_unlocked": False, "imported_doc": None,
+    "ambiguity_result": "",          # ★ NEW: stores pre-flight ambiguity check
+    "show_reasoning_chain": True,    # ★ NEW: toggle reasoning stage display
+}.items():
     if _k not in st.session_state: st.session_state[_k] = _v
 
 st.markdown(_BASE_CSS, unsafe_allow_html=True)
@@ -498,28 +875,97 @@ def _auto():
         m = _sec("GEMINI_MODEL") or os.getenv("GEMINI_MODEL","")
         if m: st.session_state.gemini_model = _norm(m)
 
-def _gen(prompt: str, sys: str) -> str:
+def _gen(prompt: str, sys: str, gen_cfg: dict | None = None) -> str:
+    """Core generation function with configurable generation parameters."""
     k = _key()
     if not k: return "⚠️ No API key configured."
     _cfg(k)
-    try: model = genai.GenerativeModel(_model(), system_instruction=sys)
+    cfg = gen_cfg or GEN_CONFIG
+    try:
+        model = genai.GenerativeModel(_model(), system_instruction=sys)
     except TypeError:
-        model = genai.GenerativeModel(_model()); prompt = f"{sys}\n\n{prompt}"
+        model = genai.GenerativeModel(_model())
+        prompt = f"{sys}\n\n{prompt}"
     for attempt in range(2):
-        try: return model.generate_content(prompt, generation_config=GEN_CONFIG).text
+        try:
+            return model.generate_content(prompt, generation_config=cfg).text
         except Exception as e:
             if attempt == 1: return f"Error: {e}"
             time.sleep(1.5)
     return "Error: generation failed."
 
+
+# =============================================================================
+# ★★★ SENIOR LAWYER COGNITIVE ENGINE — AI FUNCTIONS ★★★
+# =============================================================================
+
+def ai_ambiguity_check(prompt: str) -> str:
+    """
+    Stage 0 of the reasoning chain.
+    Quickly surfaces 'IT DEPENDS' factors before the full analysis runs.
+    Uses a fast, low-token generation config.
+    """
+    if not st.session_state.api_configured:
+        return ""
+    try:
+        return _gen(
+            f"Legal query to pre-scan:\n\n{prompt}",
+            AMBIGUITY_INSTRUCTION,
+            AMBIGUITY_GEN_CONFIG
+        )
+    except Exception:
+        return ""
+
+
 def ai_respond(prompt: str, task: str) -> str:
-    if not st.session_state.api_configured: return "⚠️ Configure your API key first."
-    label = TASK_TYPES.get(task, {}).get("label", "General Query")
-    return _gen(f"[Task: {label}]\n\n{prompt}", SYSTEM_INSTRUCTION)
+    """
+    Main reasoning engine — routes to task-specific Senior Lawyer prompt.
+    Each task type has its own multi-stage cognitive framework.
+    """
+    if not st.session_state.api_configured:
+        return "⚠️ Configure your API key first."
+
+    # Select the correct deep reasoning instruction for this task
+    system_instruction = TASK_INSTRUCTIONS.get(task, GENERAL_INSTRUCTION)
+    task_label = TASK_TYPES.get(task, {}).get("label", "General Query")
+
+    # Build a rich contextual prompt
+    full_prompt = (
+        f"TASK TYPE: {task_label}\n"
+        f"DATE OF QUERY: {datetime.now().strftime('%d %B %Y')}\n\n"
+        f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+        f"QUERY / INSTRUCTIONS FROM LAWYER:\n"
+        f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+        f"{prompt}\n\n"
+        f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+        f"INSTRUCTION: Apply your full Senior Lawyer reasoning framework.\n"
+        f"Do NOT give a shallow or summary answer.\n"
+        f"Work through EVERY stage of your framework methodically.\n"
+        f"If any stage reveals that 'it depends', identify the SPECIFIC variable.\n"
+        f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+    )
+
+    return _gen(full_prompt, system_instruction, GEN_CONFIG)
+
 
 def ai_research(q: str) -> str:
-    if not st.session_state.api_configured: return "⚠️ Configure your API key first."
-    return _gen(q, RESEARCH_INSTRUCTION)
+    """Deep legal research — uses the dedicated RESEARCH_INSTRUCTION framework."""
+    if not st.session_state.api_configured:
+        return "⚠️ Configure your API key first."
+
+    full_prompt = (
+        f"RESEARCH REQUEST — {datetime.now().strftime('%d %B %Y')}\n\n"
+        f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+        f"RESEARCH QUESTION:\n{q}\n\n"
+        f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+        f"INSTRUCTION: Conduct a comprehensive research memorandum.\n"
+        f"Cover ALL stages of the research framework.\n"
+        f"Distinguish clearly between settled and unsettled law.\n"
+        f"If a citation cannot be verified with certainty, state the principle\n"
+        f"and mark: [Citation to be verified].\n"
+        f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+    )
+    return _gen(full_prompt, RESEARCH_INSTRUCTION, GEN_CONFIG)
 
 
 # =============================================================================
@@ -558,22 +1004,19 @@ def _hearings(n=10):
 
 
 # =============================================================================
-# UI: SIDEBAR (with Multi-Format Import)
+# UI: SIDEBAR
 # =============================================================================
 def render_sidebar():
     with st.sidebar:
         st.markdown("### ⚖️ LexiAssist")
-        st.caption("v4.0 — AI Legal Practice Management")
+        st.caption("v5.0 — Senior Lawyer AI Engine")
         st.divider()
 
-        # Quick stats
         c1, c2 = st.columns(2)
         with c1: st.metric("Active Cases", len([c for c in st.session_state.cases if c.get("status")=="Active"]))
         with c2: st.metric("Upcoming Hearings", len(_hearings()))
 
         st.divider()
-
-        # Theme selector (8 themes)
         st.markdown("### 🎨 Theme")
         th = st.selectbox(
             "Choose theme",
@@ -589,6 +1032,7 @@ def render_sidebar():
         st.markdown("### 🤖 AI Engine")
         if st.session_state.api_configured:
             st.success(f"✅ Connected · `{_model()}`")
+            st.caption("🧠 Senior Lawyer Cognitive Engine Active")
         else:
             st.warning("⚠️ Not connected")
 
@@ -598,6 +1042,15 @@ def render_sidebar():
             st.session_state.gemini_model = _norm(sel)
             st.session_state.api_configured = False
             st.rerun()
+
+        # ★ NEW: Reasoning chain toggle
+        st.divider()
+        st.markdown("### 🧠 Reasoning Settings")
+        st.session_state.show_reasoning_chain = st.toggle(
+            "Show 'It Depends' Pre-Analysis",
+            value=st.session_state.show_reasoning_chain,
+            help="Before generating a full response, surface the key 'IT DEPENDS' variables and deadline risks."
+        )
 
         has_sec = bool(_sec("GEMINI_API_KEY"))
         adm_pw = _sec("ADMIN_PASSWORD")
@@ -620,11 +1073,8 @@ def render_sidebar():
 
         if show:
             ki = st.text_input(
-                "API Key",
-                type="password",
-                value=st.session_state.api_key,
-                label_visibility="collapsed",
-                placeholder="Paste your Gemini API key…",
+                "API Key", type="password", value=st.session_state.api_key,
+                label_visibility="collapsed", placeholder="Paste your Gemini API key…",
             )
             if st.button("Connect", type="primary", use_container_width=True):
                 if ki and len(ki.strip()) >= 10:
@@ -639,26 +1089,14 @@ def render_sidebar():
         st.divider()
         st.markdown("### 💾 Data Import / Export")
 
-        # Export
         if st.button("📥 Export All (JSON)", use_container_width=True):
             st.download_button(
                 "Download",
-                json.dumps(
-                    {
-                        "cases": st.session_state.cases,
-                        "clients": st.session_state.clients,
-                        "time_entries": st.session_state.time_entries,
-                        "invoices": st.session_state.invoices,
-                    },
-                    indent=2,
-                ),
-                f"lexiassist_{datetime.now():%Y%m%d}.json",
-                "application/json",
+                json.dumps({"cases": st.session_state.cases, "clients": st.session_state.clients,
+                    "time_entries": st.session_state.time_entries, "invoices": st.session_state.invoices}, indent=2),
+                f"lexiassist_{datetime.now():%Y%m%d}.json", "application/json",
             )
 
-        # =================================================================
-        # MULTI-FORMAT IMPORT — PDF, DOCX, TXT, CSV, XLSX, JSON
-        # =================================================================
         up = st.file_uploader(
             "📤 Import Document",
             type=["json", "pdf", "docx", "txt", "csv", "xlsx"],
@@ -667,56 +1105,44 @@ def render_sidebar():
         if up:
             try:
                 ext = up.name.split(".")[-1].lower()
-
-                # JSON → import structured data
                 if ext == "json":
                     data = json.load(up)
                     for k in ["cases", "clients", "time_entries", "invoices"]:
                         st.session_state[k] = data.get(k, [])
-                    st.success("✅ JSON data imported successfully!")
+                    st.success("✅ JSON data imported!")
                     st.rerun()
-
-                # All other types → extract text for AI
                 else:
                     text = _extract_text_from_file(up)
-                    # Store in session for AI page to consume
                     st.session_state.imported_doc = {
-                        "name": up.name,
-                        "type": ext,
-                        "size": len(up.getvalue()),
+                        "name": up.name, "type": ext, "size": len(up.getvalue()),
                         "preview": text[:500] + ("…" if len(text) > 500 else ""),
                         "full_text": text,
                     }
-                    st.success(f"✅ **{up.name}** loaded ({len(text)} chars). Go to **AI Assistant** to use it!")
+                    st.success(f"✅ **{up.name}** loaded. Go to **AI Assistant** to analyze it!")
                     st.rerun()
-
             except Exception as e:
                 st.error(f"❌ Import failed: {e}")
-                if "support missing" in str(e):
-                    st.info("💡 Install required library (see message above) and restart.")
 
         st.divider()
-        st.caption("**LexiAssist v4.0** · © 2026\n\n🤖 Gemini · 🎈 Streamlit · 🐍 Python")
+        st.caption("**LexiAssist v5.0** · © 2026\n\n🧠 Senior Lawyer Cognitive Engine\n🤖 Google Gemini · 🎈 Streamlit")
 
 
 # =============================================================================
-# PAGE: LANDING (Hero + Stats + Features)
+# PAGE: LANDING
 # =============================================================================
 def render_landing():
-    api_status = "🟢 AI Ready" if st.session_state.api_configured else "🔴 Configure API Key in Sidebar"
+    api_status = "🟢 Senior Lawyer AI Ready" if st.session_state.api_configured else "🔴 Configure API Key in Sidebar"
     st.markdown(f"""
     <div class="hero">
         <div class="hero-badge">{api_status}</div>
         <h1>The Future of<br>Legal Practice in Nigeria</h1>
         <p>AI-powered tools built exclusively for Nigerian lawyers. Draft documents, research case law,
-        manage cases, track billing — all in one intelligent platform powered by Google Gemini.</p>
-        <div class="hero-badge" style="margin-top:.75rem">🇳🇬 Made for Nigerian Law · CFRN 1999 · Federal & State Legislation · Case Law</div>
+        manage cases, track billing — all powered by a Senior Lawyer Cognitive Engine running on Google Gemini.</p>
+        <div class="hero-badge" style="margin-top:.75rem">🇳🇬 Nigerian Law · CREAC Reasoning · Multi-Claim Analysis · Equity vs. Law</div>
     </div>
     """, unsafe_allow_html=True)
 
     st.markdown("")
-
-    # Stats row
     active = len([c for c in st.session_state.cases if c.get("status") == "Active"])
     c1, c2, c3, c4 = st.columns(4)
     with c1: st.markdown(f'<div class="stat-card"><div class="stat-value">{active}</div><div class="stat-label">📁 Active Cases</div></div>', unsafe_allow_html=True)
@@ -725,17 +1151,15 @@ def render_landing():
     with c4: st.markdown(f'<div class="stat-card t-amber"><div class="stat-value">{len(_hearings())}</div><div class="stat-label">📅 Hearings</div></div>', unsafe_allow_html=True)
 
     st.markdown("")
-
-    # Features grid
     st.markdown("#### What Can LexiAssist Do?")
     features = [
-        ("🤖", "AI Legal Assistant", "Draft contracts, analyze issues, interpret statutes — instant AI-powered legal guidance."),
-        ("📚", "Legal Research", "Deep research across Nigerian statutes, case law, and legal principles."),
+        ("🧠", "Senior Lawyer AI", "Multi-claim CREAC reasoning, equity vs. law, strategic risk assessment, counter-argument engine."),
+        ("📚", "Deep Research", "Full jurisprudential analysis: statutes, case law, principles, and procedural requirements."),
         ("📁", "Case Management", "Track suits, hearing dates, statuses, notes, and client linkages."),
-        ("📅", "Court Calendar", "Visual hearing timeline with urgency-coded reminders so you never miss a date."),
+        ("📅", "Court Calendar", "Visual hearing timeline with urgency-coded reminders."),
         ("📋", "Document Templates", "8 professional Nigerian templates — contracts, affidavits, opinions, resolutions."),
         ("👥", "Client Management", "Client records, case counts, and per-client billing at a glance."),
-        ("💰", "Billing & Invoicing", "Log hours, set rates, and generate downloadable professional invoices."),
+        ("💰", "Billing & Invoicing", "Log hours, set rates, generate downloadable professional invoices."),
         ("🇳🇬", "Nigerian Legal Tools", "Limitation periods, interest calculator, court hierarchy, legal maxims."),
     ]
     cols = st.columns(4)
@@ -744,17 +1168,12 @@ def render_landing():
             st.markdown(f'<div class="feat-card"><span class="feat-icon">{ic}</span><h4>{t}</h4><p>{d}</p></div>', unsafe_allow_html=True)
 
     st.markdown("")
-
-    # Value props
     st.markdown("#### Why Nigerian Lawyers Choose LexiAssist")
     v1, v2, v3 = st.columns(3)
-    with v1: st.markdown('<div class="value-card"><span class="v-icon">🇳🇬</span><h4>Built for Nigerian Law</h4><p>Trained on the Constitution, Federal & State Acts, Rules of Court, and landmark Nigerian case law. Not a generic tool — purpose-built for your jurisdiction.</p></div>', unsafe_allow_html=True)
-    with v2: st.markdown('<div class="value-card"><span class="v-icon">🤖</span><h4>Powered by Google Gemini</h4><p>State-of-the-art AI that understands legal reasoning, IRAC methodology, and can draft, analyze, and research with remarkable depth.</p></div>', unsafe_allow_html=True)
+    with v1: st.markdown('<div class="value-card"><span class="v-icon">🧠</span><h4>Senior Lawyer Reasoning</h4><p>Not just answers — full CREAC analysis per issue, Devil\'s Advocate counter-arguments, strategic risk assessment, and "It Depends" factor surfacing. Thinks like a Senior Partner.</p></div>', unsafe_allow_html=True)
+    with v2: st.markdown('<div class="value-card"><span class="v-icon">🇳🇬</span><h4>Built for Nigerian Law</h4><p>Every reasoning framework is calibrated for the CFRN 1999, Federal and State Acts, Rules of Court, and landmark Nigerian Supreme Court and Court of Appeal jurisprudence.</p></div>', unsafe_allow_html=True)
     with v3: st.markdown('<div class="value-card"><span class="v-icon">🔒</span><h4>Private & Secure</h4><p>Your API key stays in your session. No data is stored on external servers. Your practice data remains entirely under your control.</p></div>', unsafe_allow_html=True)
 
-    st.markdown("")
-
-    # Recent activity preview
     hearings = _hearings(5)
     recent = st.session_state.cases[-5:] if st.session_state.cases else []
     if hearings or recent:
@@ -785,27 +1204,46 @@ def render_landing():
 
 
 # =============================================================================
-# PAGE: AI ASSISTANT (with Imported Document Support)
+# PAGE: AI ASSISTANT — WITH SENIOR LAWYER COGNITIVE ENGINE UI
 # =============================================================================
 def render_ai():
-    st.markdown('<div class="page-header"><h1>🤖 AI Legal Assistant</h1><p>Draft · Analyze · Research · Interpret — powered by Google Gemini</p></div>', unsafe_allow_html=True)
+    st.markdown(
+        '<div class="page-header"><h1>🧠 AI Legal Assistant</h1>'
+        '<p>Senior Lawyer Cognitive Engine · Multi-Claim CREAC · Equity vs. Law · Strategic Risk Assessment</p></div>',
+        unsafe_allow_html=True
+    )
 
     if not st.session_state.api_configured:
-        st.warning("⚠️ **Connect your API key** in the sidebar to activate the AI assistant.")
+        st.warning("⚠️ **Connect your API key** in the sidebar to activate the Senior Lawyer AI.")
 
-    # -------------------------------------------------------------------------
-    # IMPORTED DOCUMENT PREVIEW (if user uploaded PDF/DOCX/etc.)
-    # -------------------------------------------------------------------------
+    # Reasoning framework explainer (collapsible)
+    with st.expander("ℹ️ How the Senior Lawyer Reasoning Engine Works", expanded=False):
+        st.markdown("""
+        Unlike a basic AI assistant, LexiAssist v5.0 processes every legal query through a
+        **multi-stage cognitive framework** modelled on how a Senior Partner approaches a brief:
+
+        | Stage | What Happens |
+        |---|---|
+        | **0. Pre-Flight** | Surfaces "IT DEPENDS" variables and deadline risks before full analysis |
+        | **1. Fact Matrix** | Identifies material facts and flags critical missing information |
+        | **2. Issue Spotting** | Decomposes the scenario into distinct legal claims — no conflation |
+        | **3. CREAC Per Issue** | Strict Law → Equity → Explanation → Application → Conclusion per issue |
+        | **4. Devil's Advocate** | Builds the strongest counter-argument and identifies weaknesses |
+        | **5. Risk Assessment** | Probability rating, procedural hurdles, evidence needs, ADR options |
+        | **6. Next Steps** | Clear, actionable conclusion with immediate strategic steps |
+
+        *The task type you select determines which specialized framework runs.*
+        """)
+
+    # Imported document section
     if st.session_state.imported_doc:
         with st.expander("📄 Imported Document — Ready for Analysis", expanded=True):
             doc = st.session_state.imported_doc
             st.caption(f"**File:** `{doc['name']}` · **Type:** {doc['type'].upper()} · **Size:** {doc['size']:,} bytes")
             st.text_area("Preview / Content", doc["preview"], height=200, disabled=True)
-            
             c1, c2 = st.columns([1, 1])
             with c1:
                 if st.button("✅ Load Full Text into Editor", type="primary", use_container_width=True):
-                    # Auto-populate the AI input with the document text
                     st.session_state.loaded_template = doc["full_text"]
                     st.success("Document loaded into editor below!")
                     st.rerun()
@@ -814,16 +1252,28 @@ def render_ai():
                     st.session_state.imported_doc = None
                     st.rerun()
 
-    # Task type selector
+    # Task type selector — each now has a specialized reasoning framework
     task_keys = list(TASK_TYPES.keys())
     task_labels = {k: f"{v['icon']} {v['label']} — {v['desc']}" for k, v in TASK_TYPES.items()}
     chosen_task = st.selectbox(
-        "🎯 Task Type",
+        "🎯 Select Task Type",
         task_keys,
-        index=task_keys.index("general"),
+        index=task_keys.index("analysis"),   # Default to deep analysis
         format_func=lambda k: task_labels[k],
         key="task_type_selectbox",
+        help="Each task type activates a specialized Senior Lawyer reasoning framework.",
     )
+
+    # Show which reasoning framework will activate
+    framework_desc = {
+        "analysis":       "🔍 **CREAC Multi-Claim Engine** — Issue spotting, equity vs. law, devil's advocate, strategic risk",
+        "drafting":       "📄 **Professional Drafting Engine** — Drafting brief analysis, risk-aware clauses, draftsman's notes",
+        "research":       "📚 **Jurisprudential Research Engine** — Statutes, case law, principles, procedural application",
+        "procedure":      "📋 **Procedural Guidance Engine** — Jurisdiction, pre-action, filing, evidence, enforcement",
+        "interpretation": "⚖️ **Statutory Interpretation Engine** — Literal/golden/mischief rules, Nigerian case law, constitutional validity",
+        "general":        "💬 **General Reasoning Engine** — Deep reasoning with 'it depends' analysis and practical guidance",
+    }
+    st.markdown(f'<div class="reasoning-stage">⚙️ Active Framework: {framework_desc.get(chosen_task, "")}</div>', unsafe_allow_html=True)
 
     st.markdown("---")
 
@@ -838,35 +1288,64 @@ def render_ai():
                     st.session_state.loaded_template = t["content"]
                     st.rerun()
 
-    # Main input area
+    # Main input
     prefill = st.session_state.pop("loaded_template", "")
     user_input = st.text_area(
         "📝 Your Legal Query or Instructions",
         value=prefill,
-        height=260,
-        placeholder="Example: Draft a commercial lease agreement for property in Victoria Island, Lagos, "
-        "with a 3-year term, annual rent review clause, and break option after 18 months…",
+        height=280,
+        placeholder=(
+            "Be as specific as possible for deeper analysis.\n\n"
+            "Example: 'My client entered a contract with ABC Ltd on 15 Jan 2022 for delivery of goods worth ₦50m. "
+            "ABC Ltd has failed to deliver. My client has already paid 60% upfront. ABC Ltd claims force majeure due to "
+            "flooding. Analyse my client's legal position, available remedies, and the strength of the force majeure defence.'"
+        ),
     )
 
-    c1, c2 = st.columns([3, 1])
+    # Word count for input
+    if user_input:
+        iw = len(user_input.split())
+        st.caption(f"📝 Query length: **{iw} words** — {'Detailed enough for deep analysis ✅' if iw > 30 else '⚠️ Consider adding more facts for a more precise analysis'}")
+
+    c1, c2, c3 = st.columns([3, 1, 1])
     with c1:
         generate = st.button(
-            "✨ Generate Response",
+            "🧠 Generate Senior Lawyer Analysis",
             type="primary",
             use_container_width=True,
             disabled=not st.session_state.api_configured,
         )
     with c2:
+        check_ambiguity = st.button(
+            "🔍 Pre-Check Only",
+            use_container_width=True,
+            disabled=not st.session_state.api_configured,
+            help="Run only the 'IT DEPENDS' pre-analysis without generating the full response.",
+        )
+    with c3:
         clear = st.button(
-            "🗑️ Clear Response",
+            "🗑️ Clear",
             use_container_width=True,
             disabled=not bool(st.session_state.last_response),
         )
 
+    # Pre-flight ambiguity check
+    if check_ambiguity and user_input.strip():
+        with st.spinner("🔍 Scanning for 'It Depends' factors…"):
+            st.session_state.ambiguity_result = ai_ambiguity_check(user_input)
+            st.session_state.last_response = ""
+
+    # Full generation with optional ambiguity pre-check
     if generate:
         if user_input.strip():
-            with st.spinner("⚖️ LexiAssist is analyzing…"):
-                task_key = st.session_state.get("task_type_selectbox", "general")
+            # Stage 0: Ambiguity pre-flight (if enabled)
+            if st.session_state.show_reasoning_chain:
+                with st.spinner("🔍 Stage 0: Scanning 'IT DEPENDS' factors…"):
+                    st.session_state.ambiguity_result = ai_ambiguity_check(user_input)
+
+            # Main reasoning chain
+            with st.spinner("🧠 Senior Lawyer is reasoning through your query… (this may take 15-30s for deep analysis)"):
+                task_key = st.session_state.get("task_type_selectbox", "analysis")
                 result = ai_respond(user_input, task_key)
                 if not result.startswith("Error") and not result.startswith("⚠️"):
                     st.session_state.last_response = result
@@ -877,71 +1356,98 @@ def render_ai():
 
     if clear:
         st.session_state.last_response = ""
+        st.session_state.ambiguity_result = ""
         st.rerun()
 
-    # Response display
+    # ─────────────────────────────────────────────────────────
+    # ★ AMBIGUITY / "IT DEPENDS" BOX
+    # ─────────────────────────────────────────────────────────
+    if st.session_state.ambiguity_result:
+        st.markdown(
+            f'<div class="ambiguity-box">'
+            f'<h5>⚠️ PRE-ANALYSIS — KEY "IT DEPENDS" FACTORS</h5>'
+            f'{_esc(st.session_state.ambiguity_result)}'
+            f'</div>',
+            unsafe_allow_html=True,
+        )
+
+    # ─────────────────────────────────────────────────────────
+    # ★ FULL RESPONSE
+    # ─────────────────────────────────────────────────────────
     if st.session_state.last_response:
         st.markdown("---")
-        st.markdown("#### 📄 AI Response")
-        
-        # Word/character count (professional polish)
+        st.markdown("#### 📄 Senior Lawyer Analysis")
+
         text = st.session_state.last_response
         wc = len(text.split())
         cc = len(text)
-        st.caption(f"📝 **{wc:,} words** · **{cc:,} characters**")
+        depth = "🟢 Comprehensive" if wc > 600 else ("🟡 Moderate" if wc > 250 else "🔴 Brief")
+        st.caption(f"📝 **{wc:,} words** · **{cc:,} characters** · Depth: {depth}")
 
         ec1, ec2, ec3 = st.columns([1, 1, 4])
         with ec1:
             st.download_button(
-                "📥 .txt",
-                text,
-                f"LexiAssist_{datetime.now():%Y%m%d_%H%M}.txt",
-                "text/plain",
+                "📥 .txt", text,
+                f"LexiAssist_{datetime.now():%Y%m%d_%H%M}.txt", "text/plain",
             )
         with ec2:
             esc = _esc(text)
             html_doc = (
-                f"<!DOCTYPE html><html><head><meta charset='UTF-8'><title>LexiAssist</title>"
-                f"<style>body{{font-family:Georgia,serif;line-height:1.8;max-width:800px;margin:40px auto;padding:20px}}"
-                f"h1{{color:#059669;border-bottom:3px solid #059669;padding-bottom:12px}}.c{{white-space:pre-wrap}}"
-                f".d{{background:#fef3c7;border-left:4px solid #f59e0b;padding:16px;margin-top:32px}}</style></head>"
-                f"<body><h1>⚖️ LexiAssist Output</h1><div class='c'>{esc}</div>"
-                f"<div class='d'><b>Disclaimer:</b> For informational purposes only.</div>"
-                f"<p style='text-align:center;color:#64748b;font-size:12px;margin-top:32px'>"
-                f"Generated {datetime.now():%B %d, %Y %I:%M %p}</p></body></html>"
+                f"<!DOCTYPE html><html><head><meta charset='UTF-8'><title>LexiAssist Senior Lawyer Analysis</title>"
+                f"<style>body{{font-family:Georgia,serif;line-height:1.9;max-width:850px;margin:40px auto;padding:20px;color:#1e293b}}"
+                f"h1{{color:#059669;border-bottom:3px solid #059669;padding-bottom:12px}}"
+                f".meta{{background:#f0fdf4;border:1px solid #bbf7d0;padding:12px 16px;border-radius:8px;margin:16px 0;font-size:14px}}"
+                f".c{{white-space:pre-wrap;font-size:15px}}"
+                f".d{{background:#fef3c7;border-left:4px solid #f59e0b;padding:16px;margin-top:32px;border-radius:0 8px 8px 0}}"
+                f"</style></head>"
+                f"<body><h1>⚖️ LexiAssist — Senior Lawyer Analysis</h1>"
+                f"<div class='meta'>Generated: {datetime.now():%B %d, %Y %I:%M %p} · "
+                f"Task: {TASK_TYPES.get(st.session_state.get('task_type_selectbox','general'),{}).get('label','Analysis')} · "
+                f"Words: {wc:,}</div>"
+                f"<div class='c'>{esc}</div>"
+                f"<div class='d'><b>⚖️ Disclaimer:</b> This analysis is for informational and professional reference purposes only. "
+                f"It does not constitute legal advice. Verify all citations independently and apply professional judgment.</div>"
+                f"<p style='text-align:center;color:#94a3b8;font-size:12px;margin-top:32px'>"
+                f"LexiAssist v5.0 · Powered by Google Gemini · Nigerian Law</p></body></html>"
             )
             st.download_button(
-                "📥 .html",
-                html_doc,
-                f"LexiAssist_{datetime.now():%Y%m%d_%H%M}.html",
-                "text/html",
+                "📥 .html", html_doc,
+                f"LexiAssist_{datetime.now():%Y%m%d_%H%M}.html", "text/html",
             )
         with ec3:
             if st.button("🗑️ Clear Output", key="clr2"):
                 st.session_state.last_response = ""
+                st.session_state.ambiguity_result = ""
                 st.rerun()
 
         st.markdown(f'<div class="response-box">{_esc(text)}</div>', unsafe_allow_html=True)
         st.markdown(
-            '<div class="disclaimer"><strong>⚖️ Disclaimer:</strong> This response is for informational purposes only. '
-            'It does not constitute legal advice. Verify all citations and consult a qualified legal practitioner.</div>',
+            '<div class="disclaimer"><strong>⚖️ Disclaimer:</strong> This analysis is generated by an AI system '
+            'for informational and professional reference purposes only. It does not constitute legal advice. '
+            'All citations must be independently verified. Apply your own professional judgment before relying '
+            'on this analysis. LexiAssist does not establish a lawyer-client relationship.</div>',
             unsafe_allow_html=True,
         )
 
 
 # =============================================================================
-# PAGE: RESEARCH (unchanged logic, polished UI)
+# PAGE: RESEARCH
 # =============================================================================
 def render_research():
-    st.markdown('<div class="page-header"><h1>📚 Legal Research</h1><p>AI-powered research across Nigerian statutes, case law & legal principles</p></div>', unsafe_allow_html=True)
-    q = st.text_input("🔍 Research Query", placeholder="E.g. 'employer liability for workplace injury under Nigerian law'")
+    st.markdown(
+        '<div class="page-header"><h1>📚 Legal Research</h1>'
+        '<p>Full jurisprudential research · Statutes · Case law · Principles · Procedural requirements</p></div>',
+        unsafe_allow_html=True
+    )
+    st.info("💡 **Research Engine:** Produces structured research memoranda covering statutory framework, case law analysis, synthesized legal principles, and practical application.")
+    q = st.text_input("🔍 Research Query", placeholder="E.g. 'employer's liability for workplace injuries under Nigerian law — applicable statutes, leading cases, and procedural requirements'")
     rc1, rc2 = st.columns([3, 1])
     with rc1:
-        go = st.button("🔍 Research", type="primary", use_container_width=True, disabled=not st.session_state.api_configured)
+        go = st.button("📚 Run Deep Research", type="primary", use_container_width=True, disabled=not st.session_state.api_configured)
     with rc2:
         clr = st.button("🗑️ Clear", use_container_width=True, disabled=not bool(st.session_state.research_results), key="rclr")
     if go and q.strip():
-        with st.spinner("📚 Researching Nigerian law…"):
+        with st.spinner("📚 Conducting comprehensive Nigerian law research… (this may take 20-40s)"):
             st.session_state.research_results = ai_research(q)
     if clr:
         st.session_state.research_results = ""
@@ -950,28 +1456,27 @@ def render_research():
         st.info("💡 Connect your API key in the sidebar to use Research.")
     if st.session_state.research_results:
         st.markdown("---")
-        st.download_button("📥 Export Research", st.session_state.research_results, f"Research_{datetime.now():%Y%m%d_%H%M}.txt", "text/plain")
+        wc = len(st.session_state.research_results.split())
+        st.caption(f"📝 Research memo: **{wc:,} words**")
+        st.download_button(
+            "📥 Export Research Memo",
+            st.session_state.research_results,
+            f"Research_{datetime.now():%Y%m%d_%H%M}.txt",
+            "text/plain"
+        )
         st.markdown(f'<div class="response-box">{_esc(st.session_state.research_results)}</div>', unsafe_allow_html=True)
 
 
 # =============================================================================
-# PAGE: CASES (with Search)
+# PAGE: CASES
 # =============================================================================
 def render_cases():
     st.markdown('<div class="page-header"><h1>📁 Case Management</h1><p>Track suits, hearings, and case progress</p></div>', unsafe_allow_html=True)
-
-    # Search bar (professional improvement)
     search_q = st.text_input("🔍 Search Cases", placeholder="Type to search by title, suit number, court, or notes…")
-    
-    # Filter by status
     filt = st.selectbox("Filter by Status", ["All"] + CASE_STATUSES, key="cfilt")
-    
-    # Apply filters
     cases = st.session_state.cases
-    if filt != "All":
-        cases = [c for c in cases if c.get("status") == filt]
-    if search_q:
-        cases = [c for c in cases if search_q.lower() in json.dumps(c).lower()]
+    if filt != "All": cases = [c for c in cases if c.get("status") == filt]
+    if search_q: cases = [c for c in cases if search_q.lower() in json.dumps(c).lower()]
 
     with st.expander("➕ Add New Case", expanded=not bool(st.session_state.cases)):
         with st.form("cf"):
@@ -989,57 +1494,37 @@ def render_cases():
             if st.form_submit_button("Save Case", type="primary"):
                 if title.strip() and suit.strip():
                     cid = st.session_state.clients[ci - 1]["id"] if ci > 0 else None
-                    add_case(
-                        {
-                            "title": title.strip(),
-                            "suit_no": suit.strip(),
-                            "court": court.strip(),
-                            "next_hearing": nh.isoformat() if nh else None,
-                            "status": status,
-                            "client_id": cid,
-                            "notes": notes.strip(),
-                        }
-                    )
-                    st.success("✅ Case added successfully!")
-                    st.rerun()
-                else:
-                    st.error("Title and Suit Number are required.")
+                    add_case({"title": title.strip(), "suit_no": suit.strip(), "court": court.strip(),
+                        "next_hearing": nh.isoformat() if nh else None, "status": status,
+                        "client_id": cid, "notes": notes.strip()})
+                    st.success("✅ Case added!"); st.rerun()
+                else: st.error("Title and Suit Number are required.")
 
     if not cases:
-        st.info("📁 No cases match your criteria. Add one above or adjust your search!")
+        st.info("📁 No cases match your criteria.")
         return
 
     for case in cases:
         bc = {"Active": "success", "Pending": "warning", "Completed": "info", "Archived": ""}.get(case.get("status", ""), "")
         hh = f"<p>📅 <strong>Next Hearing:</strong> {_esc(_fdate(case['next_hearing']))} <span class='badge badge-info'>{_esc(_rel(case['next_hearing']))}</span></p>" if case.get("next_hearing") else ""
         nn = f"<p style='color:#64748b'><em>{_esc(case['notes'][:150])}{'…' if len(case.get('notes',''))>150 else ''}</em></p>" if case.get("notes") else ""
-        
         a, b = st.columns([5, 1])
         with a:
             st.markdown(
                 f'<div class="custom-card"><h4>{_esc(case["title"])} <span class="badge badge-{bc}">{_esc(case.get("status", ""))}</span></h4>'
                 f'<p>⚖️ {_esc(case.get("suit_no", ""))} · 🏛️ {_esc(case.get("court", ""))} · 👤 {_esc(client_name(case.get("client_id", "")))}</p>'
-                f"{hh}{nn}</div>",
-                unsafe_allow_html=True,
+                f"{hh}{nn}</div>", unsafe_allow_html=True,
             )
         with b:
-            ns = st.selectbox(
-                "Update Status",
-                CASE_STATUSES,
+            ns = st.selectbox("Update Status", CASE_STATUSES,
                 index=CASE_STATUSES.index(case["status"]) if case.get("status") in CASE_STATUSES else 0,
-                key=f"s{case['id']}",
-                label_visibility="collapsed",
-            )
-            if ns != case.get("status"):
-                upd_case(case["id"], {"status": ns})
-                st.rerun()
-            if st.button("🗑️ Delete", key=f"d{case['id']}", type="secondary"):
-                del_case(case["id"])
-                st.rerun()
+                key=f"s{case['id']}", label_visibility="collapsed")
+            if ns != case.get("status"): upd_case(case["id"], {"status": ns}); st.rerun()
+            if st.button("🗑️ Delete", key=f"d{case['id']}", type="secondary"): del_case(case["id"]); st.rerun()
 
 
 # =============================================================================
-# PAGE: CALENDAR (unchanged logic, cleaner UI)
+# PAGE: CALENDAR
 # =============================================================================
 def render_calendar():
     st.markdown('<div class="page-header"><h1>📅 Court Calendar</h1><p>Upcoming hearings at a glance</p></div>', unsafe_allow_html=True)
@@ -1059,13 +1544,14 @@ def render_calendar():
         )
     st.markdown("---")
     df = pd.DataFrame([{"Case": h["title"], "Days Until": max(_days(h["date"]), 0), "Date": _fdate(h["date"])} for h in hearings])
-    fig = px.bar(df, x="Days Until", y="Case", orientation="h", text="Date", color="Days Until", color_continuous_scale=["#ef4444", "#f59e0b", "#10b981"], title="Days Until Next Hearing")
+    fig = px.bar(df, x="Days Until", y="Case", orientation="h", text="Date", color="Days Until",
+        color_continuous_scale=["#ef4444", "#f59e0b", "#10b981"], title="Days Until Next Hearing")
     fig.update_layout(yaxis={"categoryorder": "total ascending"}, showlegend=False, height=400)
     st.plotly_chart(fig, use_container_width=True)
 
 
 # =============================================================================
-# PAGE: TEMPLATES (unchanged, polished)
+# PAGE: TEMPLATES
 # =============================================================================
 def render_templates():
     st.markdown('<div class="page-header"><h1>📋 Document Templates</h1><p>Professional Nigerian legal templates — load into AI or download</p></div>', unsafe_allow_html=True)
@@ -1073,7 +1559,6 @@ def render_templates():
     cats = sorted({t["cat"] for t in templates})
     sel = st.selectbox("Filter by Category", ["All"] + cats, key="tcat")
     vis = templates if sel == "All" else [t for t in templates if t["cat"] == sel]
-    
     cols = st.columns(2)
     for i, t in enumerate(vis):
         with cols[i % 2]:
@@ -1087,13 +1572,11 @@ def render_templates():
             with a:
                 if st.button("📋 Load to AI", key=f"u{t['id']}", use_container_width=True):
                     st.session_state.loaded_template = t["content"]
-                    st.success(f"✅ '{t['name']}' loaded into AI editor!")
+                    st.success(f"✅ '{t['name']}' loaded!")
                     st.rerun()
             with b:
                 if st.button("👁️ Preview", key=f"p{t['id']}", use_container_width=True):
                     st.session_state["pv"] = t
-
-    # Preview modal
     pv = st.session_state.get("pv")
     if pv:
         st.markdown("---")
@@ -1102,21 +1585,17 @@ def render_templates():
         c1, c2 = st.columns([1, 4])
         with c1:
             if st.button("Close Preview"):
-                del st.session_state["pv"]
-                st.rerun()
+                del st.session_state["pv"]; st.rerun()
         with c2:
             st.download_button("📥 Download .txt", pv["content"], f"{pv['name'].replace(' ', '_')}.txt", "text/plain")
 
 
 # =============================================================================
-# PAGE: CLIENTS (with Search)
+# PAGE: CLIENTS
 # =============================================================================
 def render_clients():
     st.markdown('<div class="page-header"><h1>👥 Client Management</h1><p>Manage clients, link cases, and track billables</p></div>', unsafe_allow_html=True)
-
-    # Search
     search_q = st.text_input("🔍 Search Clients", placeholder="Search by name, email, type, or address…")
-    
     with st.expander("➕ Add New Client", expanded=not bool(st.session_state.clients)):
         with st.form("clf"):
             a, b = st.columns(2)
@@ -1130,28 +1609,15 @@ def render_clients():
                 notes = st.text_area("Notes")
             if st.form_submit_button("Save Client", type="primary"):
                 if name.strip():
-                    add_client(
-                        {
-                            "name": name.strip(),
-                            "email": email.strip(),
-                            "phone": phone.strip(),
-                            "type": ct,
-                            "address": addr.strip(),
-                            "notes": notes.strip(),
-                        }
-                    )
-                    st.success("✅ Client added!")
-                    st.rerun()
-                else:
-                    st.error("Name is required.")
+                    add_client({"name": name.strip(), "email": email.strip(), "phone": phone.strip(),
+                        "type": ct, "address": addr.strip(), "notes": notes.strip()})
+                    st.success("✅ Client added!"); st.rerun()
+                else: st.error("Name is required.")
 
-    # Filter clients
     clients = st.session_state.clients
-    if search_q:
-        clients = [c for c in clients if search_q.lower() in json.dumps(c).lower()]
-
+    if search_q: clients = [c for c in clients if search_q.lower() in json.dumps(c).lower()]
     if not clients:
-        st.info("👥 No clients found. Add one above or adjust your search!")
+        st.info("👥 No clients found.")
         return
 
     cols = st.columns(2)
@@ -1166,43 +1632,31 @@ def render_clients():
                 f"{el}{pl}{al}<hr style='margin:.75rem 0'>"
                 f"<div style='display:flex;justify-content:space-around;text-align:center'>"
                 f"<div><div style='font-size:1.5rem;font-weight:700;color:#059669'>{cc}</div>"
-                f"<div style='font-size:.7rem;color:#64748b'>ACTIVE CASES</div></div>"
+                f"<div style='font-size:.7rem;color:#64748b'>CASES</div></div>"
                 f"<div><div style='font-size:1.5rem;font-weight:700;color:#7c3aed'>{_esc(_cur(cb))}</div>"
                 f"<div style='font-size:.7rem;color:#64748b'>OUTSTANDING</div></div>"
-                f"</div></div>",
-                unsafe_allow_html=True,
+                f"</div></div>", unsafe_allow_html=True,
             )
             a, b = st.columns(2)
             with a:
                 if cb > 0 and st.button("📄 Generate Invoice", key=f"iv{cl['id']}", use_container_width=True):
                     inv = make_invoice(cl["id"])
-                    if inv:
-                        st.success(f"✅ Invoice {inv['invoice_no']} created!")
-                        st.rerun()
+                    if inv: st.success(f"✅ Invoice {inv['invoice_no']} created!"); st.rerun()
             with b:
                 if st.button("🗑️ Delete", key=f"dc{cl['id']}", type="secondary", use_container_width=True):
-                    del_client(cl["id"])
-                    st.rerun()
+                    del_client(cl["id"]); st.rerun()
 
 
 # =============================================================================
-# PAGE: BILLING (with Word Count & Better Tables)
+# PAGE: BILLING
 # =============================================================================
 def render_billing():
     st.markdown('<div class="page-header"><h1>💰 Billing & Time Tracking</h1><p>Log billable hours and generate invoices</p></div>', unsafe_allow_html=True)
-
-    # Summary cards
     s1, s2, s3 = st.columns(3)
-    with s1:
-        st.markdown(f'<div class="stat-card"><div class="stat-value">{_esc(_cur(_tb()))}</div><div class="stat-label">💰 Total Billable</div></div>', unsafe_allow_html=True)
-    with s2:
-        st.markdown(f'<div class="stat-card t-blue"><div class="stat-value">{_th():.1f}h</div><div class="stat-label">⏱️ Hours Logged</div></div>', unsafe_allow_html=True)
-    with s3:
-        st.markdown(f'<div class="stat-card t-purple"><div class="stat-value">{len(st.session_state.invoices)}</div><div class="stat-label">📄 Invoices Generated</div></div>', unsafe_allow_html=True)
-
+    with s1: st.markdown(f'<div class="stat-card"><div class="stat-value">{_esc(_cur(_tb()))}</div><div class="stat-label">💰 Total Billable</div></div>', unsafe_allow_html=True)
+    with s2: st.markdown(f'<div class="stat-card t-blue"><div class="stat-value">{_th():.1f}h</div><div class="stat-label">⏱️ Hours Logged</div></div>', unsafe_allow_html=True)
+    with s3: st.markdown(f'<div class="stat-card t-purple"><div class="stat-value">{len(st.session_state.invoices)}</div><div class="stat-label">📄 Invoices</div></div>', unsafe_allow_html=True)
     st.markdown("---")
-
-    # Time entry form
     with st.expander("⏱️ Log Time Entry", expanded=False):
         with st.form("tf"):
             a, b = st.columns(2)
@@ -1216,81 +1670,46 @@ def render_billing():
                 hrs = st.number_input("Hours *", 0.25, step=0.25, value=1.0)
                 rate = st.number_input("Hourly Rate (₦) *", 0, value=50000, step=5000)
                 st.markdown(f"**💵 Total: {_cur(hrs * rate)}**")
-            desc = st.text_area("Work Description *", placeholder="E.g. Drafted affidavit of evidence and conducted legal research on limitation periods…")
+            desc = st.text_area("Work Description *")
             if st.form_submit_button("Save Entry", type="primary"):
                 if ci > 0 and desc.strip():
-                    add_entry(
-                        {
-                            "client_id": st.session_state.clients[ci - 1]["id"],
-                            "case_id": st.session_state.cases[csi - 1]["id"] if csi > 0 else None,
-                            "date": ed.isoformat(),
-                            "hours": hrs,
-                            "rate": rate,
-                            "description": desc.strip(),
-                        }
-                    )
-                    st.success("✅ Time entry logged!")
-                    st.rerun()
-                else:
-                    st.error("Please select a client and provide a description.")
+                    add_entry({"client_id": st.session_state.clients[ci - 1]["id"],
+                        "case_id": st.session_state.cases[csi - 1]["id"] if csi > 0 else None,
+                        "date": ed.isoformat(), "hours": hrs, "rate": rate, "description": desc.strip()})
+                    st.success("✅ Time entry logged!"); st.rerun()
+                else: st.error("Please select a client and provide a description.")
 
-    # Time entries table
     if not st.session_state.time_entries:
-        st.info("No time entries yet. Use the form above to log your first entry.")
-        return
+        st.info("No time entries yet."); return
 
-    rows = [
-        {
-            "Date": _fdate(e["date"]),
-            "Client": client_name(e.get("client_id", "")),
-            "Case": client_name(e.get("case_id", "")) if e.get("case_id") else "—",
-            "Description": e["description"][:60] + ("…" if len(e["description"]) > 60 else ""),
-            "Hours": f"{e['hours']}h",
-            "Rate": _cur(e["rate"]),
-            "Amount": _cur(e["amount"]),
-            "ID": e["id"],
-        }
-        for e in reversed(st.session_state.time_entries)
-    ]
+    rows = [{"Date": _fdate(e["date"]), "Client": client_name(e.get("client_id", "")),
+        "Description": e["description"][:60] + ("…" if len(e["description"]) > 60 else ""),
+        "Hours": f"{e['hours']}h", "Rate": _cur(e["rate"]), "Amount": _cur(e["amount"]), "ID": e["id"]}
+        for e in reversed(st.session_state.time_entries)]
     st.dataframe(pd.DataFrame(rows).drop(columns=["ID"]), use_container_width=True, hide_index=True)
 
-    # Delete entry
     labs = [f"{r['Date']} — {r['Client']} — {r['Description']}" for r in rows]
-    sd = st.selectbox("🗑️ Delete Entry (select then click Delete)", ["None"] + labs, key="de")
+    sd = st.selectbox("🗑️ Delete Entry", ["None"] + labs, key="de")
     if sd != "None" and st.button("🗑️ Confirm Delete", type="secondary"):
-        del_entry(rows[labs.index(sd)]["ID"])
-        st.rerun()
+        del_entry(rows[labs.index(sd)]["ID"]); st.rerun()
 
-    # Chart
     if len(rows) > 1:
         st.markdown("---")
         tots: dict[str, float] = {}
         for e in st.session_state.time_entries:
             cn2 = client_name(e.get("client_id", ""))
             tots[cn2] = tots.get(cn2, 0) + e["amount"]
-        st.plotly_chart(px.pie(values=list(tots.values()), names=list(tots.keys()), title="Billable Amount by Client", hole=0.4), use_container_width=True)
+        st.plotly_chart(px.pie(values=list(tots.values()), names=list(tots.keys()),
+            title="Billable Amount by Client", hole=0.4), use_container_width=True)
 
-    # Invoices list
     if st.session_state.invoices:
         st.markdown("---")
         st.markdown("#### 📄 Generated Invoices")
         for inv in reversed(st.session_state.invoices):
             with st.expander(f"📄 {inv['invoice_no']} — {inv['client_name']} — {_cur(inv['total'])}"):
                 sep, dash = "=" * 60, "-" * 60
-                lines = [
-                    sep,
-                    "INVOICE",
-                    sep,
-                    "",
-                    f"No: {inv['invoice_no']}",
-                    f"Date: {_fdate(inv['date'])}",
-                    "",
-                    f"Bill To: {inv['client_name']}",
-                    "",
-                    dash,
-                    "ENTRIES",
-                    dash,
-                ]
+                lines = [sep, "INVOICE", sep, "", f"No: {inv['invoice_no']}", f"Date: {_fdate(inv['date'])}", "",
+                    f"Bill To: {inv['client_name']}", "", dash, "ENTRIES", dash]
                 for i, e in enumerate(inv["entries"], 1):
                     lines += ["", f"{i}. {_fdate(e['date'])} — {e['description']}", f"   {e['hours']}h × {_cur(e['rate'])} = {_cur(e['amount'])}"]
                 lines += ["", dash, f"TOTAL: {_cur(inv['total'])}", dash, "", "Payment due upon receipt.", sep]
@@ -1298,7 +1717,7 @@ def render_billing():
 
 
 # =============================================================================
-# PAGE: LEGAL TOOLS (Limitation, Interest, Hierarchy, Maxims)
+# PAGE: LEGAL TOOLS
 # =============================================================================
 def render_tools():
     st.markdown('<div class="page-header"><h1>🇳🇬 Nigerian Legal Tools</h1><p>Quick references, calculators, and legal maxims</p></div>', unsafe_allow_html=True)
@@ -1309,8 +1728,7 @@ def render_tools():
         data = [l for l in LIMITATION_PERIODS if s.lower() in l["cause"].lower()] if s else LIMITATION_PERIODS
         if data:
             st.dataframe(pd.DataFrame(data).rename(columns={"cause": "Cause", "period": "Period", "authority": "Authority"}), use_container_width=True, hide_index=True)
-        else:
-            st.info("No matching limitation period found.")
+        else: st.info("No matching limitation period found.")
 
     with tabs[1]:
         with st.form("ic"):
@@ -1323,10 +1741,7 @@ def render_tools():
                 ct = st.selectbox("Interest Type", ["Simple", "Compound (Monthly)"])
             calc = st.form_submit_button("Calculate", type="primary")
         if calc:
-            if ct == "Simple":
-                interest = p * (r / 100) * (m / 12)
-            else:
-                interest = p * ((1 + (r / 100) / 12) ** m) - p
+            interest = p * (r / 100) * (m / 12) if ct == "Simple" else p * ((1 + (r / 100) / 12) ** m) - p
             total = p + interest
             c1, c2, c3 = st.columns(3)
             with c1: st.metric("Principal", _cur(p))
@@ -1347,13 +1762,12 @@ def render_tools():
             st.caption(f"{indent}　　{c['desc']}")
 
     with tabs[3]:
-        sq = st.text_input("Search legal maxims (Latin or meaning)", "", placeholder="e.g. nemo, audi, precedent…")
+        sq = st.text_input("Search legal maxims", "", placeholder="e.g. nemo, audi, precedent…")
         mx = [m for m in LEGAL_MAXIMS if sq.lower() in m["maxim"].lower() or sq.lower() in m["meaning"].lower()] if sq else LEGAL_MAXIMS
         if mx:
             for m in mx:
                 st.markdown(f'<div class="tool-card"><h4 style="font-style:italic;color:#7c3aed">{_esc(m["maxim"])}</h4><p>{_esc(m["meaning"])}</p></div>', unsafe_allow_html=True)
-        else:
-            st.info("No matching maxim found.")
+        else: st.info("No matching maxim found.")
 
 
 # =============================================================================
@@ -1363,19 +1777,10 @@ def main():
     _auto()
     render_sidebar()
 
-    tabs = st.tabs(
-        [
-            "🏠 Home",
-            "🤖 AI Assistant",
-            "📚 Research",
-            "📁 Cases",
-            "📅 Calendar",
-            "📋 Templates",
-            "👥 Clients",
-            "💰 Billing",
-            "🇳🇬 Legal Tools",
-        ]
-    )
+    tabs = st.tabs([
+        "🏠 Home", "🧠 AI Assistant", "📚 Research", "📁 Cases",
+        "📅 Calendar", "📋 Templates", "👥 Clients", "💰 Billing", "🇳🇬 Legal Tools",
+    ])
     with tabs[0]: render_landing()
     with tabs[1]: render_ai()
     with tabs[2]: render_research()
@@ -1388,10 +1793,10 @@ def main():
 
     st.markdown(
         '<div class="app-footer">'
-        '<p>⚖️ <strong>LexiAssist v4.0</strong></p>'
+        '<p>⚖️ <strong>LexiAssist v5.0</strong> · Senior Lawyer Cognitive Engine</p>'
         '<p>Purpose-Built for Nigerian Lawyers · Powered by <a href="https://ai.google.dev" target="_blank">Google Gemini</a></p>'
-        '<p style="font-size:.78rem;margin-top:.5rem">⚠️ LexiAssist provides legal information, not legal advice. '
-        'Always verify references and consult a qualified legal practitioner.</p>'
+        '<p style="font-size:.78rem;margin-top:.5rem">⚠️ LexiAssist provides legal information and analysis, not legal advice. '
+        'Always verify all citations independently and apply professional judgment.</p>'
         '<p style="font-size:.75rem;margin-top:.25rem">© 2026 LexiAssist. All rights reserved.</p>'
         "</div>",
         unsafe_allow_html=True,
