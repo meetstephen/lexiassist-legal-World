@@ -10,7 +10,7 @@ import pandas as pd
 import plotly.express as px
 import streamlit as st
 
-import core
+import lexicore as core
 
 # ═══════════════════════════════════════════════════════
 # PAGE CONFIG
