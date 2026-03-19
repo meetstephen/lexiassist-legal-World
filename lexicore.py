@@ -1,5 +1,5 @@
 """
-core.py — LexiAssist v7.0 Backend Engine
+lexicore.py — LexiAssist v7.0 Backend Engine
 Smart legal AI with instruction adherence, response-length control, and persistence.
 """
 from __future__ import annotations
@@ -32,7 +32,7 @@ except ImportError:
     HAS_PDF_WRITE = False
 
 try:
-    import openpyxl  # noqa: F401
+    import openpyxl
     HAS_XLSX = True
 except ImportError:
     HAS_XLSX = False
@@ -72,7 +72,7 @@ RESPONSE_MODES = {
 }
 
 # ═══════════════════════════════════════════════════════
-# PROMPTS — Short, mode-aware, instruction-adherent
+# PROMPTS
 # ═══════════════════════════════════════════════════════
 _CORE = """You are LexiAssist — an expert Nigerian legal AI assistant.
 Jurisdiction: Nigeria (Constitution 1999 as amended, Federal/State Acts, Nigerian case law).
@@ -233,402 +233,407 @@ TEMPLATES = [
      "content": "BOARD RESOLUTION — [COMPANY] (RC: [NUMBER])\n[VENUE] — [DATE]\n\nPRESENT: [Directors]\nIN ATTENDANCE: [Company Secretary]\n\nRESOLVED:\n1. [Resolution]\n2. Any Director authorized to execute documents.\n3. Company Secretary to file returns with CAC.\n\nCERTIFIED TRUE COPY\n_______________\nCompany Secretary"},
 ]
 # ═══════════════════════════════════════════════════════
-# HELPERS
+# UTILITY FUNCTIONS
 # ═══════════════════════════════════════════════════════
 def gen_id() -> str:
-    return uuid.uuid4().hex[:8]
+    return uuid.uuid4().hex[:12]
 
-def fmt_currency(a: float) -> str:
-    return f"₦{a:,.2f}"
 
-def esc(t: str) -> str:
-    return html.escape(str(t))
+def esc(text: str) -> str:
+    if not text:
+        return ""
+    return html.escape(str(text))
 
-def fmt_date(s: str) -> str:
-    try:
-        return datetime.fromisoformat(s).strftime("%B %d, %Y")
-    except Exception:
-        return str(s)
-
-def days_until(s: str) -> int:
-    try:
-        return (datetime.fromisoformat(s).date() - datetime.now().date()).days
-    except Exception:
-        return 999
-
-def relative_date(s: str) -> str:
-    d = days_until(s)
-    if d == 0: return "Today"
-    if d == 1: return "Tomorrow"
-    if d == -1: return "Yesterday"
-    if 0 < d <= 7: return f"In {d} days"
-    if -7 <= d < 0: return f"{abs(d)} days ago"
-    return fmt_date(s)
 
 def normalize_model(name: str) -> str:
-    c = (name or "").strip()
-    m = MODEL_MIGRATION.get(c, c)
-    return m if m in SUPPORTED_MODELS else DEFAULT_MODEL
+    return MODEL_MIGRATION.get(name, name if name in SUPPORTED_MODELS else DEFAULT_MODEL)
+
+
+def fmt_currency(amount: float) -> str:
+    try:
+        return f"₦{float(amount):,.2f}"
+    except (ValueError, TypeError):
+        return "₦0.00"
+
+
+def fmt_date(dt_str: str) -> str:
+    if not dt_str:
+        return "—"
+    for fmt in ("%Y-%m-%d", "%Y-%m-%dT%H:%M:%S", "%Y-%m-%dT%H:%M:%S.%f"):
+        try:
+            return datetime.strptime(dt_str[:19], fmt[:len(dt_str[:19])]).strftime("%d %b %Y")
+        except ValueError:
+            continue
+    return str(dt_str)[:10]
+
+
+def days_until(dt_str: str) -> int:
+    if not dt_str:
+        return 999
+    try:
+        target = datetime.strptime(dt_str[:10], "%Y-%m-%d").date()
+        return (target - datetime.now().date()).days
+    except (ValueError, TypeError):
+        return 999
+
+
+def relative_date(dt_str: str) -> str:
+    d = days_until(dt_str)
+    if d < 0:
+        return f"{abs(d)}d overdue"
+    if d == 0:
+        return "Today"
+    if d == 1:
+        return "Tomorrow"
+    if d <= 7:
+        return f"{d} days"
+    if d <= 30:
+        return f"{d // 7}w {d % 7}d"
+    return f"{d // 30}mo"
+
+
+# ═══════════════════════════════════════════════════════
+# API
+# ═══════════════════════════════════════════════════════
+def get_api_key(secrets_fn=None, session_key: str = "") -> str:
+    if secrets_fn:
+        try:
+            k = secrets_fn()
+            if k:
+                return k
+        except Exception:
+            pass
+    env_key = os.environ.get("GEMINI_API_KEY", "")
+    if env_key:
+        return env_key
+    return session_key or ""
+
+
+def configure_api(key: str):
+    if key and len(key) >= 10:
+        genai.configure(api_key=key)
+
+
+def test_connection(key: str, model_name: str = DEFAULT_MODEL) -> tuple[bool, str]:
+    try:
+        genai.configure(api_key=key)
+        m = genai.GenerativeModel(model_name)
+        r = m.generate_content("Reply: OK", generation_config={"max_output_tokens": 10})
+        return True, "Connected"
+    except Exception as e:
+        return False, str(e)[:200]
+
+
+def generate(prompt: str, system: str, model_name: str, config: dict | None = None) -> str:
+    try:
+        cfg = config or {"temperature": 0.3, "top_p": 0.9, "top_k": 40, "max_output_tokens": 2500}
+        m = genai.GenerativeModel(model_name, system_instruction=system)
+        r = m.generate_content(prompt, generation_config=cfg)
+        if r and r.text:
+            return r.text.strip()
+        return "⚠️ No response generated. Try rephrasing."
+    except Exception as e:
+        return f"Error: {str(e)[:300]}"
+
+
+# ═══════════════════════════════════════════════════════
+# PIPELINE
+# ═══════════════════════════════════════════════════════
+def run_pipeline(
+    query: str, task: str, mode: str, model: str,
+    doc_context: str = "", conversation_context: str = "",
+) -> dict:
+    results = {"issue_spot": "", "main": "", "critique": "", "grade": ""}
+    mode_cfg = RESPONSE_MODES.get(mode, RESPONSE_MODES["standard"])
+    system = SYSTEM_PROMPTS.get(mode, SYSTEM_PROMPTS["standard"])
+    system += TASK_MODS.get(task, "")
+    gen_config = {
+        "temperature": 0.3 if mode != "comprehensive" else 0.35,
+        "top_p": 0.9,
+        "top_k": 40,
+        "max_output_tokens": mode_cfg["tokens"],
+    }
+
+    prompt_parts = []
+    if doc_context:
+        prompt_parts.append(f"UPLOADED DOCUMENT CONTEXT:\n{doc_context}\n\n---\n")
+    if conversation_context and mode != "brief":
+        prompt_parts.append(f"PREVIOUS CONVERSATION:\n{conversation_context}\n\n---\n")
+    prompt_parts.append(f"LEGAL QUERY:\n{query}")
+    full_prompt = "\n".join(prompt_parts)
+
+    if mode == "comprehensive":
+        spot = generate(
+            f"LEGAL SCENARIO:\n\n{query}",
+            ISSUE_SPOT_SYSTEM, model,
+            {"temperature": 0.15, "top_p": 0.85, "top_k": 25, "max_output_tokens": 800},
+        )
+        results["issue_spot"] = spot
+        if not spot.startswith(("Error", "⚠️")):
+            full_prompt += f"\n\n---\nISSUE ANALYSIS (for reference):\n{spot}"
+
+    main_response = generate(full_prompt, system, model, gen_config)
+    results["main"] = main_response
+
+    if mode == "comprehensive" and not main_response.startswith(("Error", "⚠️")):
+        critique_prompt = f"QUERY:\n{query}\n\nANALYSIS TO CRITIQUE:\n{main_response[:4000]}"
+        critique = generate(
+            critique_prompt, CRITIQUE_SYSTEM, model,
+            {"temperature": 0.2, "top_p": 0.85, "top_k": 25, "max_output_tokens": 500},
+        )
+        results["critique"] = critique
+        grade_match = re.search(r"OVERALL\s*GRADE\s*:\s*([ABCD])", critique, re.IGNORECASE)
+        results["grade"] = grade_match.group(1).upper() if grade_match else ""
+
+    return results
+
+
+def run_research(query: str, mode: str, model: str) -> str:
+    system = SYSTEM_PROMPTS.get(mode, SYSTEM_PROMPTS["standard"])
+    system += TASK_MODS.get("research", "")
+    cfg = RESPONSE_MODES.get(mode, RESPONSE_MODES["standard"])
+    return generate(
+        f"RESEARCH QUERY:\n{query}", system, model,
+        {"temperature": 0.25, "top_p": 0.9, "top_k": 40, "max_output_tokens": cfg["tokens"]},
+    )
+
+
+def run_followup(
+    original_query: str, previous_response: str,
+    followup: str, mode: str, task: str, model: str,
+) -> str:
+    system = FOLLOWUP_SYSTEM + TASK_MODS.get(task, "")
+    mode_label = RESPONSE_MODES.get(mode, RESPONSE_MODES["standard"])["label"]
+    cfg = RESPONSE_MODES.get(mode, RESPONSE_MODES["standard"])
+    prompt = (
+        f"RESPONSE MODE: {mode_label}\n\n"
+        f"ORIGINAL QUERY:\n{original_query[:1000]}\n\n"
+        f"PREVIOUS ANALYSIS:\n{previous_response[:3000]}\n\n"
+        f"FOLLOW-UP QUESTION:\n{followup}"
+    )
+    return generate(
+        prompt, system, model,
+        {"temperature": 0.3, "top_p": 0.9, "top_k": 40, "max_output_tokens": cfg["tokens"]},
+    )
 
 
 # ═══════════════════════════════════════════════════════
 # FILE EXTRACTION
 # ═══════════════════════════════════════════════════════
 def extract_file_text(uploaded_file) -> str:
-    """Extract text from uploaded file. Raises on unsupported type."""
     name = uploaded_file.name.lower()
     data = uploaded_file.getvalue()
 
-    # Size check
-    mb = len(data) / (1024 * 1024)
-    if mb > MAX_UPLOAD_MB:
-        raise ValueError(f"File too large ({mb:.1f}MB). Max is {MAX_UPLOAD_MB}MB.")
+    if len(data) > MAX_UPLOAD_MB * 1024 * 1024:
+        raise ValueError(f"File exceeds {MAX_UPLOAD_MB}MB limit.")
 
-    if name.endswith(".pdf"):
-        if not HAS_PDF_READ:
-            raise RuntimeError("PDF support not installed. Run: pip install pdfplumber")
-        with pdfplumber.open(io.BytesIO(data)) as pdf:
-            pages = [p.extract_text() or "" for p in pdf.pages]
-            return "\n".join(pages)
-    elif name.endswith(".docx"):
-        if not HAS_DOCX:
-            raise RuntimeError("DOCX support not installed. Run: pip install python-docx")
-        doc = DocxDoc(io.BytesIO(data))
-        return "\n".join([p.text for p in doc.paragraphs if p.text.strip()])
-    elif name.endswith(".txt"):
-        return data.decode("utf-8", errors="ignore")
+    if name.endswith(".txt"):
+        return data.decode("utf-8", errors="replace")
     elif name.endswith(".csv"):
-        return pd.read_csv(io.BytesIO(data)).to_string(index=False)
+        df = pd.read_csv(io.BytesIO(data))
+        return df.to_string(index=False)
     elif name.endswith(".xlsx"):
         if not HAS_XLSX:
-            raise RuntimeError("Excel support not installed. Run: pip install openpyxl")
-        return pd.read_excel(io.BytesIO(data)).to_string(index=False)
+            raise ValueError("openpyxl not installed.")
+        df = pd.read_excel(io.BytesIO(data), engine="openpyxl")
+        return df.to_string(index=False)
+    elif name.endswith(".pdf"):
+        if not HAS_PDF_READ:
+            raise ValueError("pdfplumber not installed.")
+        pages = []
+        with pdfplumber.open(io.BytesIO(data)) as pdf:
+            for p in pdf.pages[:50]:
+                t = p.extract_text()
+                if t:
+                    pages.append(t)
+        return "\n\n".join(pages) if pages else "⚠️ Could not extract text."
+    elif name.endswith(".docx"):
+        if not HAS_DOCX:
+            raise ValueError("python-docx not installed.")
+        doc = DocxDoc(io.BytesIO(data))
+        return "\n".join(p.text for p in doc.paragraphs if p.text.strip())
     else:
         raise ValueError(f"Unsupported file type: {name.split('.')[-1]}")
 
 
 # ═══════════════════════════════════════════════════════
-# EXPORT FUNCTIONS
+# EXPORT — ALL FIXES APPLIED
 # ═══════════════════════════════════════════════════════
 def export_txt(text: str, title: str = "LexiAssist Analysis") -> str:
-    """Export analysis as plain text string."""
-    stamp = datetime.now().strftime("%B %d, %Y at %I:%M %p")
-    header = f"{'='*60}\n{title}\nGenerated: {stamp}\n{'='*60}\n\n"
-    footer = f"\n\n{'='*60}\nDisclaimer: AI-generated legal information. Not legal advice.\nVerify all citations independently. Apply professional judgment.\n{'='*60}"
+    header = f"{'=' * 60}\n{title}\nGenerated: {datetime.now():%Y-%m-%d %H:%M}\n{'=' * 60}\n\n"
+    footer = (
+        f"\n\n{'=' * 60}\n"
+        "Disclaimer: AI-generated legal information. Not legal advice.\n"
+        "Verify all citations independently.\n"
+        f"{'=' * 60}"
+    )
     return header + text + footer
 
 
 def export_html(text: str, title: str = "LexiAssist Analysis") -> str:
-    """Export analysis as styled HTML."""
-    stamp = datetime.now().strftime("%B %d, %Y at %I:%M %p")
     escaped = esc(text)
     return f"""<!DOCTYPE html>
-<html><head><meta charset="UTF-8"><title>{esc(title)}</title>
+<html><head><meta charset="utf-8"><title>{esc(title)}</title>
 <style>
-body{{font-family:Georgia,serif;line-height:1.8;max-width:850px;margin:40px auto;padding:20px;color:#1e293b}}
-h1{{color:#059669;border-bottom:3px solid #059669;padding-bottom:12px;font-size:1.6rem}}
-.meta{{color:#64748b;font-size:.85rem;margin-bottom:2rem}}
-.content{{white-space:pre-wrap;font-size:15px}}
-.disclaimer{{background:#fef3c7;border-left:4px solid #f59e0b;padding:16px;margin-top:32px;border-radius:0 8px 8px 0;font-size:.9rem}}
+body{{font-family:Georgia,serif;max-width:800px;margin:2rem auto;padding:0 1rem;color:#1e293b;line-height:1.8}}
+h1{{color:#059669;border-bottom:3px solid #059669;padding-bottom:.5rem}}
+.content{{white-space:pre-wrap;font-size:1rem}}
+.disclaimer{{background:#fef3c7;border-left:4px solid #f59e0b;padding:1rem;margin-top:2rem;font-size:.85rem}}
+.footer{{text-align:center;color:#94a3b8;margin-top:2rem;font-size:.8rem}}
 </style></head><body>
 <h1>⚖️ {esc(title)}</h1>
-<div class="meta">Generated: {stamp}</div>
+<p style="color:#64748b">Generated: {datetime.now():%Y-%m-%d %H:%M}</p>
 <div class="content">{escaped}</div>
-<div class="disclaimer"><strong>Disclaimer:</strong> AI-generated legal information for professional reference only. Not legal advice. Verify all citations independently.</div>
+<div class="disclaimer"><strong>⚖️ Disclaimer:</strong> AI-generated legal information. Not legal advice. Verify all citations.</div>
+<div class="footer">LexiAssist v7.0 · Smart Legal AI</div>
 </body></html>"""
 
 
 def export_pdf(text: str, title: str = "LexiAssist Analysis") -> bytes:
-    """Export analysis as PDF bytes. Returns empty bytes if fpdf2 not installed."""
+    """Export text to PDF. Returns bytes or empty bytes if fpdf2 not installed."""
     if not HAS_PDF_WRITE:
         return b""
-    stamp = datetime.now().strftime("%B %d, %Y at %I:%M %p")
-    pdf = FPDF()
-    pdf.set_auto_page_break(auto=True, margin=20)
-    pdf.add_page()
-    pdf.set_font("Helvetica", "B", 16)
-    safe_title = title.encode("latin-1", "replace").decode("latin-1")
-    pdf.cell(0, 12, safe_title, ln=True)
-    pdf.set_font("Helvetica", "", 9)
-    pdf.set_text_color(100, 100, 100)
-    pdf.cell(0, 8, f"Generated: {stamp}", ln=True)
-    pdf.ln(6)
-    pdf.set_draw_color(5, 150, 105)
-    pdf.line(10, pdf.get_y(), 200, pdf.get_y())
-    pdf.ln(8)
-    pdf.set_text_color(30, 41, 59)
-    pdf.set_font("Helvetica", "", 10)
-    safe_text = text.replace("\u2014", "--").replace("\u2013", "-")
-    safe_text = safe_text.replace("\u2018", "'").replace("\u2019", "'")
-    safe_text = safe_text.replace("\u201c", '"').replace("\u201d", '"')
-    safe_text = safe_text.replace("\u20a6", "N")  # Naira sign
-    safe_text = safe_text.encode("latin-1", "replace").decode("latin-1")
-    pdf.multi_cell(0, 5.5, safe_text)
-    pdf.ln(10)
-    pdf.set_font("Helvetica", "I", 8)
-    pdf.set_text_color(120, 120, 120)
-    pdf.multi_cell(0, 4.5, "Disclaimer: AI-generated legal information. Not legal advice. Verify citations. Apply professional judgment.")
-    return pdf.output()
+    try:
+        pdf = FPDF()
+        pdf.set_auto_page_break(auto=True, margin=20)
+        pdf.add_page()
+        pdf.set_font("Helvetica", "B", 16)
+        pdf.cell(0, 12, title, ln=True, align="C")
+        pdf.set_font("Helvetica", "", 8)
+        pdf.cell(0, 6, f"Generated: {datetime.now():%Y-%m-%d %H:%M}", ln=True, align="C")
+        pdf.ln(8)
+        pdf.set_font("Helvetica", "", 10)
+        clean = text.encode("latin-1", "replace").decode("latin-1")
+        pdf.multi_cell(0, 5, clean)
+        pdf.ln(10)
+        pdf.set_font("Helvetica", "I", 8)
+        pdf.multi_cell(0, 4, "Disclaimer: AI-generated legal information. Not legal advice. Verify all citations.")
+        # FIX: wrap in bytes() so Streamlit accepts it
+        return bytes(pdf.output())
+    except Exception:
+        return b""
 
 
 def export_docx(text: str, title: str = "LexiAssist Analysis") -> bytes:
-    """Export analysis as DOCX bytes. Returns empty bytes if python-docx not installed."""
+    """Export text to DOCX. Returns bytes or empty bytes if python-docx not installed."""
     if not HAS_DOCX:
         return b""
-    stamp = datetime.now().strftime("%B %d, %Y at %I:%M %p")
-    doc = DocxDoc()
-    style = doc.styles["Normal"]
-    style.font.name = "Calibri"
-    style.font.size = Pt(11)
-    doc.add_heading(title, level=1)
-    meta = doc.add_paragraph(f"Generated: {stamp}")
-    meta.style.font.size = Pt(9)
-    doc.add_paragraph("─" * 60)
-    for para in text.split("\n"):
-        if para.strip():
-            doc.add_paragraph(para)
-        else:
-            doc.add_paragraph("")
-    doc.add_paragraph("─" * 60)
-    disclaimer = doc.add_paragraph(
-        "Disclaimer: AI-generated legal information for professional reference only. "
-        "Not legal advice. Verify all citations independently."
-    )
-    disclaimer.runs[0].italic = True
-    buf = io.BytesIO()
-    doc.save(buf)
-    return buf.getvalue()
-
-
-# ═══════════════════════════════════════════════════════
-# API LAYER
-# ═══════════════════════════════════════════════════════
-def get_api_key(secrets_fn=None, session_key: str = "") -> str:
-    """Get API key from secrets, env, or session."""
-    sources = [
-        lambda: (secrets_fn() if secrets_fn else ""),
-        lambda: os.getenv("GEMINI_API_KEY", ""),
-        lambda: session_key,
-    ]
-    for fn in sources:
-        try:
-            k = fn()
-            if k and len(k.strip()) >= 10:
-                return k.strip()
-        except Exception:
-            pass
-    return ""
-
-
-def configure_api(key: str):
-    """Configure genai with key."""
-    genai.configure(api_key=key, transport="rest")
-
-
-def test_connection(key: str, model_name: str) -> tuple[bool, str]:
-    """Test API connection. Returns (success, message)."""
     try:
-        configure_api(key)
-        m = genai.GenerativeModel(normalize_model(model_name))
-        m.generate_content("Say OK", generation_config={"max_output_tokens": 8})
-        return True, "Connected"
-    except Exception as e:
-        s = str(e)
-        if "403" in s:
-            return False, "API key invalid or unauthorized."
-        if "429" in s:
-            return False, "Rate limit hit. Wait and retry."
-        return False, f"Connection error: {s}"
-
-
-def generate(prompt: str, system: str, model_name: str, gen_cfg: dict) -> str:
-    """Generate response from Gemini. Retries up to 3 times."""
-    model_name = normalize_model(model_name)
-    try:
-        model = genai.GenerativeModel(model_name, system_instruction=system)
-    except TypeError:
-        model = genai.GenerativeModel(model_name)
-        prompt = f"{system}\n\n---\n\n{prompt}"
-
-    for attempt in range(3):
-        try:
-            resp = model.generate_content(prompt, generation_config=gen_cfg)
-            return resp.text
-        except Exception as e:
-            if attempt == 2:
-                return f"Error: {e}"
-            time.sleep(1.5 * (attempt + 1))
-    return "Error: generation failed after retries."
-
-
-# ═══════════════════════════════════════════════════════
-# SMART PIPELINE
-# ═══════════════════════════════════════════════════════
-def build_system_prompt(mode: str, task: str) -> str:
-    """Build system prompt from mode and task type."""
-    base = SYSTEM_PROMPTS.get(mode, SYSTEM_PROMPTS["standard"])
-    mod = TASK_MODS.get(task, "")
-    return base + mod
-
-
-def run_pipeline(
-    query: str,
-    task: str,
-    mode: str,
-    model_name: str,
-    doc_context: str = "",
-    conv_context: str = "",
-) -> dict[str, str]:
-    """Run the smart pipeline. Returns dict with keys: issue_spot, ambiguity, main, critique, grade."""
-    result = {"issue_spot": "", "ambiguity": "", "main": "", "critique": "", "grade": ""}
-    tokens = RESPONSE_MODES.get(mode, RESPONSE_MODES["standard"])["tokens"]
-    system = build_system_prompt(mode, task)
-    now = datetime.now().strftime("%d %B %Y")
-
-    # Build prompt parts
-    parts = [f"DATE: {now}"]
-    if doc_context:
-        parts.append(f"DOCUMENT CONTEXT:\n{doc_context[:3000]}")
-    if conv_context:
-        parts.append(f"PRIOR CONTEXT:\n{conv_context[:1500]}")
-
-    gen_main = {"temperature": 0.2, "top_p": 0.88, "top_k": 35, "max_output_tokens": tokens}
-    gen_fast = {"temperature": 0.15, "top_p": 0.85, "top_k": 25, "max_output_tokens": 800}
-    gen_crit = {"temperature": 0.15, "top_p": 0.85, "top_k": 25, "max_output_tokens": 500}
-
-    if mode == "comprehensive":
-        # Pass 1: Issue Spotting
-        result["issue_spot"] = generate(
-            f"LEGAL SCENARIO:\n\n{query}", ISSUE_SPOT_SYSTEM, model_name, gen_fast
+        doc = DocxDoc()
+        doc.add_heading(title, level=1)
+        doc.add_paragraph(f"Generated: {datetime.now():%Y-%m-%d %H:%M}").italic = True
+        doc.add_paragraph("")
+        for para in text.split("\n"):
+            p = doc.add_paragraph(para)
+            for run in p.runs:
+                run.font.size = Pt(11)
+        doc.add_paragraph("")
+        disclaimer = doc.add_paragraph(
+            "Disclaimer: AI-generated legal information. Not legal advice. Verify all citations."
         )
-        # Pass 2: Build main prompt with issue context
-        parts.append(f"PRE-ANALYSIS — ISSUES IDENTIFIED:\n{result['issue_spot']}")
-        parts.append(f"QUERY:\n{query}")
-        parts.append("Address EVERY issue identified above (including hidden issues). Apply your full reasoning framework.")
-        prompt = "\n\n".join(parts)
-        result["main"] = generate(prompt, system, model_name, gen_main)
-
-        # Pass 3: Self-Critique
-        if not result["main"].startswith(("Error", "⚠️")):
-            critique_prompt = (
-                f"QUERY:\n{query}\n\nISSUES:\n{result['issue_spot']}\n\nANALYSIS TO CRITIQUE:\n{result['main']}"
-            )
-            result["critique"] = generate(critique_prompt, CRITIQUE_SYSTEM, model_name, gen_crit)
-            result["grade"] = extract_grade(result["critique"])
-    else:
-        # Brief / Standard: single call
-        parts.append(f"QUERY:\n{query}")
-        prompt = "\n\n".join(parts)
-        result["main"] = generate(prompt, system, model_name, gen_main)
-
-    return result
+        disclaimer.italic = True
+        buf = io.BytesIO()
+        doc.save(buf)
+        # FIX: wrap in bytes() so Streamlit accepts it
+        return bytes(buf.getvalue())
+    except Exception:
+        return b""
 
 
-def run_followup(
-    original_query: str,
-    original_response: str,
-    followup: str,
-    mode: str,
-    task: str,
-    model_name: str,
-) -> str:
-    """Run a follow-up query with context."""
-    tokens = RESPONSE_MODES.get(mode, RESPONSE_MODES["standard"])["tokens"]
-    system = FOLLOWUP_SYSTEM + f"\n\nRESPONSE MODE: {mode.upper()} — max {tokens} tokens." + TASK_MODS.get(task, "")
-    prompt = (
-        f"ORIGINAL QUERY:\n{original_query[:1000]}\n\n"
-        f"PREVIOUS ANALYSIS:\n{original_response[:3000]}\n\n"
-        f"FOLLOW-UP QUESTION:\n{followup}\n\n"
-        f"Address the follow-up. Do NOT repeat prior analysis."
+def export_all_data(cases, clients, time_entries, invoices) -> str:
+    return json.dumps(
+        {
+            "export_date": datetime.now().isoformat(),
+            "version": "7.0",
+            "cases": cases,
+            "clients": clients,
+            "time_entries": time_entries,
+            "invoices": invoices,
+        },
+        indent=2, default=str,
     )
-    gen_cfg = {"temperature": 0.2, "top_p": 0.88, "top_k": 35, "max_output_tokens": tokens}
-    return generate(prompt, system, model_name, gen_cfg)
-
-
-def run_research(query: str, mode: str, model_name: str) -> str:
-    """Run a legal research query."""
-    tokens = RESPONSE_MODES.get(mode, RESPONSE_MODES["standard"])["tokens"]
-    system = build_system_prompt(mode, "research")
-    gen_cfg = {"temperature": 0.2, "top_p": 0.88, "top_k": 35, "max_output_tokens": tokens}
-    prompt = (
-        f"RESEARCH QUESTION:\n{query}\n\n"
-        f"Provide a focused legal research response. Cite statutes and cases. "
-        f"Mark uncertain citations: [Citation to be verified]."
-    )
-    return generate(prompt, system, model_name, gen_cfg)
-
-
-def extract_grade(text: str) -> str:
-    """Extract quality grade from critique text."""
-    m = re.search(r"OVERALL GRADE:\s*([A-D])", text, re.IGNORECASE)
-    return m.group(1).upper() if m else "B"
 
 
 # ═══════════════════════════════════════════════════════
-# HISTORY PERSISTENCE
+# HISTORY (PERSISTENT)
 # ═══════════════════════════════════════════════════════
-def save_history(history: list[dict]) -> bool:
-    """Save conversation history to file. Returns True on success."""
-    try:
-        # Keep last 100 entries
-        trimmed = history[-100:] if len(history) > 100 else history
-        HISTORY_FILE.write_text(json.dumps(trimmed, indent=2, default=str))
-        return True
-    except Exception as e:
-        logger.warning(f"Failed to save history: {e}")
-        return False
-
-
-def load_history() -> list[dict]:
-    """Load conversation history from file."""
+def load_history() -> list:
     try:
         if HISTORY_FILE.exists():
-            data = json.loads(HISTORY_FILE.read_text())
+            data = json.loads(HISTORY_FILE.read_text(encoding="utf-8"))
             if isinstance(data, list):
-                return data
-    except Exception as e:
-        logger.warning(f"Failed to load history: {e}")
+                return data[-100:]
+    except Exception:
+        pass
     return []
 
 
-def clear_history() -> bool:
-    """Delete history file."""
+def save_history(history: list):
+    try:
+        trimmed = history[-100:]
+        HISTORY_FILE.write_text(json.dumps(trimmed, indent=2, default=str), encoding="utf-8")
+    except Exception:
+        pass
+
+
+def clear_history():
     try:
         if HISTORY_FILE.exists():
             HISTORY_FILE.unlink()
-        return True
-    except Exception as e:
-        logger.warning(f"Failed to clear history: {e}")
-        return False
+    except Exception:
+        pass
 
 
 # ═══════════════════════════════════════════════════════
-# DATA CRUD — Cases, Clients, Time, Invoices
+# CASE MANAGEMENT
 # ═══════════════════════════════════════════════════════
-def add_case(cases: list, data: dict) -> list:
-    data["id"] = gen_id()
-    data["created_at"] = datetime.now().isoformat()
-    cases.append(data)
-    return cases
+def add_case(cases: list, data: dict) -> dict:
+    case = {
+        "id": gen_id(),
+        "created": datetime.now().isoformat(),
+        **data,
+    }
+    cases.append(case)
+    return case
 
 
-def update_case(cases: list, case_id: str, updates: dict) -> list:
+def update_case(cases: list, case_id: str, updates: dict):
     for c in cases:
         if c["id"] == case_id:
             c.update(updates)
-            c["updated_at"] = datetime.now().isoformat()
-    return cases
+            return c
+    return None
 
 
 def delete_case(cases: list, case_id: str) -> list:
     return [c for c in cases if c["id"] != case_id]
 
 
-def add_client(clients: list, data: dict) -> list:
-    data["id"] = gen_id()
-    data["created_at"] = datetime.now().isoformat()
-    clients.append(data)
-    return clients
+def get_hearings(cases: list) -> list:
+    hearings = []
+    for c in cases:
+        if c.get("status") == "Active" and c.get("next_hearing"):
+            hearings.append({
+                "title": c.get("title", "Untitled"),
+                "suit": c.get("suit_no", ""),
+                "court": c.get("court", ""),
+                "date": c["next_hearing"],
+            })
+    hearings.sort(key=lambda h: h["date"])
+    return hearings
+
+
+# ═══════════════════════════════════════════════════════
+# CLIENT MANAGEMENT
+# ═══════════════════════════════════════════════════════
+def add_client(clients: list, data: dict) -> dict:
+    client = {
+        "id": gen_id(),
+        "created": datetime.now().isoformat(),
+        **data,
+    }
+    clients.append(client)
+    return client
 
 
 def delete_client(clients: list, client_id: str) -> list:
@@ -638,38 +643,30 @@ def delete_client(clients: list, client_id: str) -> list:
 def client_name(clients: list, client_id: str) -> str:
     for c in clients:
         if c["id"] == client_id:
-            return c["name"]
+            return c.get("name", "Unknown")
     return "—"
 
 
-def add_time_entry(entries: list, data: dict) -> list:
-    data["id"] = gen_id()
-    data["created_at"] = datetime.now().isoformat()
-    data["amount"] = data["hours"] * data["rate"]
-    entries.append(data)
-    return entries
+def client_case_count(cases: list, client_id: str) -> int:
+    return sum(1 for c in cases if c.get("client_id") == client_id)
 
 
-def delete_time_entry(entries: list, entry_id: str) -> list:
-    return [e for e in entries if e["id"] != entry_id]
+def client_billable(time_entries: list, client_id: str) -> float:
+    return sum(e.get("amount", 0) for e in time_entries if e.get("client_id") == client_id)
 
 
-def make_invoice(invoices: list, entries: list, clients: list, client_id: str) -> dict | None:
-    client_entries = [e for e in entries if e.get("client_id") == client_id]
-    if not client_entries:
-        return None
-    inv = {
+# ═══════════════════════════════════════════════════════
+# BILLING
+# ═══════════════════════════════════════════════════════
+def add_time_entry(entries: list, data: dict) -> dict:
+    entry = {
         "id": gen_id(),
-        "invoice_no": f"INV-{datetime.now():%Y%m%d}-{gen_id()[:4].upper()}",
-        "client_id": client_id,
-        "client_name": client_name(clients, client_id),
-        "entries": client_entries,
-        "total": sum(e["amount"] for e in client_entries),
-        "date": datetime.now().isoformat(),
-        "status": "Draft",
+        "created": datetime.now().isoformat(),
+        "amount": float(data.get("hours", 0)) * float(data.get("rate", 0)),
+        **data,
     }
-    invoices.append(inv)
-    return inv
+    entries.append(entry)
+    return entry
 
 
 def total_billable(entries: list) -> float:
@@ -680,35 +677,19 @@ def total_hours(entries: list) -> float:
     return sum(e.get("hours", 0) for e in entries)
 
 
-def client_billable(entries: list, client_id: str) -> float:
-    return sum(e.get("amount", 0) for e in entries if e.get("client_id") == client_id)
-
-
-def client_case_count(cases: list, client_id: str) -> int:
-    return sum(1 for c in cases if c.get("client_id") == client_id)
-
-
-def get_hearings(cases: list, limit: int = 10) -> list[dict]:
-    """Get upcoming hearings sorted by date. Returns a list (not tuple)."""
-    hearings = []
-    for c in cases:
-        if c.get("next_hearing") and c.get("status") == "Active":
-            hearings.append({
-                "id": c["id"],
-                "title": c["title"],
-                "date": c["next_hearing"],
-                "court": c.get("court", ""),
-                "suit": c.get("suit_no", ""),
-            })
-    hearings.sort(key=lambda x: x["date"])
-    return hearings[:limit]
-
-
-def export_all_data(cases, clients, entries, invoices) -> str:
-    """Export all app data as JSON string."""
-    return json.dumps({
-        "cases": cases,
-        "clients": clients,
-        "time_entries": entries,
-        "invoices": invoices,
-    }, indent=2, default=str)
+def make_invoice(invoices: list, time_entries: list, clients: list, client_id: str) -> dict | None:
+    entries = [e for e in time_entries if e.get("client_id") == client_id]
+    if not entries:
+        return None
+    name = client_name(clients, client_id)
+    inv = {
+        "id": gen_id(),
+        "invoice_no": f"INV-{datetime.now():%Y%m%d}-{gen_id()[:4].upper()}",
+        "date": datetime.now().isoformat(),
+        "client_id": client_id,
+        "client_name": name,
+        "entries": entries,
+        "total": sum(e.get("amount", 0) for e in entries),
+    }
+    invoices.append(inv)
+    return inv
