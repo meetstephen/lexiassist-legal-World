@@ -34,8 +34,8 @@ LexiAssist combines a jurisdiction-focused legal assistant with practical law-of
 
 ```bash
 # Clone
-git clone https://github.com/your-username/lexiassist.git
-cd lexiassist
+git clone https://github.com/meetstephen/lexiassist-legal-World.git
+cd lexiassist-legal-World
 
 # Install
 pip install streamlit google-generativeai pandas plotly pdfplumber python-docx fpdf2 openpyxl
