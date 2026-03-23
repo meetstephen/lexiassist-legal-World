@@ -10,6 +10,16 @@
 
 LexiAssist combines a jurisdiction-focused legal assistant with practical law-office tools for research, drafting, case tracking, client management, billing, and document handling — all in a single-file Streamlit deployment.
 
+<p align="center">
+  <a href="https://lexiassist-legal-world.streamlit.app">
+    <img src="https://img.shields.io/badge/🚀%20Launch%20App-LexiAssist%20Live-059669?style=for-the-badge&logoColor=white" alt="Launch LexiAssist">
+  </a>
+</p>
+
+<p align="center">
+  👉 <strong><a href="https://lexiassist-legal-world.streamlit.app">https://lexiassist-legal-world.streamlit.app</a></strong>
+</p>
+
 ---
 
 ## Features
@@ -31,6 +41,12 @@ LexiAssist combines a jurisdiction-focused legal assistant with practical law-of
 | Gemini 2.5 Flash Lite | `gemini-2.5-flash-lite` |
 
 ## Quick Start
+
+### Try it now
+
+Visit **[lexiassist-legal-world.streamlit.app](https://lexiassist-legal-world.streamlit.app)** — no installation needed.
+
+### Run locally
 
 ```bash
 # Clone
@@ -90,5 +106,5 @@ LexiAssist provides **AI-generated legal information** for workflow support, dra
 ---
 
 <p align="center">
-  <strong>LexiAssist v8.0</strong> · Built for Nigerian lawyers · <a href="https://ai.google.dev">Powered by Google Gemini</a>
+  <strong>LexiAssist v8.0</strong> · Built for Nigerian lawyers · <a href="https://lexiassist-legal-world.streamlit.app">Try it live</a> · <a href="https://ai.google.dev">Powered by Google Gemini</a>
 </p>
