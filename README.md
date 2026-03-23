@@ -88,11 +88,13 @@ streamlit run app.py
 
 ```text
 .
-├── app.py                  # Entire application (single-file)
 ├── .streamlit/
-│   └── secrets.toml        # API key configuration
+│   └── secrets.toml        # Streamlit config and API key
+├── .gitignore              # Git ignore rules
+├── app.py                  # Entire application (single-file)
 ├── requirements.txt        # Dependencies
-└── README.md
+├── runtime.txt             # Python version for deployment
+└── README.md               # Documentation
 ```
 
 ## Who This Is For
