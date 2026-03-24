@@ -558,1589 +558,911 @@ def db_count(table: str, where: str = "", params: tuple = ()) -> int:
         conn.close()
 
 # ═══════════════════════════════════════════════════════
-# PART 2 — AI ENGINE · DOCUMENT PARSER · REFERENCES · UI
+# SECURITY & USER PROFILE
 # ═══════════════════════════════════════════════════════
-
-# ───────────────────────────────────────────────────────
-#  AI ENGINE
-# ───────────────────────────────────────────────────────
-def _resolve_api_key() -> str:
-    """Resolve API key: secrets → env → session state."""
-    k = safe_secret("GEMINI_API_KEY", "")
-    if k and len(k.strip()) >= 10:
-        return k.strip()
-    k = os.environ.get("GEMINI_API_KEY", "")
-    if k and len(k.strip()) >= 10:
-        return k.strip()
-    return st.session_state.get("api_key_input", "").strip()
+def safe_secret(key, default=""):
+    try:
+        return st.secrets.get(key, default)
+    except Exception:
+        return default
 
 
-def count_tokens(text: str) -> int:
-    """Rough token estimate (words × 1.3)."""
-    return int(len(text.split()) * 1.3)
+def hash_password(password):
+    salt = os.environ.get("LEXIASSIST_SALT", "lexiassist_v8")
+    return hashlib.sha256((password + salt).encode()).hexdigest()
 
 
-def estimate_cost(input_tokens: int, output_tokens: int, model: str) -> float:
-    """Estimate Gemini API cost in USD."""
-    pricing = {
-        "gemini-2.5-flash": {"input": 0.15, "output": 0.60},
-        "gemini-2.5-flash-lite": {"input": 0.075, "output": 0.30},
-    }
-    rates = pricing.get(model, {"input": 0.15, "output": 0.60})
-    return round(
-        (input_tokens / 1_000_000) * rates["input"]
-        + (output_tokens / 1_000_000) * rates["output"],
-        6,
-    )
+def verify_password(password, hashed):
+    return hash_password(password) == hashed
 
 
-RESPONSE_MODE_INSTRUCTIONS = {
-    "Brief": (
-        "Respond concisely in 2-4 paragraphs. Focus on the direct answer, "
-        "key authority, and one actionable recommendation."
-    ),
-    "Standard": (
-        "Provide a balanced analysis in 4-8 paragraphs. Include: (1) Direct answer, "
-        "(2) Applicable law and leading authority, (3) Application to facts, "
-        "(4) Strategic recommendations with at least one alternative angle, "
-        "(5) Practical next steps."
-    ),
-    "Comprehensive": (
-        "Deliver a full CREAC analysis: Conclusion → Rule → Explanation → Application → Conclusion. "
-        "Include: all relevant statutes and case law with citations, procedural requirements, "
-        "limitation periods, court hierarchy considerations, a Devil's Advocate section "
-        "highlighting opposing arguments, and a detailed action plan with timelines."
-    ),
-}
+def get_user_profile():
+    rows = db_fetch_all("user_profile", order="id ASC")
+    return rows[0] if rows else None
 
 
-def build_system_prompt(mode: str = "Standard", contract_mode: bool = False) -> str:
-    """Construct the LexiAssist system prompt for Gemini."""
-    base = (
-        "You are LexiAssist — an elite, aggressive AI legal partner specialising in Nigerian law. "
-        "You think like a seasoned Senior Advocate of Nigeria (SAN) who leaves no stone unturned.\n\n"
-        "CORE DIRECTIVES:\n"
-        "1. Jurisdiction: Nigerian legal system — Constitution, statutes, case law (Supreme Court, "
-        "Court of Appeal, Federal & State High Courts, National Industrial Court, Sharia & Customary courts).\n"
-        "2. Citations: Always cite real statutes (e.g., Companies and Allied Matters Act 2020, s.XXX) "
-        "and real case law (e.g., Registered Trustees of National Association of Community Health "
-        "Practitioners of Nigeria v. Medical & Health Workers Union of Nigeria [2008] 2 NWLR "
-        "(Pt. 1070) 1) where available. Never fabricate citations.\n"
-        "3. Accuracy: If uncertain about a specific citation, say so explicitly rather than inventing one.\n"
-        "4. Strategy: Always include a practical strategy layer — don't just state the law, advise on "
-        "how to use it, what pitfalls to avoid, and what the opponent may argue.\n"
-        "5. Limitation periods: Flag applicable limitation periods proactively.\n"
-        "6. Tone: Professional, authoritative, direct. Write for a lawyer, not a layperson.\n"
-        "7. Format: Use clear headings, numbered points where helpful, and bold key terms.\n\n"
-    )
-
-    mode_instruction = RESPONSE_MODE_INSTRUCTIONS.get(mode, RESPONSE_MODE_INSTRUCTIONS["Standard"])
-
-    if contract_mode:
-        contract_layer = (
-            "CONTRACT REVIEW MODE ACTIVE:\n"
-            "Perform a clause-by-clause review. For each material clause:\n"
-            "• Identify the clause and its purpose\n"
-            "• Flag risks, ambiguities, or missing protections\n"
-            "• Check compliance with Nigerian law (e.g., CAMA 2020, Labour Act, Land Use Act)\n"
-            "• Suggest specific redline edits with replacement language\n"
-            "• Rate each clause: ✅ Acceptable | ⚠️ Needs Attention | 🚨 High Risk\n"
-            "End with an Executive Summary of overall risk level and top 5 recommendations.\n\n"
-        )
-        return base + contract_layer + f"RESPONSE MODE: {mode}\n{mode_instruction}"
-
-    return base + f"RESPONSE MODE: {mode}\n{mode_instruction}"
+def save_user_profile(data):
+    existing = get_user_profile()
+    now = datetime.now().isoformat(timespec="seconds")
+    if existing:
+        data["updated_at"] = now
+        db_update("user_profile", existing["id"], data)
+    else:
+        data.setdefault("created_at", now)
+        data.setdefault("updated_at", now)
+        db_insert("user_profile", data)
 
 
-def call_gemini(
-    prompt: str,
-    mode: str = "Standard",
-    context: str = "",
-    contract_mode: bool = False,
-    user_id: str = "",
-    model_override: str = "",
-) -> dict:
-    """Send a prompt to Gemini and return structured result."""
+def ensure_profile_exists():
+    if not get_user_profile():
+        save_user_profile({"firm_name": "", "user_name": "", "email": "", "password_hash": ""})
+
+
+# ═══════════════════════════════════════════════════════
+# API CONFIGURATION
+# ═══════════════════════════════════════════════════════
+def _resolve_api_key():
+    for src in [safe_secret("GEMINI_API_KEY"), os.environ.get("GEMINI_API_KEY", ""), st.session_state.get("api_key_input", "")]:
+        if src and len(src.strip()) >= 10:
+            return src.strip()
+    return ""
+
+
+def configure_gemini(model_name=None):
+    if not HAS_GENAI:
+        st.session_state["api_error"] = "google-generativeai not installed."
+        return False
     api_key = _resolve_api_key()
     if not api_key:
-        return {"error": "No API key configured.", "text": "", "tokens": {}, "cost": 0.0}
-
-    model_name = model_override or st.session_state.get(
-        "selected_model", safe_secret("GEMINI_MODEL", DEFAULT_MODEL)
-    )
-
-    system_prompt = build_system_prompt(mode, contract_mode)
-
-    full_prompt = prompt
-    if context:
-        full_prompt = f"REFERENCE DOCUMENT:\n{context[:15000]}\n\n---\nUSER QUERY:\n{prompt}"
-
+        st.session_state["api_error"] = "No valid API key."
+        return False
     try:
         genai.configure(api_key=api_key)
-        model = genai.GenerativeModel(
-            model_name=model_name,
-            system_instruction=system_prompt,
-        )
-        response = model.generate_content(
-            full_prompt,
-            generation_config=genai.types.GenerationConfig(
-                temperature=0.4,
-                max_output_tokens=8192,
-            ),
-        )
-
-        # Handle blocked responses
-        if not response.parts:
-            return {
-                "error": "Response blocked by safety filters. Try rephrasing your query.",
-                "text": "",
-                "tokens": {},
-                "cost": 0.0,
-            }
-
-        text = response.text or ""
-
-        # Token counting — use API metadata if available, else estimate
-        input_tokens = count_tokens(system_prompt + full_prompt)
-        output_tokens = count_tokens(text)
-        try:
-            if hasattr(response, "usage_metadata") and response.usage_metadata:
-                um = response.usage_metadata
-                input_tokens = getattr(um, "prompt_token_count", input_tokens) or input_tokens
-                output_tokens = getattr(um, "candidates_token_count", output_tokens) or output_tokens
-        except Exception:
-            pass
-
-        cost = estimate_cost(input_tokens, output_tokens, model_name)
-
-        # Persist usage stats
-        if user_id:
-            save_usage(user_id, model_name, input_tokens, output_tokens, cost)
-
-        return {
-            "text": text,
-            "error": "",
-            "tokens": {
-                "input": input_tokens,
-                "output": output_tokens,
-                "total": input_tokens + output_tokens,
-            },
-            "cost": cost,
-            "model": model_name,
-        }
-
-    except Exception as e:
-        return {"error": str(e), "text": "", "tokens": {}, "cost": 0.0}
+        st.session_state["api_configured"] = True
+        st.session_state["model"] = model_name or safe_secret("GEMINI_MODEL", SUPPORTED_MODELS[0])
+        st.session_state.pop("api_error", None)
+        return True
+    except Exception as err:
+        st.session_state["api_error"] = str(err)
+        st.session_state["api_configured"] = False
+        return False
 
 
-# ───────────────────────────────────────────────────────
-#  DOCUMENT PARSER
-# ───────────────────────────────────────────────────────
-def parse_pdf(file) -> str:
-    try:
-        import pdfplumber
-        text_parts = []
-        with pdfplumber.open(file) as pdf:
-            for page in pdf.pages:
-                t = page.extract_text()
-                if t:
-                    text_parts.append(t)
-        return "\n\n".join(text_parts) if text_parts else "[No extractable text in PDF]"
-    except Exception as e:
-        return f"[PDF parse error: {e}]"
+def get_available_models():
+    if "available_models" not in st.session_state:
+        st.session_state["available_models"] = SUPPORTED_MODELS
+    return st.session_state["available_models"]
 
 
-def parse_docx_file(file) -> str:
-    try:
-        doc = Document(file)
-        return "\n\n".join(p.text for p in doc.paragraphs if p.text.strip())
-    except Exception as e:
-        return f"[DOCX parse error: {e}]"
+def ensure_api_configured():
+    if not st.session_state.get("api_configured"):
+        configure_gemini(st.session_state.get("model", SUPPORTED_MODELS[0]))
 
 
-def parse_txt(file) -> str:
-    try:
-        raw = file.read()
-        if isinstance(raw, bytes):
-            raw = raw.decode("utf-8", errors="replace")
-        return raw
-    except Exception as e:
-        return f"[TXT parse error: {e}]"
-
-
-def parse_xlsx(file) -> str:
-    try:
-        df = pd.read_excel(file, engine="openpyxl")
-        return df.to_string(index=False)
-    except Exception as e:
-        return f"[XLSX parse error: {e}]"
-
-
-def parse_csv_file(file) -> str:
-    try:
-        df = pd.read_csv(file)
-        return df.to_string(index=False)
-    except Exception as e:
-        return f"[CSV parse error: {e}]"
-
-
-def parse_json_file(file) -> str:
-    try:
-        raw = file.read()
-        if isinstance(raw, bytes):
-            raw = raw.decode("utf-8", errors="replace")
-        data = json.loads(raw)
-        return json.dumps(data, indent=2, ensure_ascii=False)
-    except Exception as e:
-        return f"[JSON parse error: {e}]"
-
-
-def parse_uploaded_file(file) -> str:
-    """Route uploaded file to the correct parser."""
-    if file is None:
+# ═══════════════════════════════════════════════════════
+# DOCUMENT PARSING
+# ═══════════════════════════════════════════════════════
+def parse_uploaded_file(upload):
+    if not upload:
         return ""
-    name = file.name.lower()
-    if name.endswith(".pdf"):
-        return parse_pdf(file)
-    elif name.endswith(".docx"):
-        return parse_docx_file(file)
-    elif name.endswith((".txt", ".rtf", ".text")):
-        return parse_txt(file)
-    elif name.endswith((".xlsx", ".xls")):
-        return parse_xlsx(file)
-    elif name.endswith(".csv"):
-        return parse_csv_file(file)
-    elif name.endswith(".json"):
-        return parse_json_file(file)
+    suffix = Path(upload.name).suffix.lower()
+    try:
+        if suffix in [".txt", ".md", ".rtf"]:
+            data = upload.read()
+            return data.decode("utf-8", errors="ignore") if isinstance(data, bytes) else data
+        if suffix == ".pdf" and HAS_PDF:
+            chunks = []
+            with pdfplumber.open(upload) as pdf:
+                for page in pdf.pages[:10]:
+                    chunks.append(page.extract_text() or "")
+            return "\n\n".join(chunks).strip()
+        if suffix in [".docx", ".doc"] and HAS_DOCX:
+            doc = DocxDocument(upload)
+            return "\n".join(p.text for p in doc.paragraphs if p.text).strip()
+        if suffix == ".json":
+            return json.dumps(json.load(upload), indent=2)
+        if suffix == ".csv" and pd:
+            return pd.read_csv(upload).to_string()
+        if suffix in [".xlsx", ".xls"] and pd:
+            return pd.read_excel(upload).to_string()
+        return upload.read().decode("utf-8", errors="ignore")
+    except Exception as exc:
+        return f"Parse error: {exc}"
+
+
+# ═══════════════════════════════════════════════════════
+# AI PROMPT ENGINE
+# ═══════════════════════════════════════════════════════
+def build_prompt_instructions(query, analysis_type, response_mode, user_context, doc_context, client_name):
+    mode = RESPONSE_MODES.get(response_mode, RESPONSE_MODES["📝 Standard"])
+    ctx = []
+    if client_name:
+        ctx.append(f"Client: {client_name}")
+    if user_context:
+        ctx.append(f"User Context:\n{user_context.strip()}")
+    if doc_context:
+        ctx.append(f"Document Context:\n{doc_context.strip()}")
+    ctx_text = "\n\n".join(ctx).strip()
+    instructions = f"""You are LexiAssist v8.0, an elite AI legal engine for Nigerian lawyers.
+Analysis type: {analysis_type}. Response mode: {response_mode} (~{mode['tokens']} tokens).
+Core rules:
+- Cite Nigerian statutes/cases with proper party names and year.
+- Apply CREAC/ILAC where relevant.
+- Highlight procedural steps with timelines.
+- Map risks with mitigation strategies.
+- Use formal Nigerian legal drafting tone.
+- If data is missing, state assumptions clearly.
+
+Query:
+\"\"\"{query.strip()}\"\"\""""
+    if ctx_text:
+        instructions += f"\n\nContext:\n{ctx_text}"
+    if analysis_type == "📑 Contract Review":
+        instructions += "\n\nDeliverables:\n- Clause-by-clause red flag analysis\n- Risk rating per clause\n"
     else:
-        return parse_txt(file)
+        instructions += "\n\nDeliverables:\n- Structured analysis with conclusions and recommendations\n"
+    return instructions.strip()
 
 
-# ───────────────────────────────────────────────────────
-#  REFERENCE DATA (Nigerian Legal System)
-# ───────────────────────────────────────────────────────
-def get_default_limitation_periods() -> list:
-    return [
-        {"category": "Simple Contract", "period": "6 years", "statute": "Limitation Act (various states)"},
-        {"category": "Land Recovery", "period": "12 years", "statute": "Limitation Act (various states)"},
-        {"category": "Tort (General)", "period": "6 years", "statute": "Limitation Act (various states)"},
-        {"category": "Personal Injury", "period": "3 years", "statute": "Limitation Act (various states)"},
-        {"category": "Defamation", "period": "3 years", "statute": "Limitation Act (various states)"},
-        {"category": "Debt Recovery", "period": "6 years", "statute": "Limitation Act (various states)"},
-        {"category": "Fundamental Rights", "period": "12 months", "statute": "Fundamental Rights (Enforcement Procedure) Rules 2009"},
-        {"category": "Tax Appeal", "period": "30 days", "statute": "Federal Inland Revenue Service (Est.) Act 2007"},
-        {"category": "Election Petition", "period": "21 days", "statute": "Electoral Act 2022, s.285(5) CFRN"},
-        {"category": "Winding Up Petition", "period": "21 days (statutory demand)", "statute": "CAMA 2020, s.572"},
-        {"category": "Appeal (Court of Appeal)", "period": "90 days (civil) / 90 days (criminal)", "statute": "Court of Appeal Act, s.27"},
-        {"category": "Appeal (Supreme Court)", "period": "90 days", "statute": "Supreme Court Act, s.31"},
-        {"category": "Judicial Review", "period": "3 months", "statute": "Various High Court Civil Procedure Rules"},
-        {"category": "Labour / Employment", "period": "12 months", "statute": "National Industrial Court Act 2006"},
-    ]
-
-
-def get_court_hierarchy() -> list:
-    return [
-        {"court": "Supreme Court of Nigeria", "level": 1, "description": "Final appellate court. Decisions bind all lower courts."},
-        {"court": "Court of Appeal", "level": 2, "description": "Intermediate appellate court. Divisions across Nigeria."},
-        {"court": "Federal High Court", "level": 3, "description": "Exclusive jurisdiction: revenue, admiralty, banking, IP, federal agencies."},
-        {"court": "State High Court", "level": 3, "description": "General civil and criminal jurisdiction within each state."},
-        {"court": "National Industrial Court", "level": 3, "description": "Exclusive jurisdiction: labour, employment, trade unions."},
-        {"court": "FCT High Court", "level": 3, "description": "High Court for the Federal Capital Territory, Abuja."},
-        {"court": "Sharia Court of Appeal", "level": 4, "description": "Appellate jurisdiction on Islamic personal law matters."},
-        {"court": "Customary Court of Appeal", "level": 4, "description": "Appellate jurisdiction on customary law matters."},
-        {"court": "Magistrate / District Court", "level": 5, "description": "Summary jurisdiction. Limited monetary and criminal thresholds."},
-        {"court": "Area / Customary Court", "level": 6, "description": "Local customary law disputes. Varies by state."},
-    ]
-
-
-def get_latin_maxims() -> list:
-    return [
-        {"maxim": "Audi alteram partem", "meaning": "Hear the other side — a fundamental rule of natural justice."},
-        {"maxim": "Nemo judex in causa sua", "meaning": "No one should be a judge in their own cause."},
-        {"maxim": "Actus curiae neminem gravabit", "meaning": "An act of the court shall prejudice no one."},
-        {"maxim": "Ei incumbit probatio qui dicit", "meaning": "The burden of proof lies on the one who asserts."},
-        {"maxim": "Res judicata pro veritate accipitur", "meaning": "A matter adjudged is accepted as truth."},
-        {"maxim": "Stare decisis", "meaning": "Stand by decided matters — the doctrine of precedent."},
-        {"maxim": "Ubi jus ibi remedium", "meaning": "Where there is a right, there is a remedy."},
-        {"maxim": "Volenti non fit injuria", "meaning": "No injury is done to one who consents."},
-        {"maxim": "Caveat emptor", "meaning": "Let the buyer beware."},
-        {"maxim": "Nemo dat quod non habet", "meaning": "No one gives what they do not have."},
-        {"maxim": "Expressio unius est exclusio alterius", "meaning": "The expression of one thing is the exclusion of another."},
-        {"maxim": "Ignorantia juris non excusat", "meaning": "Ignorance of the law is no excuse."},
-        {"maxim": "Pacta sunt servanda", "meaning": "Agreements must be kept."},
-        {"maxim": "Ultra vires", "meaning": "Beyond the powers — an act beyond legal authority."},
-        {"maxim": "De minimis non curat lex", "meaning": "The law does not concern itself with trifles."},
-        {"maxim": "Doli incapax", "meaning": "Incapable of committing wrong — applied to minors."},
-        {"maxim": "Locus standi", "meaning": "The right or capacity to bring an action before a court."},
-        {"maxim": "Obiter dictum", "meaning": "A remark made in passing — not binding but persuasive."},
-        {"maxim": "Ratio decidendi", "meaning": "The reason for the decision — the binding principle."},
-        {"maxim": "Sub judice", "meaning": "Under judicial consideration — not yet decided."},
-    ]
-
-
-def get_user_references(user_id: str, ref_type: str) -> list:
-    """Return user-customised references or defaults."""
-    saved = load_references(user_id)
-    if saved and ref_type in saved:
-        return saved[ref_type]
-    defaults = {
-        "limitation_periods": get_default_limitation_periods(),
-        "court_hierarchy": get_court_hierarchy(),
-        "latin_maxims": get_latin_maxims(),
+def call_gemini(prompt, model_name, response_mode):
+    ensure_api_configured()
+    model_name = model_name or st.session_state.get("model", SUPPORTED_MODELS[0])
+    mode = RESPONSE_MODES.get(response_mode, RESPONSE_MODES["📝 Standard"])
+    gen_config = {
+        "temperature": 0.3 if response_mode == "🔬 Comprehensive" else 0.5,
+        "top_p": 0.95, "top_k": 40,
+        "max_output_tokens": mode["tokens"],
     }
-    return defaults.get(ref_type, [])
+    safety = [{"category": c, "threshold": "BLOCK_NONE"} for c in
+              ["HARM_CATEGORY_HARASSMENT", "HARM_CATEGORY_HATE_SPEECH",
+               "HARM_CATEGORY_SEXUAL_CONTENT", "HARM_CATEGORY_DANGEROUS_CONTENT"]]
+    try:
+        model = genai.GenerativeModel(model_name)
+        response = model.generate_content(prompt, generation_config=gen_config, safety_settings=safety)
+        text = response.text or "(No response.)"
+        usage = getattr(response, "usage_metadata", None)
+        tokens = {
+            "prompt": getattr(usage, "prompt_token_count", 0) if usage else 0,
+            "candidates": getattr(usage, "candidates_token_count", 0) if usage else 0,
+            "total": getattr(usage, "total_token_count", 0) if usage else 0,
+        }
+        return text.strip(), tokens
+    except Exception as exc:
+        raise RuntimeError(f"Gemini API error: {exc}") from exc
 
 
-# ───────────────────────────────────────────────────────
-#  SESSION STATE INIT
-# ───────────────────────────────────────────────────────
-def init_session_state():
-    """Initialise all session state keys with defaults."""
-    defaults = {
-        "authenticated": False,
-        "user_id": "",
-        "username": "",
-        "chat_history": [],
-        "uploaded_context": "",
-        "uploaded_filename": "",
-        "selected_model": safe_secret("GEMINI_MODEL", DEFAULT_MODEL),
-        "response_mode": "Standard",
-        "contract_mode": False,
-        "current_page": "AI Assistant",
-        "last_result": None,
-    }
-    for k, v in defaults.items():
-        if k not in st.session_state:
-            st.session_state[k] = v
+# ═══════════════════════════════════════════════════════
+# COST TRACKING
+# ═══════════════════════════════════════════════════════
+def log_cost(model, tokens, query_preview):
+    total = tokens.get("total", tokens.get("prompt", 0) + tokens.get("candidates", 0))
+    db_insert("cost_log", {
+        "model": model, "prompt_tokens": tokens.get("prompt", 0),
+        "response_tokens": tokens.get("candidates", 0),
+        "total_cost": total * 0.0000025, "query_preview": query_preview[:200],
+        "created_at": datetime.now().isoformat(timespec="seconds"),
+    })
 
 
-# ───────────────────────────────────────────────────────
-#  REUSABLE UI COMPONENTS
-# ───────────────────────────────────────────────────────
-def render_export_buttons(text: str, title: str = "LexiAssist Output", key_prefix: str = "exp"):
-    """Render TXT / HTML / PDF / DOCX download buttons."""
-    if not text:
-        return
-    cols = st.columns(4)
-    with cols[0]:
-        st.download_button(
-            "📄 TXT", export_text(text, title),
-            file_name=f"{title}.txt", mime="text/plain",
-            key=f"{key_prefix}_txt", use_container_width=True,
-        )
-    with cols[1]:
-        st.download_button(
-            "🌐 HTML", export_html(text, title),
-            file_name=f"{title}.html", mime="text/html",
-            key=f"{key_prefix}_html", use_container_width=True,
-        )
-    with cols[2]:
-        st.download_button(
-            "📑 PDF", export_pdf(text, title),
-            file_name=f"{title}.pdf", mime="application/pdf",
-            key=f"{key_prefix}_pdf", use_container_width=True,
-        )
-    with cols[3]:
-        st.download_button(
-            "📝 DOCX", export_docx(text, title),
-            file_name=f"{title}.docx",
-            mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-            key=f"{key_prefix}_docx", use_container_width=True,
-        )
+def summarize_costs(period="all"):
+    conn = _get_conn()
+    try:
+        sql = "SELECT SUM(prompt_tokens) AS p, SUM(response_tokens) AS r, SUM(total_cost) AS c FROM cost_log"
+        params = ()
+        if period in ("24h", "7d"):
+            sql += " WHERE created_at >= ?"
+            delta = timedelta(hours=24) if period == "24h" else timedelta(days=7)
+            params = ((datetime.now() - delta).isoformat(timespec="seconds"),)
+        row = conn.execute(sql, params).fetchone()
+        return {"prompt": row["p"] or 0, "response": row["r"] or 0, "cost": row["c"] or 0.0}
+    finally:
+        conn.close()
 
 
-def render_token_display(result: dict):
-    """Show model, token counts and estimated cost."""
-    if not result or "tokens" not in result or not result["tokens"]:
-        return
-    tokens = result["tokens"]
-    cost = result.get("cost", 0.0)
-    model = result.get("model", "unknown")
-    cols = st.columns(4)
-    cols[0].metric("Model", model.split("/")[-1])
-    cols[1].metric("Input Tokens", f"{tokens.get('input', 0):,}")
-    cols[2].metric("Output Tokens", f"{tokens.get('output', 0):,}")
-    cols[3].metric("Est. Cost", f"${cost:.6f}")
+# ═══════════════════════════════════════════════════════
+# EXPORT UTILITIES
+# ═══════════════════════════════════════════════════════
+def export_text(content):
+    return content or ""
 
 
-def render_save_to_case(text: str, user_id: str, key_prefix: str = "save"):
-    """One-click save an analysis snippet into an existing case."""
-    cases = load_cases(user_id)
-    if not cases:
-        return
-    case_options = {c.get("title", f"Case {i+1}"): i for i, c in enumerate(cases)}
-    col1, col2 = st.columns([3, 1])
-    with col1:
-        selected = st.selectbox(
-            "Save analysis to case:",
-            options=list(case_options.keys()),
-            key=f"{key_prefix}_case_select",
-        )
-    with col2:
-        if st.button("💾 Save to Case", key=f"{key_prefix}_save_btn", use_container_width=True):
-            idx = case_options[selected]
-            if "analyses" not in cases[idx]:
-                cases[idx]["analyses"] = []
-            cases[idx]["analyses"].append({
-                "date": datetime.now().isoformat(),
-                "content": text[:5000],
-            })
-            save_cases(user_id, cases)
-            st.success(f"✅ Saved to **{selected}**")
+def export_html(content, title="Legal Analysis"):
+    profile = get_user_profile()
+    firm = profile.get("firm_name", "LexiAssist v8.0") if profile else "LexiAssist v8.0"
+    ts = datetime.now().strftime("%B %d, %Y")
+    gt = datetime.now().strftime("%Y-%m-%d %H:%M")
+    css = ("body{font-family:Georgia,serif;max-width:800px;margin:2rem auto;padding:1rem;"
+           "line-height:1.7;color:#1e293b}h1{color:#059669;border-bottom:2px solid #059669;"
+           "padding-bottom:.5rem}.header{text-align:center;margin-bottom:2rem}"
+           ".content{white-space:pre-wrap}.footer{margin-top:3rem;padding-top:1rem;"
+           "border-top:1px solid #ccc;font-size:.85rem;color:#666}")
+    return ("<!DOCTYPE html><html lang='en'><head><meta charset='UTF-8'>"
+            f"<title>{esc(title)}</title><style>{css}</style></head><body>"
+            f"<div class='header'><h1>{esc(firm)}</h1><p>{esc(title)}</p>"
+            f"<p><small>{ts}</small></p></div><div class='content'>{content}</div>"
+            f"<div class='footer'>Generated by LexiAssist v8.0 · {gt}"
+            " · AI-generated — verify independently</div></body></html>")
 
 
+def export_docx(content, title="LexiAssist Output"):
+    if not HAS_DOCX:
+        raise RuntimeError("python-docx not installed.")
+    profile = get_user_profile()
+    firm = profile.get("firm_name", "LexiAssist v8.0") if profile else "LexiAssist v8.0"
+    doc = DocxDocument()
+    doc.add_heading(firm, level=1)
+    doc.add_paragraph(title)
+    doc.add_paragraph(datetime.now().strftime("%B %d, %Y"))
+    for line in content.split("\n"):
+        doc.add_paragraph(line)
+    return doc
+
+
+def export_pdf(content, title="LexiAssist Output"):
+    if not HAS_FPDF:
+        raise RuntimeError("fpdf2 not installed.")
+    profile = get_user_profile()
+    firm = profile.get("firm_name", "LexiAssist v8.0") if profile else "LexiAssist v8.0"
+    pdf = FPDF()
+    pdf.add_page()
+    pdf.set_auto_page_break(auto=True, margin=15)
+    pdf.set_font("Helvetica", "B", 16)
+    pdf.cell(0, 10, firm, ln=True, align="C")
+    pdf.set_font("Helvetica", "", 12)
+    pdf.cell(0, 8, title, ln=True, align="C")
+    pdf.ln(4)
+    pdf.set_font("Helvetica", "", 11)
+    for line in content.split("\n"):
+        pdf.multi_cell(0, 6, line)
+    return pdf.output(dest="S").encode("latin1", errors="ignore")
+
+
+# ═══════════════════════════════════════════════════════
+# BACKUP / RESTORE
+# ═══════════════════════════════════════════════════════
+def export_database_snapshot():
+    conn = _get_conn()
+    tables = ["cases", "case_notes", "clients", "time_entries", "invoices",
+              "chat_history", "templates", "limitation_periods", "maxims", "cost_log", "user_profile"]
+    snapshot = {"exported_at": datetime.now().isoformat(timespec="seconds")}
+    try:
+        for t in tables:
+            snapshot[t] = [dict(r) for r in conn.execute(f"SELECT * FROM {t}").fetchall()]
+    finally:
+        conn.close()
+    return snapshot
+
+
+def restore_database_snapshot(snapshot):
+    conn = _get_conn()
+    tables = ["cases", "case_notes", "clients", "time_entries", "invoices",
+              "chat_history", "templates", "limitation_periods", "maxims", "cost_log", "user_profile"]
+    try:
+        for t in tables:
+            conn.execute(f"DELETE FROM {t}")
+        for t in tables:
+            rows = snapshot.get(t, [])
+            if not rows:
+                continue
+            cols = list(rows[0].keys())
+            sql = f"INSERT INTO {t} ({', '.join(cols)}) VALUES ({', '.join('?' for _ in cols)})"
+            conn.executemany(sql, [tuple(r[c] for c in cols) for r in rows])
+        conn.commit()
+    finally:
+        conn.close()
+
+
+# ═══════════════════════════════════════════════════════
+# UI HELPERS
+# ═══════════════════════════════════════════════════════
+def section_header(title, subtitle=""):
+    st.markdown(f"<div class='page-header'><h2>{esc(title)}</h2><p>{esc(subtitle)}</p></div>", unsafe_allow_html=True)
+
+
+def metric_card(label, value, help_text=""):
+    h = f"<div style='font-size:.75rem;opacity:.7'>{esc(help_text)}</div>" if help_text else ""
+    st.markdown(f"<div class='metric-card'><div class='metric-value'>{esc(str(value))}</div><div class='metric-label'>{esc(label)}</div>{h}</div>", unsafe_allow_html=True)
+
+
+def badge(text, kind="info"):
+    cls = {"ok": "badge-ok", "warn": "badge-warn", "error": "badge-error"}.get(kind, "badge-info")
+    return f"<span class='badge {cls}'>{esc(text)}</span>"
+
+
+# ═══════════════════════════════════════════════════════
+# SIDEBAR
+# ═══════════════════════════════════════════════════════
 def render_sidebar():
-    """Render the full sidebar: branding, model, mode, upload, nav, logout."""
     with st.sidebar:
-        st.markdown(f"### ⚖️ {APP_TITLE}")
-        st.caption(f"v{VERSION}")
+        st.markdown("## ⚖️ LexiAssist v8.0")
+        st.caption("AI legal workspace for Nigerian lawyers")
+        theme = st.selectbox("Theme", list(THEMES.keys()), index=list(THEMES.keys()).index(st.session_state["theme"]))
+        st.session_state["theme"] = theme
+        st.markdown("---")
+        st.markdown("### 🤖 AI Configuration")
+        models = get_available_models()
+        cur = st.session_state.get("model") or models[0]
+        idx = models.index(cur) if cur in models else 0
+        st.session_state["model"] = st.selectbox("Gemini Model", models, index=idx)
 
-        if st.session_state.get("authenticated"):
-            st.markdown(f"👤 **{st.session_state.get('username', 'User')}**")
-            st.divider()
-
-            # ── Model selection ──
-            model_str = safe_secret("GEMINI_MODELS", ", ".join(AVAILABLE_MODELS))
-            models = [m.strip() for m in model_str.split(",") if m.strip()]
-            current = st.session_state.get("selected_model", DEFAULT_MODEL)
-            if current not in models:
-                models.insert(0, current)
-            st.session_state["selected_model"] = st.selectbox(
-                "🤖 AI Model", models,
-                index=models.index(current), key="sb_model",
-            )
-
-            # ── Response mode ──
-            modes = list(RESPONSE_MODE_INSTRUCTIONS.keys())
-            current_mode = st.session_state.get("response_mode", "Standard")
-            st.session_state["response_mode"] = st.selectbox(
-                "📊 Response Mode", modes,
-                index=modes.index(current_mode), key="sb_mode",
-            )
-
-            # ── Contract review toggle ──
-            st.session_state["contract_mode"] = st.toggle(
-                "📋 Contract Review Mode",
-                value=st.session_state.get("contract_mode", False),
-                key="sb_contract",
-            )
-
-            st.divider()
-
-            # ── File upload ──
-            uploaded = st.file_uploader(
-                "📎 Upload Document",
-                type=["pdf", "docx", "txt", "rtf", "xlsx", "csv", "json"],
-                key="sb_file_upload",
-            )
-            if uploaded:
-                if uploaded.name != st.session_state.get("uploaded_filename", ""):
-                    with st.spinner("Parsing document..."):
-                        content = parse_uploaded_file(uploaded)
-                        st.session_state["uploaded_context"] = content
-                        st.session_state["uploaded_filename"] = uploaded.name
-                    st.success(f"✅ {uploaded.name} loaded ({len(content):,} chars)")
-                else:
-                    st.info(f"📄 {uploaded.name} active")
-
-            if st.session_state.get("uploaded_context"):
-                if st.button("🗑️ Clear Document", key="sb_clear_doc"):
-                    st.session_state["uploaded_context"] = ""
-                    st.session_state["uploaded_filename"] = ""
+        auth_enabled = str(safe_secret("AUTH_ENABLED", "false")).lower() == "true"
+        profile = get_user_profile()
+        if auth_enabled and profile and profile.get("password_hash") and not st.session_state.get("authenticated"):
+            st.warning("🔒 Login required")
+            pwd = st.text_input("Password", type="password", key="login_password")
+            if st.button("Login", use_container_width=True):
+                if verify_password(pwd, profile["password_hash"]):
+                    st.session_state["authenticated"] = True
                     st.rerun()
-
-            st.divider()
-
-            # ── Navigation ──
-            pages = [
-                "AI Assistant",
-                "Cases & Hearings",
-                "Clients & Billing",
-                "Legal References",
-                "Document Templates",
-                "AI Usage & Costs",
-                "Settings",
-            ]
-            icons = {
-                "AI Assistant": "🤖",
-                "Cases & Hearings": "📂",
-                "Clients & Billing": "👥",
-                "Legal References": "📚",
-                "Document Templates": "📝",
-                "AI Usage & Costs": "📊",
-                "Settings": "⚙️",
-            }
-            current_page = st.session_state.get("current_page", "AI Assistant")
-            for page in pages:
-                btn_type = "primary" if page == current_page else "secondary"
-                if st.button(
-                    f"{icons.get(page, '📄')} {page}",
-                    key=f"nav_{page}",
-                    use_container_width=True,
-                    type=btn_type,
-                ):
-                    st.session_state["current_page"] = page
-                    st.rerun()
-
-            st.divider()
-
-            # ── Logout ──
-            if st.button("🚪 Logout", key="sb_logout", use_container_width=True):
-                for key in list(st.session_state.keys()):
-                    del st.session_state[key]
-                st.rerun()
-
-# ═══════════════════════════════════════════════════════
-# PART 3 — APPLICATION PAGES
-# ═══════════════════════════════════════════════════════
-
-# ───────────────────────────────────────────────────────
-#  LOGIN & REGISTRATION
-# ───────────────────────────────────────────────────────
-def page_login():
-    col1, col2, col3 = st.columns([1, 2, 1])
-    with col2:
-        st.markdown(
-            "<h1 style='text-align:center'>⚖️ LexiAssist</h1>"
-            "<p style='text-align:center;color:#64748b'>"
-            "AI-Powered Legal Workspace for Nigerian Lawyers</p>",
-            unsafe_allow_html=True,
-        )
-        st.divider()
-
-        tab_login, tab_register = st.tabs(["🔐 Login", "📝 Register"])
-
-        with tab_login:
-            with st.form("login_form"):
-                username = st.text_input("Username", placeholder="Enter username")
-                password = st.text_input("Password", type="password", placeholder="Enter password")
-                if st.form_submit_button("Login", type="primary", use_container_width=True):
-                    if not username or not password:
-                        st.error("Please fill in all fields.")
-                    else:
-                        user = authenticate_user(username, password)
-                        if user:
-                            st.session_state.update({
-                                "authenticated": True,
-                                "user_id": user["id"],
-                                "username": user["username"],
-                                "chat_history": load_chat_history(user["id"]),
-                            })
-                            st.rerun()
-                        else:
-                            st.error("Invalid username or password.")
-
-        with tab_register:
-            with st.form("register_form"):
-                new_user = st.text_input("Choose Username", placeholder="Pick a username")
-                new_pass = st.text_input("Choose Password", type="password", placeholder="Min. 6 characters")
-                confirm = st.text_input("Confirm Password", type="password")
-                if st.form_submit_button("Create Account", use_container_width=True):
-                    if not new_user or not new_pass:
-                        st.error("All fields are required.")
-                    elif len(new_pass) < 6:
-                        st.error("Password must be at least 6 characters.")
-                    elif new_pass != confirm:
-                        st.error("Passwords do not match.")
-                    elif create_user(new_user, new_pass):
-                        st.success("✅ Account created! Please log in.")
-                    else:
-                        st.error("Username already taken.")
-
-
-# ───────────────────────────────────────────────────────
-#  AI ASSISTANT
-# ───────────────────────────────────────────────────────
-def page_ai_assistant():
-    user_id = st.session_state.get("user_id", "")
-    mode = st.session_state.get("response_mode", "Standard")
-    contract_mode = st.session_state.get("contract_mode", False)
-
-    hdr = "🤖 AI Legal Assistant"
-    if contract_mode:
-        hdr += "  •  📋 Contract Review"
-    st.header(hdr)
-
-    # Context indicator
-    if st.session_state.get("uploaded_context"):
-        st.info(
-            f"📎 **{st.session_state.get('uploaded_filename')}** loaded "
-            f"({len(st.session_state['uploaded_context']):,} chars)"
-        )
-
-    # Display chat history
-    for msg in st.session_state.get("chat_history", []):
-        with st.chat_message(msg["role"]):
-            st.markdown(msg["content"])
-
-    # Chat input
-    if prompt := st.chat_input("Ask LexiAssist about Nigerian law..."):
-        st.session_state["chat_history"].append({"role": "user", "content": prompt})
-        with st.chat_message("user"):
-            st.markdown(prompt)
-
-        result = {}
-        with st.chat_message("assistant"):
-            with st.spinner("⚖️ Analyzing..."):
-                result = call_gemini(
-                    prompt=prompt,
-                    mode=mode,
-                    context=st.session_state.get("uploaded_context", ""),
-                    contract_mode=contract_mode,
-                    user_id=user_id,
-                )
-
-            if result.get("error"):
-                st.error(f"❌ {result['error']}")
-                st.session_state["last_result"] = None
-            else:
-                st.markdown(result["text"])
-                st.session_state["last_result"] = result
-                st.session_state["chat_history"].append(
-                    {"role": "assistant", "content": result["text"]}
-                )
-                save_chat_history(user_id, st.session_state["chat_history"][-50:])
-
-        # Controls below chat
-        if result and not result.get("error") and result.get("text"):
-            render_token_display(result)
-            render_export_buttons(result["text"], key_prefix="chat_exp")
-            render_save_to_case(result["text"], user_id, key_prefix="chat_save")
-
-    # Persistent controls for last result
-    elif st.session_state.get("last_result"):
-        r = st.session_state["last_result"]
-        if not r.get("error") and r.get("text"):
-            with st.expander("📊 Last Response Controls", expanded=False):
-                render_token_display(r)
-                render_export_buttons(r["text"], key_prefix="last_exp")
-                render_save_to_case(r["text"], user_id, key_prefix="last_save")
-
-    # ── Comparison tool ──
-    with st.expander("🔄 Compare Analyses"):
-        st.caption("Re-run your last query in a different mode for side-by-side comparison.")
-        user_msgs = [m for m in st.session_state.get("chat_history", []) if m["role"] == "user"]
-        if user_msgs:
-            last_query = user_msgs[-1]["content"]
-            st.text_area("Query:", value=last_query, height=80, disabled=True, key="cmp_q")
-            other_modes = [m for m in RESPONSE_MODE_INSTRUCTIONS if m != mode]
-            cmp_mode = st.selectbox("Compare in mode:", other_modes, key="cmp_mode")
-            if st.button("⚡ Run Comparison", key="cmp_run"):
-                with st.spinner("Running comparison..."):
-                    cmp_result = call_gemini(
-                        prompt=last_query,
-                        mode=cmp_mode,
-                        context=st.session_state.get("uploaded_context", ""),
-                        contract_mode=contract_mode,
-                        user_id=user_id,
-                    )
-                if cmp_result.get("error"):
-                    st.error(cmp_result["error"])
                 else:
-                    c1, c2 = st.columns(2)
-                    with c1:
-                        st.subheader(f"📄 {mode}")
-                        asst_msgs = [m for m in st.session_state.get("chat_history", []) if m["role"] == "assistant"]
-                        st.markdown(asst_msgs[-1]["content"] if asst_msgs else "_No previous response_")
-                    with c2:
-                        st.subheader(f"📄 {cmp_mode}")
-                        st.markdown(cmp_result["text"])
+                    st.error("Invalid password.")
         else:
-            st.info("Send a query first to enable comparison.")
+            st.session_state["authenticated"] = True
 
-    # Clear chat
-    if st.session_state.get("chat_history"):
-        if st.button("🗑️ Clear Chat History", key="clear_chat"):
-            st.session_state["chat_history"] = []
-            st.session_state["last_result"] = None
-            save_chat_history(user_id, [])
+        st.markdown("---")
+        st.markdown("### 🔑 API Key")
+        resolved = _resolve_api_key()
+        if resolved:
+            st.success("API key detected")
+        else:
+            st.info("Enter API key below")
+            st.text_input("Gemini API Key", type="password", key="api_key_input")
+        if st.button("Configure Gemini", use_container_width=True):
+            if configure_gemini(st.session_state.get("model")):
+                st.success("Configured!")
+            else:
+                st.error(st.session_state.get("api_error", "Failed."))
+
+        st.markdown("---")
+        st.markdown("### 📦 Backup & Restore")
+        snap = export_database_snapshot()
+        st.download_button("⬇️ Export Backup", data=json.dumps(snap, indent=2),
+                           file_name=f"lexiassist_backup_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json",
+                           mime="application/json", use_container_width=True)
+        rf = st.file_uploader("Restore Backup", type=["json"], key="restore_backup")
+        if rf and st.button("♻️ Restore", use_container_width=True):
+            try:
+                restore_database_snapshot(json.load(rf))
+                st.success("Restored!")
+                st.rerun()
+            except Exception as exc:
+                st.error(str(exc))
+        st.markdown("---")
+        st.caption("Built with Streamlit + Gemini")
+
+
+# ═══════════════════════════════════════════════════════
+# DASHBOARD
+# ═══════════════════════════════════════════════════════
+def render_dashboard():
+    section_header("🏠 Dashboard", "Overview of cases, clients, billing, and AI usage")
+    c1, c2, c3, c4 = st.columns(4)
+    with c1:
+        metric_card("Active Cases", db_count("cases", "status IN ('Active','Pending','Adjourned')"))
+    with c2:
+        metric_card("Clients", db_count("clients"))
+    with c3:
+        invoices = db_fetch_all("invoices")
+        total_billed = sum(float(i.get("total", 0) or 0) for i in invoices)
+        metric_card("Total Invoiced", f"₦{total_billed:,.2f}")
+    with c4:
+        cs = summarize_costs("7d")
+        metric_card("AI Cost (7d)", f"${cs['cost']:.4f}")
+
+    st.markdown("### 📅 Upcoming Hearings")
+    cases = db_fetch_all("cases")
+    upcoming = []
+    today = date.today()
+    for c in cases:
+        nh = c.get("next_hearing", "")
+        if nh:
+            try:
+                hd = datetime.strptime(nh, "%Y-%m-%d").date()
+                if hd >= today:
+                    upcoming.append({**c, "days_left": (hd - today).days})
+            except Exception:
+                pass
+    upcoming.sort(key=lambda x: x["days_left"])
+    if upcoming:
+        for item in upcoming[:10]:
+            kind = "ok" if item["days_left"] > 7 else "warn" if item["days_left"] > 2 else "error"
+            st.markdown(f"<div class='custom-card'><strong>{esc(item['title'])}</strong><br>"
+                        f"Suit: {esc(item.get('suit_number','—'))} · Court: {esc(item.get('court','—'))}<br>"
+                        f"Hearing: {esc(item.get('next_hearing','—'))} {badge(f'{item[\"days_left\"]}d', kind)}</div>",
+                        unsafe_allow_html=True)
+    else:
+        st.info("No upcoming hearings.")
+
+
+# ═══════════════════════════════════════════════════════
+# AI LEGAL ASSISTANT
+# ═══════════════════════════════════════════════════════
+def save_chat_history(query, response, analysis_type, response_mode, model, tokens=0):
+    db_insert("chat_history", {"query": query, "response": response, "analysis_type": analysis_type,
+              "response_mode": response_mode, "model": model,
+              "timestamp": datetime.now().isoformat(timespec="seconds"), "tokens_used": tokens})
+
+
+def render_ai_assistant():
+    section_header("🤖 AI Legal Assistant", "Research, drafting, procedural guidance, and contract review")
+    col1, col2 = st.columns([2, 1])
+    with col2:
+        st.markdown("### ⚙️ Options")
+        analysis_type = st.selectbox("Task Type", ANALYSIS_TYPES)
+        response_mode = st.selectbox("Response Mode", list(RESPONSE_MODES.keys()), index=1)
+        client_name = st.text_input("Client / Matter Reference")
+        extra_context = st.text_area("Additional Instructions", height=120)
+        st.markdown("### 📎 Document Context")
+        uploaded = st.file_uploader("Upload document", type=["pdf", "docx", "doc", "txt", "rtf", "xlsx", "xls", "csv", "json"])
+        if uploaded:
+            parsed = parse_uploaded_file(uploaded)
+            st.session_state["document_context"] = parsed
+            st.session_state["context_enabled"] = True
+            st.success("Document loaded.")
+            with st.expander("Preview"):
+                st.text(parsed[:5000])
+        else:
+            st.session_state["context_enabled"] = False
+            st.session_state["document_context"] = ""
+
+    with col1:
+        prompt = st.text_area("Enter your legal query", height=220,
+                              placeholder="Example: Draft a written address opposing a preliminary objection...")
+        run = st.button("🚀 Generate Response", type="primary", use_container_width=True)
+        if run:
+            if not st.session_state.get("authenticated"):
+                st.error("Please authenticate first.")
+                return
+            if not prompt.strip():
+                st.error("Enter a legal query.")
+                return
+            if not _resolve_api_key():
+                st.error("API key not configured.")
+                return
+            try:
+                with st.spinner("Analyzing..."):
+                    fp = build_prompt_instructions(prompt, analysis_type, response_mode, extra_context,
+                                                   st.session_state.get("document_context", "") if st.session_state.get("context_enabled") else "",
+                                                   client_name)
+                    result, tokens = call_gemini(fp, st.session_state.get("model"), response_mode)
+                st.success("Analysis complete.")
+                st.markdown(f"<div class='response-box'>{result}</div>", unsafe_allow_html=True)
+                save_chat_history(prompt, result, analysis_type, response_mode, st.session_state.get("model", ""), tokens.get("total", 0))
+                log_cost(st.session_state.get("model", ""), tokens, prompt)
+                st.markdown("### 💾 Export")
+                ec1, ec2, ec3, ec4 = st.columns(4)
+                with ec1:
+                    st.download_button("TXT", data=export_text(result), file_name="output.txt", mime="text/plain", use_container_width=True)
+                with ec2:
+                    st.download_button("HTML", data=export_html(result, analysis_type), file_name="output.html", mime="text/html", use_container_width=True)
+                with ec3:
+                    if HAS_DOCX:
+                        try:
+                            import io
+                            doc = export_docx(result, analysis_type)
+                            buf = io.BytesIO()
+                            doc.save(buf)
+                            st.download_button("DOCX", data=buf.getvalue(), file_name="output.docx", mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document", use_container_width=True)
+                        except Exception:
+                            st.caption("DOCX unavailable")
+                    else:
+                        st.caption("DOCX unavailable")
+                with ec4:
+                    if HAS_FPDF:
+                        try:
+                            st.download_button("PDF", data=export_pdf(result, analysis_type), file_name="output.pdf", mime="application/pdf", use_container_width=True)
+                        except Exception:
+                            st.caption("PDF unavailable")
+                    else:
+                        st.caption("PDF unavailable")
+                st.markdown("### 📌 Save to Case")
+                cases = db_fetch_all("cases", order="title ASC")
+                if cases:
+                    opts = {f"{c['title']} ({c.get('suit_number','')})": c["id"] for c in cases}
+                    sel = st.selectbox("Select case", list(opts.keys()), key="save_case_sel")
+                    nt = st.text_input("Note title", value=f"{analysis_type} · {datetime.now().strftime('%Y-%m-%d %H:%M')}")
+                    if st.button("Save to Case", use_container_width=True):
+                        db_insert("case_notes", {"case_id": opts[sel], "note_type": "ai_analysis", "title": nt, "content": result, "created_at": datetime.now().isoformat(timespec="seconds")})
+                        st.success("Saved!")
+                else:
+                    st.info("Create a case first.")
+            except Exception as exc:
+                st.error(str(exc))
+
+    st.markdown("### 🕘 Recent History")
+    history = db_fetch_all("chat_history", order="id DESC")
+    for item in history[:10]:
+        with st.expander(f"{item['analysis_type']} · {item['timestamp']}"):
+            st.markdown(f"**Query:** {item['query']}")
+            st.markdown(f"<div class='response-box'>{item['response']}</div>", unsafe_allow_html=True)
+
+
+# ═══════════════════════════════════════════════════════
+# CASE MANAGEMENT
+# ═══════════════════════════════════════════════════════
+def render_cases():
+    section_header("📁 Case Management", "Track suits, courts, deadlines, and case-linked notes")
+    tab1, tab2 = st.tabs(["➕ New Case", "📂 Existing Cases"])
+    with tab1:
+        with st.form("new_case_form", clear_on_submit=True):
+            title = st.text_input("Case Title *")
+            suit_number = st.text_input("Suit Number")
+            court = st.text_input("Court")
+            judge = st.text_input("Presiding Judge")
+            status = st.selectbox("Status", CASE_STATUSES)
+            client_name = st.text_input("Client Name")
+            case_type = st.text_input("Case Type")
+            date_filed = st.date_input("Date Filed", value=date.today())
+            next_hearing = st.date_input("Next Hearing", value=date.today())
+            description = st.text_area("Description", height=140)
+            notes = st.text_area("Notes", height=120)
+            if st.form_submit_button("Create Case", use_container_width=True):
+                if not title.strip():
+                    st.error("Title required.")
+                else:
+                    now = datetime.now().isoformat(timespec="seconds")
+                    db_insert("cases", {"title": title.strip(), "suit_number": suit_number.strip(),
+                              "court": court.strip(), "judge": judge.strip(), "status": status,
+                              "client_name": client_name.strip(), "case_type": case_type.strip(),
+                              "description": description.strip(),
+                              "next_hearing": next_hearing.strftime("%Y-%m-%d") if next_hearing else "",
+                              "date_filed": date_filed.strftime("%Y-%m-%d") if date_filed else "",
+                              "notes": notes.strip(), "created_at": now, "updated_at": now})
+                    st.success("Case created.")
+                    st.rerun()
+    with tab2:
+        cases = db_fetch_all("cases", order="updated_at DESC")
+        if not cases:
+            st.info("No cases.")
+            return
+        for c in cases:
+            with st.expander(f"{c['title']} · {c.get('suit_number','—')} · {c.get('status','')}"):
+                st.markdown(f"<div class='custom-card'><strong>Court:</strong> {esc(c.get('court','—'))}<br>"
+                            f"<strong>Judge:</strong> {esc(c.get('judge','—'))}<br>"
+                            f"<strong>Client:</strong> {esc(c.get('client_name','—'))}<br>"
+                            f"<strong>Filed:</strong> {esc(c.get('date_filed','—'))}<br>"
+                            f"<strong>Next Hearing:</strong> {esc(c.get('next_hearing','—'))}</div>", unsafe_allow_html=True)
+                st.write(c.get("description", "") or "—")
+                notes = db_fetch_all("case_notes", where="case_id = ?", params=(c["id"],), order="id DESC")
+                if notes:
+                    for n in notes:
+                        with st.expander(f"{n.get('title','Note')} · {n.get('created_at','')}"):
+                            st.write(n.get("content", ""))
+                            if st.button("Delete Note", key=f"dn_{n['id']}"):
+                                db_delete("case_notes", n["id"])
+                                st.rerun()
+                bc1, bc2, bc3 = st.columns(3)
+                with bc1:
+                    if st.button("Archive", key=f"arc_{c['id']}", use_container_width=True):
+                        db_update("cases", c["id"], {"status": "Archived", "updated_at": datetime.now().isoformat(timespec="seconds")})
+                        st.rerun()
+                with bc2:
+                    if st.button("Close", key=f"cls_{c['id']}", use_container_width=True):
+                        db_update("cases", c["id"], {"status": "Closed", "updated_at": datetime.now().isoformat(timespec="seconds")})
+                        st.rerun()
+                with bc3:
+                    if st.button("Delete", key=f"del_{c['id']}", use_container_width=True):
+                        db_delete("cases", c["id"])
+                        st.rerun()
+
+
+# ═══════════════════════════════════════════════════════
+# CLIENT MANAGEMENT
+# ═══════════════════════════════════════════════════════
+def render_clients():
+    section_header("👥 Client Management", "Manage client records")
+    tab1, tab2 = st.tabs(["➕ New Client", "📋 All Clients"])
+    with tab1:
+        with st.form("new_client_form", clear_on_submit=True):
+            name = st.text_input("Client Name *")
+            email = st.text_input("Email")
+            phone = st.text_input("Phone")
+            client_type = st.selectbox("Type", CLIENT_TYPES)
+            address = st.text_area("Address", height=80)
+            notes = st.text_area("Notes", height=100)
+            if st.form_submit_button("Create Client", use_container_width=True):
+                if not name.strip():
+                    st.error("Name required.")
+                else:
+                    db_insert("clients", {"name": name.strip(), "email": email.strip(), "phone": phone.strip(),
+                              "type": client_type, "address": address.strip(), "notes": notes.strip(),
+                              "created_at": datetime.now().isoformat(timespec="seconds")})
+                    st.success("Client created.")
+                    st.rerun()
+    with tab2:
+        clients = db_fetch_all("clients", order="name ASC")
+        if not clients:
+            st.info("No clients.")
+            return
+        for cl in clients:
+            with st.expander(f"{cl['name']} · {cl.get('type','')}"):
+                st.markdown(f"<div class='custom-card'>📧 {esc(cl.get('email','—'))} · 📞 {esc(cl.get('phone','—'))}<br>"
+                            f"📍 {esc(cl.get('address','—'))}<br>Notes: {esc(cl.get('notes','—'))}</div>", unsafe_allow_html=True)
+                if st.button("Delete", key=f"dcl_{cl['id']}", use_container_width=True):
+                    db_delete("clients", cl["id"])
+                    st.rerun()
+
+
+# ═══════════════════════════════════════════════════════
+# BILLING & INVOICING
+# ═══════════════════════════════════════════════════════
+def render_billing():
+    section_header("💰 Billing & Invoicing", "Time entries and invoice generation")
+    tab1, tab2, tab3 = st.tabs(["⏱️ Time Entry", "🧾 Invoices", "📊 Summary"])
+    with tab1:
+        clients = db_fetch_all("clients", order="name ASC")
+        client_opts = {c["name"]: c["id"] for c in clients} if clients else {}
+        with st.form("time_entry_form", clear_on_submit=True):
+            cn = st.selectbox("Client", ["(No Client)"] + list(client_opts.keys()))
+            desc = st.text_area("Work Description", height=100)
+            tc1, tc2 = st.columns(2)
+            with tc1:
+                hours = st.number_input("Hours", min_value=0.0, step=0.25, value=1.0)
+            with tc2:
+                rate = st.number_input("Rate (₦/hr)", min_value=0.0, step=1000.0, value=50000.0)
+            ed = st.date_input("Date", value=date.today())
+            if st.form_submit_button("Log Time", use_container_width=True):
+                amt = hours * rate
+                db_insert("time_entries", {"client_id": client_opts.get(cn, 0),
+                          "client_name": cn if cn != "(No Client)" else "", "description": desc.strip(),
+                          "hours": hours, "rate": rate, "amount": amt,
+                          "entry_date": ed.strftime("%Y-%m-%d"),
+                          "created_at": datetime.now().isoformat(timespec="seconds")})
+                st.success(f"Logged: ₦{amt:,.2f}")
+                st.rerun()
+        entries = db_fetch_all("time_entries", order="id DESC")
+        for e in entries[:20]:
+            st.markdown(f"<div class='custom-card'><strong>{esc(e.get('client_name','—'))}</strong> · {esc(e.get('entry_date',''))}<br>"
+                        f"{esc(e.get('description','')[:120])}<br>"
+                        f"{e.get('hours',0):.2f}hrs × ₦{e.get('rate',0):,.0f} = <strong>₦{e.get('amount',0):,.2f}</strong></div>", unsafe_allow_html=True)
+    with tab2:
+        clients_inv = db_fetch_all("clients", order="name ASC")
+        if not clients_inv:
+            st.info("Add clients first.")
+        else:
+            inv_cl = st.selectbox("Invoice Client", [c["name"] for c in clients_inv], key="inv_cl_sel")
+            unbilled = db_fetch_all("time_entries", where="client_name = ?", params=(inv_cl,))
+            if unbilled:
+                total = sum(float(e.get("amount", 0) or 0) for e in unbilled)
+                st.write(f"**{len(unbilled)}** entries · **₦{total:,.2f}**")
+                if st.button("Generate Invoice", type="primary", use_container_width=True):
+                    inv_no = f"INV-{datetime.now().strftime('%Y%m%d%H%M%S')}"
+                    db_insert("invoices", {"invoice_no": inv_no, "client_id": 0, "client_name": inv_cl,
+                              "entries_json": json.dumps([dict(e) for e in unbilled]),
+                              "total": total, "status": "Draft",
+                              "created_at": datetime.now().isoformat(timespec="seconds")})
+                    st.success(f"Invoice {inv_no}: ₦{total:,.2f}")
+                    st.rerun()
+            else:
+                st.info(f"No entries for {inv_cl}.")
+        invoices = db_fetch_all("invoices", order="id DESC")
+        for inv in invoices:
+            with st.expander(f"{inv['invoice_no']} · {inv['client_name']} · ₦{inv.get('total',0):,.2f}"):
+                ic1, ic2, ic3 = st.columns(3)
+                with ic1:
+                    if st.button("Sent", key=f"is_{inv['id']}"):
+                        db_update("invoices", inv["id"], {"status": "Sent"})
+                        st.rerun()
+                with ic2:
+                    if st.button("Paid", key=f"ip_{inv['id']}"):
+                        db_update("invoices", inv["id"], {"status": "Paid"})
+                        st.rerun()
+                with ic3:
+                    if st.button("Delete", key=f"id_{inv['id']}"):
+                        db_delete("invoices", inv["id"])
+                        st.rerun()
+    with tab3:
+        entries = db_fetch_all("time_entries")
+        invoices = db_fetch_all("invoices")
+        s1, s2, s3 = st.columns(3)
+        with s1:
+            metric_card("Logged", f"₦{sum(float(e.get('amount',0) or 0) for e in entries):,.2f}")
+        with s2:
+            metric_card("Invoiced", f"₦{sum(float(i.get('total',0) or 0) for i in invoices):,.2f}")
+        with s3:
+            metric_card("Paid", f"₦{sum(float(i.get('total',0) or 0) for i in invoices if i.get('status')=='Paid'):,.2f}")
+
+
+# ═══════════════════════════════════════════════════════
+# LEGAL REFERENCE TOOLS
+# ═══════════════════════════════════════════════════════
+def render_legal_tools():
+    section_header("📚 Legal Reference Tools", "Court hierarchy, limitation periods, Latin maxims, templates")
+    tab1, tab2, tab3, tab4 = st.tabs(["🏛️ Courts", "⏳ Limitation", "📜 Maxims", "📝 Templates"])
+    with tab1:
+        for court in COURT_HIERARCHY:
+            indent = "—" * (court["level"] - 1)
+            st.markdown(f"<div class='custom-card'><strong>{court['icon']} {indent} {esc(court['name'])}</strong> (L{court['level']})<br>"
+                        f"<span style='opacity:.75'>{esc(court['desc'])}</span></div>", unsafe_allow_html=True)
+    with tab2:
+        for lp in db_fetch_all("limitation_periods", order="cause ASC"):
+            st.markdown(f"<div class='custom-card'><strong>{esc(lp['cause'])}</strong><br>"
+                        f"Period: <strong>{esc(lp['period'])}</strong><br>Authority: {esc(lp.get('authority','—'))}</div>", unsafe_allow_html=True)
+        with st.form("add_lim", clear_on_submit=True):
+            lc = st.text_input("Cause of Action")
+            lp2 = st.text_input("Period")
+            la = st.text_input("Authority")
+            if st.form_submit_button("Add"):
+                if lc.strip():
+                    db_insert("limitation_periods", {"cause": lc.strip(), "period": lp2.strip(), "authority": la.strip()})
+                    st.rerun()
+    with tab3:
+        search = st.text_input("Search maxims")
+        maxims = db_fetch_all("maxims", order="maxim ASC")
+        filtered = [m for m in maxims if search.lower() in m["maxim"].lower() or search.lower() in m["meaning"].lower()] if search else maxims
+        for m in filtered:
+            st.markdown(f"<div class='custom-card'><strong><em>{esc(m['maxim'])}</em></strong><br>{esc(m['meaning'])}</div>", unsafe_allow_html=True)
+        with st.form("add_maxim", clear_on_submit=True):
+            mm = st.text_input("Maxim (Latin)")
+            mn = st.text_input("Meaning")
+            if st.form_submit_button("Add"):
+                if mm.strip():
+                    db_insert("maxims", {"maxim": mm.strip(), "meaning": mn.strip()})
+                    st.rerun()
+    with tab4:
+        templates = db_fetch_all("templates", order="name ASC")
+        for tmpl in templates:
+            with st.expander(f"{tmpl['name']} · {tmpl.get('cat','')}"):
+                st.code(tmpl.get("content", ""), language=None)
+                if st.button("Load", key=f"lt_{tmpl['id']}"):
+                    st.session_state["loaded_template"] = tmpl.get("content", "")
+                    st.success("Loaded — go to Editor tab.")
+                if not tmpl.get("builtin"):
+                    if st.button("Delete", key=f"dt_{tmpl['id']}"):
+                        db_delete("templates", tmpl["id"])
+                        st.rerun()
+        with st.form("add_tmpl", clear_on_submit=True):
+            tn = st.text_input("Template Name")
+            tc = st.text_input("Category", value="Custom")
+            tt = st.text_area("Content", height=300)
+            if st.form_submit_button("Save"):
+                if tn.strip() and tt.strip():
+                    db_insert("templates", {"name": tn.strip(), "cat": tc.strip(), "content": tt.strip(), "builtin": 0, "created_at": datetime.now().isoformat(timespec="seconds")})
+                    st.rerun()
+
+
+# ═══════════════════════════════════════════════════════
+# TEMPLATE EDITOR
+# ═══════════════════════════════════════════════════════
+def render_template_editor():
+    section_header("✍️ Template Editor", "Edit templates or draft documents with AI")
+    loaded = st.session_state.get("loaded_template", "")
+    content = st.text_area("Document Editor", value=loaded, height=450, key="tmpl_editor")
+    c1, c2 = st.columns(2)
+    with c1:
+        st.download_button("💾 Download TXT", data=content or "", file_name="document.txt", mime="text/plain", use_container_width=True)
+    with c2:
+        if HAS_DOCX and content.strip():
+            try:
+                import io
+                doc = export_docx(content, "Document")
+                buf = io.BytesIO()
+                doc.save(buf)
+                st.download_button("💾 Download DOCX", data=buf.getvalue(), file_name="document.docx",
+                                   mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document", use_container_width=True)
+            except Exception:
+                pass
+    instruction = st.text_input("AI editing instruction", placeholder="e.g. Make more formal, add penalty clauses")
+    if st.button("Apply AI Edit", type="primary", use_container_width=True):
+        if not content.strip() or not instruction.strip():
+            st.error("Need content and instruction.")
+        elif not _resolve_api_key():
+            st.error("API key not configured.")
+        else:
+            try:
+                with st.spinner("Editing..."):
+                    result, tokens = call_gemini(
+                        f"You are a Nigerian legal document editor. Apply this instruction to the document below.\n"
+                        f"Return ONLY the revised document.\n\nInstruction: {instruction.strip()}\n\nDocument:\n{content.strip()}",
+                        st.session_state.get("model"), "📝 Standard")
+                st.session_state["loaded_template"] = result
+                log_cost(st.session_state.get("model", ""), tokens, "Template edit")
+                st.rerun()
+            except Exception as exc:
+                st.error(str(exc))
+
+
+# ═══════════════════════════════════════════════════════
+# COST TRACKER PAGE
+# ═══════════════════════════════════════════════════════
+def render_cost_tracker():
+    section_header("📊 AI Cost Tracker", "Token usage and cost monitoring")
+    c1, c2, c3 = st.columns(3)
+    with c1:
+        metric_card("All Time", f"${summarize_costs('all')['cost']:.4f}")
+    with c2:
+        metric_card("7 Days", f"${summarize_costs('7d')['cost']:.4f}")
+    with c3:
+        metric_card("24h", f"${summarize_costs('24h')['cost']:.4f}")
+    logs = db_fetch_all("cost_log", order="id DESC")
+    for log in logs[:30]:
+        st.markdown(f"<div class='custom-card'><strong>{esc(log.get('model',''))}</strong> · {esc(log.get('created_at',''))}<br>"
+                    f"P:{log.get('prompt_tokens',0):,} R:{log.get('response_tokens',0):,} · ${log.get('total_cost',0):.6f}<br>"
+                    f"<span style='opacity:.6'>{esc(log.get('query_preview','')[:120])}</span></div>", unsafe_allow_html=True)
+    if logs and st.button("🗑️ Clear Cost Logs", use_container_width=True):
+        db_execute("DELETE FROM cost_log")
+        st.rerun()
+
+
+# ═══════════════════════════════════════════════════════
+# SETTINGS
+# ═══════════════════════════════════════════════════════
+def render_settings():
+    section_header("⚙️ Settings & Profile", "Firm details, password, system info")
+    profile = get_user_profile() or {}
+    st.markdown("### 🏢 Firm Profile")
+    with st.form("profile_form"):
+        fn = st.text_input("Firm Name", value=profile.get("firm_name", ""))
+        un = st.text_input("Your Name", value=profile.get("user_name", ""))
+        em = st.text_input("Email", value=profile.get("email", ""))
+        if st.form_submit_button("Save Profile", use_container_width=True):
+            save_user_profile({"firm_name": fn.strip(), "user_name": un.strip(), "email": em.strip()})
+            st.success("Saved.")
+    st.markdown("### 🔐 Password")
+    with st.form("pw_form"):
+        np = st.text_input("New Password", type="password")
+        cp = st.text_input("Confirm Password", type="password")
+        if st.form_submit_button("Set Password", use_container_width=True):
+            if not np:
+                st.error("Empty.")
+            elif np != cp:
+                st.error("Mismatch.")
+            else:
+                save_user_profile({"password_hash": hash_password(np)})
+                st.success("Password set.")
+    st.markdown("### 🖥️ System")
+    st.markdown(f"<div class='custom-card'><strong>Version:</strong> v8.0<br>"
+                f"<strong>Model:</strong> {esc(st.session_state.get('model','Not set'))}<br>"
+                f"<strong>API:</strong> {'Yes' if st.session_state.get('api_configured') else 'No'}<br>"
+                f"<strong>PDF:</strong> {'Yes' if HAS_PDF else 'No'} · <strong>DOCX:</strong> {'Yes' if HAS_DOCX else 'No'} · "
+                f"<strong>Charts:</strong> {'Yes' if HAS_PLOTLY else 'No'}</div>", unsafe_allow_html=True)
+    st.markdown("### 🗄️ Database")
+    dc1, dc2 = st.columns(2)
+    with dc1:
+        if st.button("Clear AI History", use_container_width=True):
+            db_execute("DELETE FROM chat_history")
+            st.rerun()
+    with dc2:
+        if st.button("Clear All Data", use_container_width=True):
+            for t in ["cases", "case_notes", "clients", "time_entries", "invoices", "chat_history", "templates", "limitation_periods", "maxims", "cost_log"]:
+                db_execute(f"DELETE FROM {t}")
+            st.success("Cleared. Restart to re-seed.")
             st.rerun()
 
 
-# ───────────────────────────────────────────────────────
-#  CASES & HEARINGS
-# ───────────────────────────────────────────────────────
-def page_cases():
-    user_id = st.session_state.get("user_id", "")
-    st.header("📂 Cases & Hearings")
-    cases = load_cases(user_id)
-
-    tab_list, tab_add, tab_hearings = st.tabs(
-        ["📋 My Cases", "➕ Add Case", "📅 Upcoming Hearings"]
-    )
-
-    # ── Add case ──
-    with tab_add:
-        with st.form("add_case_form"):
-            st.subheader("New Case")
-            title = st.text_input("Case Title / Matter Name*")
-            case_number = st.text_input("Suit Number", placeholder="e.g., FHC/L/CS/123/2025")
-            court = st.selectbox("Court", [
-                "Supreme Court of Nigeria", "Court of Appeal",
-                "Federal High Court", "State High Court",
-                "National Industrial Court", "FCT High Court",
-                "Magistrate Court", "Customary Court",
-                "Sharia Court", "Other",
-            ])
-            c1, c2 = st.columns(2)
-            with c1:
-                claimant = st.text_input("Claimant / Applicant")
-            with c2:
-                defendant = st.text_input("Defendant / Respondent")
-            status = st.selectbox("Status", [
-                "Active", "Pending", "Adjourned", "Closed", "Settled", "Struck Out",
-            ])
-            next_hearing = st.date_input("Next Hearing Date", value=None)
-            notes = st.text_area("Notes", placeholder="Brief description of the matter...")
-
-            if st.form_submit_button("💾 Save Case", type="primary", use_container_width=True):
-                if not title:
-                    st.error("Case title is required.")
-                else:
-                    cases.append({
-                        "id": hashlib.md5(
-                            f"{title}{datetime.now().isoformat()}".encode()
-                        ).hexdigest()[:12],
-                        "title": title,
-                        "case_number": case_number,
-                        "court": court,
-                        "claimant": claimant,
-                        "defendant": defendant,
-                        "status": status,
-                        "next_hearing": str(next_hearing) if next_hearing else "",
-                        "notes": notes,
-                        "hearings": [],
-                        "analyses": [],
-                        "created": datetime.now().isoformat(),
-                    })
-                    save_cases(user_id, cases)
-                    st.success(f"✅ Case **{title}** saved!")
-                    st.rerun()
-
-    # ── Case list ──
-    with tab_list:
-        if not cases:
-            st.info("No cases yet. Add your first case in the **Add Case** tab.")
-        else:
-            st.caption(f"{len(cases)} case(s) on record")
-            status_filter = st.multiselect(
-                "Filter by status:",
-                ["Active", "Pending", "Adjourned", "Closed", "Settled", "Struck Out"],
-                default=["Active", "Pending", "Adjourned"],
-            )
-
-            for i, case in enumerate(cases):
-                if status_filter and case.get("status") not in status_filter:
-                    continue
-
-                icon = {"Active": "🟢", "Pending": "🟡", "Closed": "🔴"}.get(
-                    case.get("status", ""), "⚪"
-                )
-                with st.expander(
-                    f"{icon} {case.get('title', 'Untitled')} — "
-                    f"{case.get('case_number', 'No suit number')}"
-                ):
-                    mc1, mc2, mc3 = st.columns(3)
-                    mc1.metric("Court", case.get("court", "N/A"))
-                    mc2.metric("Status", case.get("status", "N/A"))
-                    mc3.metric("Next Hearing", case.get("next_hearing", "Not set"))
-
-                    st.markdown(
-                        f"**Parties:** {case.get('claimant', 'N/A')} v. "
-                        f"{case.get('defendant', 'N/A')}"
-                    )
-                    if case.get("notes"):
-                        st.markdown(f"**Notes:** {case['notes']}")
-
-                    # Hearings
-                    hearings = case.get("hearings", [])
-                    if hearings:
-                        st.markdown("**Hearing History:**")
-                        for h in hearings:
-                            st.markdown(
-                                f"- {h.get('date', '?')} — {h.get('purpose', 'General')} "
-                                f"({h.get('outcome', 'Pending')})"
-                            )
-
-                    # Add hearing sub-form
-                    with st.form(f"hearing_{i}"):
-                        st.markdown("**Add Hearing:**")
-                        hc1, hc2 = st.columns(2)
-                        with hc1:
-                            h_date = st.date_input("Date", key=f"hd_{i}")
-                            h_purpose = st.text_input(
-                                "Purpose", placeholder="e.g., Cross-examination",
-                                key=f"hp_{i}",
-                            )
-                        with hc2:
-                            h_time = st.text_input(
-                                "Time", placeholder="9:00 AM", key=f"ht_{i}"
-                            )
-                            h_outcome = st.selectbox(
-                                "Outcome",
-                                ["Pending", "Adjourned", "Heard", "Struck Out", "Settled"],
-                                key=f"ho_{i}",
-                            )
-                        h_notes = st.text_input("Hearing Notes", key=f"hn_{i}")
-
-                        if st.form_submit_button("Add Hearing"):
-                            cases[i].setdefault("hearings", []).append({
-                                "date": str(h_date),
-                                "time": h_time,
-                                "purpose": h_purpose,
-                                "outcome": h_outcome,
-                                "notes": h_notes,
-                            })
-                            save_cases(user_id, cases)
-                            st.success("✅ Hearing added!")
-                            st.rerun()
-
-                    # Saved analyses
-                    analyses = case.get("analyses", [])
-                    if analyses:
-                        st.markdown(f"**Saved Analyses ({len(analyses)}):**")
-                        for j, a in enumerate(analyses):
-                            with st.expander(f"Analysis — {a.get('date', '?')[:10]}"):
-                                st.markdown(a.get("content", ""))
-                                render_export_buttons(
-                                    a.get("content", ""),
-                                    title=f"{case.get('title', 'Case')}_Analysis_{j+1}",
-                                    key_prefix=f"ca_{i}_{j}",
-                                )
-
-                    # Delete
-                    if st.button("🗑️ Delete Case", key=f"del_case_{i}"):
-                        cases.pop(i)
-                        save_cases(user_id, cases)
-                        st.rerun()
-
-    # ── Upcoming hearings ──
-    with tab_hearings:
-        st.subheader("📅 Upcoming Hearings")
-        all_hearings = []
-        for case in cases:
-            if case.get("next_hearing"):
-                all_hearings.append({
-                    "Case": case.get("title", "Untitled"),
-                    "Suit No.": case.get("case_number", ""),
-                    "Date": case["next_hearing"],
-                    "Court": case.get("court", "N/A"),
-                    "Purpose": "Next scheduled hearing",
-                })
-            for h in case.get("hearings", []):
-                if h.get("outcome") == "Pending":
-                    all_hearings.append({
-                        "Case": case.get("title", "Untitled"),
-                        "Suit No.": case.get("case_number", ""),
-                        "Date": h.get("date", ""),
-                        "Court": case.get("court", "N/A"),
-                        "Purpose": h.get("purpose", ""),
-                    })
-        if all_hearings:
-            all_hearings.sort(key=lambda x: x.get("Date", ""))
-            st.dataframe(pd.DataFrame(all_hearings), use_container_width=True, hide_index=True)
-        else:
-            st.info("No upcoming hearings. Add hearing dates to your cases.")
-
-
-# ───────────────────────────────────────────────────────
-#  CLIENTS & BILLING
-# ───────────────────────────────────────────────────────
-def page_clients_billing():
-    user_id = st.session_state.get("user_id", "")
-    st.header("👥 Clients & Billing")
-    clients = load_clients(user_id)
-    billing = load_billing(user_id)
-
-    tab_clients, tab_add, tab_billing, tab_invoices = st.tabs(
-        ["📋 Clients", "➕ Add Client", "⏱️ Time & Billing", "🧾 Invoices"]
-    )
-
-    # ── Add client ──
-    with tab_add:
-        with st.form("add_client"):
-            st.subheader("New Client")
-            c_name = st.text_input("Client Name*")
-            c1, c2 = st.columns(2)
-            with c1:
-                c_email = st.text_input("Email", placeholder="client@example.com")
-                c_phone = st.text_input("Phone", placeholder="+234...")
-            with c2:
-                c_type = st.selectbox("Type", ["Individual", "Corporate", "Government", "NGO"])
-                c_status = st.selectbox("Status", ["Active", "Inactive", "Prospective"])
-            c_address = st.text_input("Address")
-            c_notes = st.text_area("Notes")
-
-            if st.form_submit_button("💾 Save Client", type="primary", use_container_width=True):
-                if not c_name:
-                    st.error("Client name is required.")
-                else:
-                    clients.append({
-                        "id": hashlib.md5(
-                            f"{c_name}{datetime.now().isoformat()}".encode()
-                        ).hexdigest()[:12],
-                        "name": c_name, "email": c_email, "phone": c_phone,
-                        "type": c_type, "status": c_status,
-                        "address": c_address, "notes": c_notes,
-                        "created": datetime.now().isoformat(),
-                    })
-                    save_clients(user_id, clients)
-                    st.success(f"✅ Client **{c_name}** saved!")
-                    st.rerun()
-
-    # ── Client list ──
-    with tab_clients:
-        if not clients:
-            st.info("No clients yet. Add your first client.")
-        else:
-            st.caption(f"{len(clients)} client(s)")
-            for i, cl in enumerate(clients):
-                icon = "🟢" if cl.get("status") == "Active" else "⚪"
-                with st.expander(f"{icon} {cl.get('name', 'Unnamed')} — {cl.get('type', '')}"):
-                    cc1, cc2, cc3 = st.columns(3)
-                    cc1.write(f"📧 {cl.get('email', 'N/A')}")
-                    cc2.write(f"📞 {cl.get('phone', 'N/A')}")
-                    cc3.write(f"📍 {cl.get('address', 'N/A')}")
-                    if cl.get("notes"):
-                        st.markdown(f"**Notes:** {cl['notes']}")
-                    client_total = sum(
-                        b.get("amount", 0) for b in billing if b.get("client") == cl.get("name")
-                    )
-                    st.metric("Total Billed", f"₦{client_total:,.2f}")
-                    if st.button("🗑️ Delete", key=f"del_cl_{i}"):
-                        clients.pop(i)
-                        save_clients(user_id, clients)
-                        st.rerun()
-
-    # ── Time & billing ──
-    with tab_billing:
-        st.subheader("⏱️ Log Time Entry")
-        with st.form("billing_form"):
-            client_names = (
-                [c.get("name") for c in clients]
-                if clients
-                else ["(No clients — add one first)"]
-            )
-            b_client = st.selectbox("Client", client_names)
-            bc1, bc2 = st.columns(2)
-            with bc1:
-                b_date = st.date_input("Date")
-                b_hours = st.number_input("Hours", min_value=0.0, step=0.25, value=1.0)
-            with bc2:
-                b_rate = st.number_input("Hourly Rate (₦)", min_value=0, step=5000, value=50000)
-                b_status = st.selectbox("Status", ["Unbilled", "Billed", "Paid"])
-            b_desc = st.text_input("Description*", placeholder="e.g., Drafting motion on notice")
-
-            if st.form_submit_button("💾 Log Entry", type="primary", use_container_width=True):
-                if not b_desc:
-                    st.error("Description is required.")
-                elif b_client.startswith("(No"):
-                    st.error("Please add a client first.")
-                else:
-                    amount = b_hours * b_rate
-                    billing.append({
-                        "id": hashlib.md5(
-                            f"{b_client}{datetime.now().isoformat()}".encode()
-                        ).hexdigest()[:12],
-                        "client": b_client, "date": str(b_date),
-                        "description": b_desc, "hours": b_hours,
-                        "rate": b_rate, "amount": amount,
-                        "status": b_status,
-                        "created": datetime.now().isoformat(),
-                    })
-                    save_billing(user_id, billing)
-                    st.success(f"✅ ₦{amount:,.2f} logged for **{b_client}**")
-                    st.rerun()
-
-        if billing:
-            st.divider()
-            st.subheader("📊 Billing Summary")
-            df = pd.DataFrame(billing)
-            show = [c for c in ["date", "client", "description", "hours", "rate", "amount", "status"] if c in df.columns]
-            st.dataframe(df[show], use_container_width=True, hide_index=True)
-            s1, s2, s3 = st.columns(3)
-            s1.metric("Total Billed", f"₦{df['amount'].sum():,.2f}")
-            s2.metric("Total Hours", f"{df['hours'].sum():,.1f}")
-            paid = df[df["status"] == "Paid"]["amount"].sum() if "status" in df.columns else 0
-            s3.metric("Paid", f"₦{paid:,.2f}")
-
-    # ── Invoices ──
-    with tab_invoices:
-        st.subheader("🧾 Generate Invoice")
-        if not clients or not billing:
-            st.info("Add clients and billing entries first.")
-        else:
-            inv_client = st.selectbox(
-                "Client", [c.get("name") for c in clients], key="inv_cl"
-            )
-            unbilled = [
-                b for b in billing
-                if b.get("client") == inv_client and b.get("status") != "Paid"
-            ]
-            if unbilled:
-                inv_df = pd.DataFrame(unbilled)
-                st.dataframe(
-                    inv_df[["date", "description", "hours", "rate", "amount"]],
-                    use_container_width=True, hide_index=True,
-                )
-                total = sum(e.get("amount", 0) for e in unbilled)
-                st.markdown(f"### Total: ₦{total:,.2f}")
-
-                if st.button("📄 Generate Invoice", key="gen_inv"):
-                    inv_no = hashlib.md5(
-                        f"{inv_client}{datetime.now().isoformat()}".encode()
-                    ).hexdigest()[:6].upper()
-                    lines = [
-                        "INVOICE",
-                        "=" * 50,
-                        f"To: {inv_client}",
-                        f"Date: {datetime.now():%d %B %Y}",
-                        f"Invoice No: INV-{inv_no}",
-                        "=" * 50, "",
-                    ]
-                    for e in unbilled:
-                        lines.append(
-                            f"{e.get('date')} | {e.get('description')} | "
-                            f"{e.get('hours')}hrs × ₦{e.get('rate'):,.0f} = ₦{e.get('amount'):,.2f}"
-                        )
-                    lines += [
-                        "", "=" * 50,
-                        f"TOTAL DUE: ₦{total:,.2f}", "",
-                        "Payment is due within 30 days.",
-                        "Thank you for your patronage.",
-                    ]
-                    invoice_text = "\n".join(lines)
-                    st.text_area("Invoice Preview", invoice_text, height=300, key="inv_prev")
-                    render_export_buttons(invoice_text, title=f"Invoice_{inv_client}", key_prefix="inv_exp")
-            else:
-                st.info(f"No outstanding entries for {inv_client}.")
-
-
-# ───────────────────────────────────────────────────────
-#  LEGAL REFERENCES
-# ───────────────────────────────────────────────────────
-def page_references():
-    user_id = st.session_state.get("user_id", "")
-    st.header("📚 Legal References")
-
-    tab_lim, tab_courts, tab_maxims = st.tabs(
-        ["⏳ Limitation Periods", "🏛️ Court Hierarchy", "📜 Latin Maxims"]
-    )
-
-    for tab, ref_type, label, default_fn in [
-        (tab_lim, "limitation_periods", "Limitation Periods", get_default_limitation_periods),
-        (tab_courts, "court_hierarchy", "Court Hierarchy", get_court_hierarchy),
-        (tab_maxims, "latin_maxims", "Latin Maxims", get_latin_maxims),
-    ]:
-        with tab:
-            st.subheader(label)
-            data = get_user_references(user_id, ref_type)
-            df = pd.DataFrame(data)
-            edited = st.data_editor(
-                df, use_container_width=True, num_rows="dynamic", key=f"ed_{ref_type}"
-            )
-            c1, c2 = st.columns(2)
-            with c1:
-                if st.button("💾 Save Changes", key=f"save_{ref_type}"):
-                    refs = load_references(user_id) or {}
-                    refs[ref_type] = edited.to_dict("records")
-                    save_references(user_id, refs)
-                    st.success("✅ Saved!")
-            with c2:
-                if st.button("🔄 Reset to Defaults", key=f"reset_{ref_type}"):
-                    refs = load_references(user_id) or {}
-                    refs[ref_type] = default_fn()
-                    save_references(user_id, refs)
-                    st.success("Reset to defaults.")
-                    st.rerun()
-
-
-# ───────────────────────────────────────────────────────
-#  DOCUMENT TEMPLATES
-# ───────────────────────────────────────────────────────
-DEFAULT_TEMPLATES = [
-    {"name": "Contract of Sale", "category": "Commercial",
-     "description": "Sale of goods or property under Nigerian law."},
-    {"name": "Tenancy Agreement", "category": "Real Property",
-     "description": "Residential or commercial lease compliant with state tenancy laws."},
-    {"name": "Power of Attorney", "category": "General",
-     "description": "General or special power of attorney."},
-    {"name": "Demand / Pre-Action Letter", "category": "Litigation",
-     "description": "Formal demand letter preceding legal action."},
-    {"name": "Written Address", "category": "Litigation",
-     "description": "Written address (legal submission) for court proceedings."},
-    {"name": "Employment Contract", "category": "Labour",
-     "description": "Employment agreement compliant with the Labour Act."},
-    {"name": "Non-Disclosure Agreement", "category": "Commercial",
-     "description": "Mutual or unilateral NDA for business dealings."},
-    {"name": "Board Resolution", "category": "Corporate",
-     "description": "Board resolution compliant with CAMA 2020."},
-    {"name": "Affidavit", "category": "Litigation",
-     "description": "General-purpose affidavit for court proceedings."},
-    {"name": "Memorandum of Understanding", "category": "Commercial",
-     "description": "MOU for preliminary agreements or partnerships."},
-]
-
-
-def page_templates():
-    user_id = st.session_state.get("user_id", "")
-    st.header("📝 Document Templates")
-    custom_templates = load_templates(user_id)
-    all_templates = DEFAULT_TEMPLATES + custom_templates
-
-    tab_gen, tab_custom = st.tabs(["📄 Generate from Template", "➕ Custom Templates"])
-
-    with tab_gen:
-        names = [t["name"] for t in all_templates]
-        selected_name = st.selectbox("Template:", names, key="tmpl_sel")
-        selected = next((t for t in all_templates if t["name"] == selected_name), None)
-
-        if selected:
-            st.caption(
-                f"**{selected.get('category', 'General')}** — "
-                f"{selected.get('description', '')}"
-            )
-            with st.form("template_form"):
-                st.markdown("**Fill in the details:**")
-                tc1, tc2 = st.columns(2)
-                with tc1:
-                    party_a = st.text_input("Party A (First Party)")
-                    party_a_addr = st.text_input("Party A Address")
-                with tc2:
-                    party_b = st.text_input("Party B (Second Party)")
-                    party_b_addr = st.text_input("Party B Address")
-                subject = st.text_input("Subject Matter",
-                    placeholder="e.g., Sale of Plot 24, Lekki Phase 1")
-                consideration = st.text_input("Consideration / Value",
-                    placeholder="e.g., ₦50,000,000")
-                additional = st.text_area("Additional Instructions / Special Terms")
-
-                if st.form_submit_button(
-                    "⚡ Generate Document", type="primary", use_container_width=True
-                ):
-                    gen_prompt = (
-                        f"Generate a complete, professional {selected['name']} "
-                        f"under Nigerian law.\n\n"
-                        f"Party A: {party_a or '[Party A]'} of {party_a_addr or '[Address]'}\n"
-                        f"Party B: {party_b or '[Party B]'} of {party_b_addr or '[Address]'}\n"
-                        f"Subject: {subject or '[Subject Matter]'}\n"
-                        f"Consideration: {consideration or '[To be agreed]'}\n"
-                        f"Special terms: {additional or 'None'}\n\n"
-                        f"Include: recitals, definitions, operative clauses, boilerplate "
-                        f"(governing law, dispute resolution, severability, entire agreement), "
-                        f"and execution block with signature and witness lines.\n"
-                        f"Ensure compliance with all relevant Nigerian statutes."
-                    )
-                    with st.spinner(f"⚡ Drafting {selected['name']}..."):
-                        result = call_gemini(
-                            prompt=gen_prompt, mode="Comprehensive", user_id=user_id,
-                        )
-                    if result.get("error"):
-                        st.error(result["error"])
-                    else:
-                        st.markdown("### 📄 Generated Document")
-                        st.markdown(result["text"])
-                        render_token_display(result)
-                        render_export_buttons(
-                            result["text"], title=selected["name"], key_prefix="tmpl_exp"
-                        )
-
-    with tab_custom:
-        st.subheader("➕ Add Custom Template")
-        with st.form("custom_tmpl"):
-            ct_name = st.text_input("Template Name*")
-            ct_cat = st.text_input("Category", placeholder="e.g., Commercial")
-            ct_desc = st.text_area("Description / Instructions")
-            if st.form_submit_button("💾 Save Template", use_container_width=True):
-                if not ct_name:
-                    st.error("Template name is required.")
-                else:
-                    custom_templates.append({
-                        "name": ct_name,
-                        "category": ct_cat or "General",
-                        "description": ct_desc,
-                    })
-                    save_templates(user_id, custom_templates)
-                    st.success(f"✅ Template **{ct_name}** saved!")
-                    st.rerun()
-
-        if custom_templates:
-            st.divider()
-            st.subheader("Your Custom Templates")
-            for i, ct in enumerate(custom_templates):
-                cc1, cc2 = st.columns([4, 1])
-                cc1.markdown(
-                    f"**{ct['name']}** ({ct.get('category', '')}) — "
-                    f"{ct.get('description', '')[:80]}"
-                )
-                if cc2.button("🗑️", key=f"del_tmpl_{i}"):
-                    custom_templates.pop(i)
-                    save_templates(user_id, custom_templates)
-                    st.rerun()
-
-
-# ───────────────────────────────────────────────────────
-#  AI USAGE & COSTS
-# ───────────────────────────────────────────────────────
-def page_usage():
-    user_id = st.session_state.get("user_id", "")
-    st.header("📊 AI Usage & Costs")
-    usage = load_usage(user_id)
-
-    if not usage:
-        st.info("No usage data yet. Start using the AI Assistant to track stats.")
-        return
-
-    df = pd.DataFrame(usage)
-
-    # Summary
-    u1, u2, u3, u4 = st.columns(4)
-    u1.metric("Total Queries", len(df))
-    u2.metric("Input Tokens", f"{df['input_tokens'].sum():,}")
-    u3.metric("Output Tokens", f"{df['output_tokens'].sum():,}")
-    u4.metric("Total Cost", f"${df['cost'].sum():.4f}")
-
-    # By model
-    st.subheader("🤖 By Model")
-    if "model" in df.columns:
-        model_stats = df.groupby("model").agg(
-            queries=("model", "count"),
-            input_tokens=("input_tokens", "sum"),
-            output_tokens=("output_tokens", "sum"),
-            cost=("cost", "sum"),
-        ).reset_index()
-        st.dataframe(model_stats, use_container_width=True, hide_index=True)
-
-    # Charts
-    st.subheader("📅 Over Time")
-    if "timestamp" in df.columns:
-        df["date"] = pd.to_datetime(df["timestamp"]).dt.date
-        daily = df.groupby("date").agg(
-            queries=("date", "count"),
-            cost=("cost", "sum"),
-        ).reset_index()
-        try:
-            import plotly.express as px
-            fig = px.bar(
-                daily, x="date", y="queries", title="Queries per Day",
-                color_discrete_sequence=["#059669"],
-            )
-            st.plotly_chart(fig, use_container_width=True)
-            fig2 = px.line(
-                daily, x="date", y="cost", title="Daily Cost ($)",
-                color_discrete_sequence=["#059669"],
-            )
-            st.plotly_chart(fig2, use_container_width=True)
-        except ImportError:
-            st.line_chart(daily.set_index("date")[["queries"]])
-            st.line_chart(daily.set_index("date")[["cost"]])
-
-    # Log + export
-    with st.expander("📋 Full Usage Log"):
-        show = [c for c in ["timestamp", "model", "input_tokens", "output_tokens", "cost"] if c in df.columns]
-        st.dataframe(df[show], use_container_width=True, hide_index=True)
-
-    st.download_button(
-        "📥 Export CSV", df.to_csv(index=False).encode("utf-8"),
-        file_name="lexiassist_usage.csv", mime="text/csv",
-    )
-
-
-# ───────────────────────────────────────────────────────
-#  SETTINGS
-# ───────────────────────────────────────────────────────
-def page_settings():
-    user_id = st.session_state.get("user_id", "")
-    st.header("⚙️ Settings")
-
-    tab_profile, tab_api, tab_data = st.tabs(
-        ["👤 Profile", "🔑 API Key", "💾 Data Management"]
-    )
-
-    with tab_profile:
-        profile = get_user_profile(user_id)
-
-        with st.form("profile_form"):
-            display_name = st.text_input(
-                "Display Name",
-                value=profile.get("display_name", st.session_state.get("username", "")),
-            )
-            email = st.text_input("Email", value=profile.get("email", ""))
-            firm = st.text_input("Firm / Chambers", value=profile.get("firm", ""))
-            if st.form_submit_button("💾 Update Profile", use_container_width=True):
-                update_user_profile(user_id, {
-                    "display_name": display_name, "email": email, "firm": firm,
-                })
-                st.success("✅ Profile updated!")
-
-        st.divider()
-        st.subheader("🔒 Change Password")
-        with st.form("pw_form"):
-            old_pw = st.text_input("Current Password", type="password")
-            new_pw = st.text_input("New Password", type="password")
-            confirm_pw = st.text_input("Confirm New Password", type="password")
-            if st.form_submit_button("🔒 Change Password", use_container_width=True):
-                if not old_pw or not new_pw:
-                    st.error("All fields are required.")
-                elif len(new_pw) < 6:
-                    st.error("Minimum 6 characters.")
-                elif new_pw != confirm_pw:
-                    st.error("Passwords do not match.")
-                elif change_password(user_id, old_pw, new_pw):
-                    st.success("✅ Password changed!")
-                else:
-                    st.error("Current password is incorrect.")
-
-    with tab_api:
-        current_key = _resolve_api_key()
-        if current_key:
-            masked = current_key[:8] + "•" * max(len(current_key) - 12, 0) + current_key[-4:]
-            st.success(f"✅ API key active: `{masked}`")
-        else:
-            st.warning("⚠️ No API key configured.")
-
-        new_key = st.text_input(
-            "Set Gemini API Key (this session only):",
-            type="password", key="set_api",
-            placeholder="Paste your key...",
-        )
-        if new_key:
-            st.session_state["api_key_input"] = new_key
-            st.success("✅ Key set for this session.")
-        st.caption(
-            "For persistent keys, use Streamlit Cloud dashboard or "
-            "`.streamlit/secrets.toml`."
-        )
-
-    with tab_data:
-        st.subheader("💾 Export All Data")
-        if st.button("📥 Export as JSON", key="exp_all", use_container_width=True):
-            payload = {
-                "cases": load_cases(user_id),
-                "clients": load_clients(user_id),
-                "billing": load_billing(user_id),
-                "chat_history": load_chat_history(user_id),
-                "references": load_references(user_id),
-                "templates": load_templates(user_id),
-                "usage": load_usage(user_id),
-                "exported": datetime.now().isoformat(),
-            }
-            st.download_button(
-                "⬇️ Download Backup",
-                json.dumps(payload, indent=2, default=str).encode("utf-8"),
-                file_name=f"lexiassist_backup_{datetime.now():%Y%m%d}.json",
-                mime="application/json", key="dl_backup",
-            )
-
-        st.divider()
-        st.markdown("**⚠️ Danger Zone**")
-        with st.expander("🗑️ Clear All Data"):
-            st.warning(
-                "This permanently deletes all cases, clients, billing, "
-                "chat history, and custom references."
-            )
-            confirm_txt = st.text_input("Type DELETE to confirm:", key="del_confirm")
-            if st.button("🗑️ Delete Everything", type="primary", key="nuke"):
-                if confirm_txt == "DELETE":
-                    for fn, empty in [
-                        (save_cases, []), (save_clients, []),
-                        (save_billing, []), (save_chat_history, []),
-                        (save_references, {}), (save_templates, []),
-                    ]:
-                        fn(user_id, empty)
-                    st.session_state["chat_history"] = []
-                    st.session_state["last_result"] = None
-                    st.success("All data cleared.")
-                    st.rerun()
-                else:
-                    st.error("Type DELETE to confirm.")
-
 # ═══════════════════════════════════════════════════════
-# PART 4 — MAIN APP ENTRY POINT
+# MAIN ENTRY POINT
 # ═══════════════════════════════════════════════════════
-
-# ───────────────────────────────────────────────────────
-#  CUSTOM CSS
-# ───────────────────────────────────────────────────────
-CUSTOM_CSS = """
-<style>
-    /* ── Global ── */
-    .stApp {
-        font-family: 'Inter', 'Segoe UI', sans-serif;
-    }
-
-    /* ── Sidebar branding ── */
-    [data-testid="stSidebar"] {
-        background: linear-gradient(180deg, #f0fdf4 0%, #ffffff 100%);
-        border-right: 1px solid #e2e8f0;
-    }
-    [data-testid="stSidebar"] h3 {
-        color: #059669;
-        font-weight: 700;
-    }
-
-    /* ── Chat messages ── */
-    [data-testid="stChatMessage"] {
-        border-radius: 12px;
-        margin-bottom: 0.5rem;
-        border: 1px solid #e2e8f0;
-    }
-
-    /* ── Buttons ── */
-    .stButton > button[kind="primary"] {
-        background-color: #059669;
-        border: none;
-        color: white;
-        border-radius: 8px;
-        font-weight: 600;
-    }
-    .stButton > button[kind="primary"]:hover {
-        background-color: #047857;
-    }
-    .stButton > button[kind="secondary"] {
-        border-radius: 8px;
-        border: 1px solid #cbd5e1;
-    }
-
-    /* ── Metrics ── */
-    [data-testid="stMetric"] {
-        background: #f8fafc;
-        border: 1px solid #e2e8f0;
-        border-radius: 10px;
-        padding: 12px 16px;
-    }
-    [data-testid="stMetricValue"] {
-        font-size: 1.1rem;
-        font-weight: 700;
-        color: #059669;
-    }
-
-    /* ── Expanders ── */
-    .streamlit-expanderHeader {
-        font-weight: 600;
-        color: #1e293b;
-    }
-
-    /* ── Data editor ── */
-    [data-testid="stDataFrame"] {
-        border-radius: 8px;
-        overflow: hidden;
-    }
-
-    /* ── Download buttons ── */
-    .stDownloadButton > button {
-        border-radius: 8px;
-        font-size: 0.85rem;
-    }
-
-    /* ── Tabs ── */
-    .stTabs [data-baseweb="tab"] {
-        font-weight: 600;
-        color: #64748b;
-    }
-    .stTabs [aria-selected="true"] {
-        color: #059669;
-        border-bottom-color: #059669;
-    }
-
-    /* ── Form borders ── */
-    [data-testid="stForm"] {
-        border: 1px solid #e2e8f0;
-        border-radius: 12px;
-        padding: 1.5rem;
-    }
-
-    /* ── Footer ── */
-    .app-footer {
-        text-align: center;
-        padding: 2rem 1rem 1rem;
-        color: #94a3b8;
-        font-size: 0.8rem;
-        border-top: 1px solid #e2e8f0;
-        margin-top: 3rem;
-    }
-    .app-footer a {
-        color: #059669;
-        text-decoration: none;
-    }
-
-    /* ── Hide default Streamlit footer ── */
-    footer {visibility: hidden;}
-    #MainMenu {visibility: hidden;}
-</style>
-"""
-
-# ───────────────────────────────────────────────────────
-#  FOOTER
-# ───────────────────────────────────────────────────────
-FOOTER_HTML = """
-<div class="app-footer">
-    ⚖️ <strong>LexiAssist</strong> — AI-Powered Legal Workspace for Nigerian Lawyers<br>
-    <em>AI-generated content is for informational purposes only. Always verify citations
-    and consult qualified counsel before acting on any legal analysis.</em><br><br>
-    Built with ❤️ for the Nigerian Legal Community
-</div>
-"""
-
-
-# ───────────────────────────────────────────────────────
-#  PAGE ROUTER
-# ───────────────────────────────────────────────────────
-PAGE_MAP = {
-    "AI Assistant": page_ai_assistant,
-    "Cases & Hearings": page_cases,
-    "Clients & Billing": page_clients_billing,
-    "Legal References": page_references,
-    "Document Templates": page_templates,
-    "AI Usage & Costs": page_usage,
-    "Settings": page_settings,
-}
-
-
-# ───────────────────────────────────────────────────────
-#  MAIN
-# ───────────────────────────────────────────────────────
 def main():
-    st.set_page_config(
-        page_title=APP_TITLE,
-        page_icon="⚖️",
-        layout="wide",
-        initial_sidebar_state="expanded",
-    )
-
-    # Inject custom CSS
-    st.markdown(CUSTOM_CSS, unsafe_allow_html=True)
-
-    # Initialise DB + session
-    init_db()
-    init_session_state()
-
-    # ── Not logged in → show login page ──
-    if not st.session_state.get("authenticated"):
-        page_login()
-        st.markdown(FOOTER_HTML, unsafe_allow_html=True)
-        return
-
-    # ── Authenticated → full app ──
+    ensure_db()
+    ensure_profile_exists()
+    ensure_api_configured()
+    st.markdown(get_theme_css(st.session_state["theme"]), unsafe_allow_html=True)
     render_sidebar()
+    if not st.session_state.get("authenticated"):
+        st.warning("🔒 Please log in from the sidebar.")
+        return
+    tabs = st.tabs(["🏠 Dashboard", "🤖 AI Assistant", "📁 Cases", "👥 Clients",
+                     "💰 Billing", "📚 Legal Tools", "✍️ Editor", "📊 Costs", "⚙️ Settings"])
+    with tabs[0]:
+        render_dashboard()
+    with tabs[1]:
+        render_ai_assistant()
+    with tabs[2]:
+        render_cases()
+    with tabs[3]:
+        render_clients()
+    with tabs[4]:
+        render_billing()
+    with tabs[5]:
+        render_legal_tools()
+    with tabs[6]:
+        render_template_editor()
+    with tabs[7]:
+        render_cost_tracker()
+    with tabs[8]:
+        render_settings()
 
-    current_page = st.session_state.get("current_page", "AI Assistant")
-    page_fn = PAGE_MAP.get(current_page, page_ai_assistant)
 
-    try:
-        page_fn()
-    except Exception as e:
-        st.error(f"Something went wrong loading **{current_page}**.")
-        with st.expander("🔍 Error Details"):
-            st.code(str(e))
-        st.info("Try refreshing or switching to another page.")
-
-    # Footer
-    st.markdown(FOOTER_HTML, unsafe_allow_html=True)
-
-
-# ───────────────────────────────────────────────────────
-#  ENTRY POINT
-# ───────────────────────────────────────────────────────
 if __name__ == "__main__":
     main()
