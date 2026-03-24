@@ -1953,554 +1953,191 @@ def page_settings():
                 else:
                     st.error("Type DELETE to confirm.")
 # ═══════════════════════════════════════════════════════
-# CLIENT MANAGEMENT
+# PART 4 — MAIN APP ENTRY POINT
 # ═══════════════════════════════════════════════════════
-def render_clients():
-    section_header("👥 Client Management", "Add and manage client records for billing and case linking")
 
-    tab1, tab2 = st.tabs(["➕ New Client", "📋 All Clients"])
+# ───────────────────────────────────────────────────────
+#  CUSTOM CSS
+# ───────────────────────────────────────────────────────
+CUSTOM_CSS = """
+<style>
+    /* ── Global ── */
+    .stApp {
+        font-family: 'Inter', 'Segoe UI', sans-serif;
+    }
 
-    with tab1:
-        with st.form("new_client_form", clear_on_submit=True):
-            name = st.text_input("Client Name *")
-            email = st.text_input("Email")
-            phone = st.text_input("Phone")
-            client_type = st.selectbox("Client Type", CLIENT_TYPES)
-            address = st.text_area("Address", height=80)
-            notes = st.text_area("Notes", height=100)
+    /* ── Sidebar branding ── */
+    [data-testid="stSidebar"] {
+        background: linear-gradient(180deg, #f0fdf4 0%, #ffffff 100%);
+        border-right: 1px solid #e2e8f0;
+    }
+    [data-testid="stSidebar"] h3 {
+        color: #059669;
+        font-weight: 700;
+    }
 
-            submitted = st.form_submit_button("Create Client", use_container_width=True)
-            if submitted:
-                if not name.strip():
-                    st.error("Client name is required.")
-                else:
-                    db_insert("clients", {
-                        "name": name.strip(),
-                        "email": email.strip(),
-                        "phone": phone.strip(),
-                        "type": client_type,
-                        "address": address.strip(),
-                        "notes": notes.strip(),
-                        "created_at": datetime.now().isoformat(timespec="seconds"),
-                    })
-                    st.success("Client created.")
-                    st.rerun()
+    /* ── Chat messages ── */
+    [data-testid="stChatMessage"] {
+        border-radius: 12px;
+        margin-bottom: 0.5rem;
+        border: 1px solid #e2e8f0;
+    }
 
-    with tab2:
-        clients = db_fetch_all("clients", order="name ASC")
-        if not clients:
-            st.info("No clients found.")
-            return
+    /* ── Buttons ── */
+    .stButton > button[kind="primary"] {
+        background-color: #059669;
+        border: none;
+        color: white;
+        border-radius: 8px;
+        font-weight: 600;
+    }
+    .stButton > button[kind="primary"]:hover {
+        background-color: #047857;
+    }
+    .stButton > button[kind="secondary"] {
+        border-radius: 8px;
+        border: 1px solid #cbd5e1;
+    }
 
-        for cl in clients:
-            with st.expander(f"{cl['name']} · {cl.get('type', '')}"):
-                st.markdown(
-                    f"""
-                    <div class="custom-card">
-                        <strong>Email:</strong> {esc(cl.get('email', '—'))}<br>
-                        <strong>Phone:</strong> {esc(cl.get('phone', '—'))}<br>
-                        <strong>Type:</strong> {esc(cl.get('type', '—'))}<br>
-                        <strong>Address:</strong> {esc(cl.get('address', '—'))}<br>
-                        <strong>Notes:</strong> {esc(cl.get('notes', '—'))}
-                    </div>
-                    """,
-                    unsafe_allow_html=True,
-                )
+    /* ── Metrics ── */
+    [data-testid="stMetric"] {
+        background: #f8fafc;
+        border: 1px solid #e2e8f0;
+        border-radius: 10px;
+        padding: 12px 16px;
+    }
+    [data-testid="stMetricValue"] {
+        font-size: 1.1rem;
+        font-weight: 700;
+        color: #059669;
+    }
 
-                linked_cases = db_fetch_all("cases", where="client_name = ?", params=(cl["name"],))
-                if linked_cases:
-                    st.write("**Linked Cases:**")
-                    for lc in linked_cases:
-                        st.markdown(f"- {esc(lc['title'])} ({esc(lc.get('suit_number', '—'))})")
+    /* ── Expanders ── */
+    .streamlit-expanderHeader {
+        font-weight: 600;
+        color: #1e293b;
+    }
 
-                if st.button("Delete Client", key=f"del_client_{cl['id']}", use_container_width=True):
-                    db_delete("clients", cl["id"])
-                    st.success("Client deleted.")
-                    st.rerun()
+    /* ── Data editor ── */
+    [data-testid="stDataFrame"] {
+        border-radius: 8px;
+        overflow: hidden;
+    }
 
+    /* ── Download buttons ── */
+    .stDownloadButton > button {
+        border-radius: 8px;
+        font-size: 0.85rem;
+    }
 
-# ═══════════════════════════════════════════════════════
-# BILLING & INVOICING
-# ═══════════════════════════════════════════════════════
-def render_billing():
-    section_header("💰 Billing & Invoicing", "Time entries, invoice generation, and billing overview")
+    /* ── Tabs ── */
+    .stTabs [data-baseweb="tab"] {
+        font-weight: 600;
+        color: #64748b;
+    }
+    .stTabs [aria-selected="true"] {
+        color: #059669;
+        border-bottom-color: #059669;
+    }
 
-    tab1, tab2, tab3 = st.tabs(["⏱️ Time Entry", "🧾 Invoices", "📊 Summary"])
+    /* ── Form borders ── */
+    [data-testid="stForm"] {
+        border: 1px solid #e2e8f0;
+        border-radius: 12px;
+        padding: 1.5rem;
+    }
 
-    with tab1:
-        clients = db_fetch_all("clients", order="name ASC")
-        client_options = {c["name"]: c["id"] for c in clients} if clients else {}
+    /* ── Footer ── */
+    .app-footer {
+        text-align: center;
+        padding: 2rem 1rem 1rem;
+        color: #94a3b8;
+        font-size: 0.8rem;
+        border-top: 1px solid #e2e8f0;
+        margin-top: 3rem;
+    }
+    .app-footer a {
+        color: #059669;
+        text-decoration: none;
+    }
 
-        with st.form("time_entry_form", clear_on_submit=True):
-            client_name = st.selectbox("Client", ["(No Client)"] + list(client_options.keys()))
-            description = st.text_area("Work Description", height=100)
-            col1, col2 = st.columns(2)
-            with col1:
-                hours = st.number_input("Hours", min_value=0.0, step=0.25, value=1.0)
-            with col2:
-                rate = st.number_input("Rate (₦/hr)", min_value=0.0, step=1000.0, value=50000.0)
-            entry_date = st.date_input("Date", value=date.today())
-
-            submitted = st.form_submit_button("Log Time", use_container_width=True)
-            if submitted:
-                amount = hours * rate
-                db_insert("time_entries", {
-                    "client_id": client_options.get(client_name, 0),
-                    "client_name": client_name if client_name != "(No Client)" else "",
-                    "description": description.strip(),
-                    "hours": hours,
-                    "rate": rate,
-                    "amount": amount,
-                    "entry_date": entry_date.strftime("%Y-%m-%d"),
-                    "created_at": datetime.now().isoformat(timespec="seconds"),
-                })
-                st.success(f"Time entry logged: ₦{amount:,.2f}")
-                st.rerun()
-
-        st.markdown("### 📝 Recent Time Entries")
-        entries = db_fetch_all("time_entries", order="id DESC")
-        if entries:
-            for e in entries[:20]:
-                st.markdown(
-                    f"""
-                    <div class="custom-card">
-                        <strong>{esc(e.get('client_name', '—'))}</strong> · {esc(e.get('entry_date', ''))}<br>
-                        {esc(e.get('description', '')[:120])}<br>
-                        {e.get('hours', 0):.2f}hrs × ₦{e.get('rate', 0):,.0f} = <strong>₦{e.get('amount', 0):,.2f}</strong>
-                    </div>
-                    """,
-                    unsafe_allow_html=True,
-                )
-                if st.button("Delete", key=f"del_time_{e['id']}"):
-                    db_delete("time_entries", e["id"])
-                    st.rerun()
-        else:
-            st.info("No time entries logged.")
-
-    with tab2:
-        st.markdown("### Generate Invoice")
-        clients_for_inv = db_fetch_all("clients", order="name ASC")
-        if not clients_for_inv:
-            st.info("Add clients first.")
-        else:
-            inv_client = st.selectbox("Invoice Client", [c["name"] for c in clients_for_inv], key="inv_client_sel")
-            unbilled = db_fetch_all("time_entries", where="client_name = ?", params=(inv_client,))
-
-            if unbilled:
-                st.write(f"Found **{len(unbilled)}** time entries for {inv_client}.")
-                total = sum(float(e.get("amount", 0) or 0) for e in unbilled)
-                st.write(f"**Total: ₦{total:,.2f}**")
-
-                if st.button("Generate Invoice", type="primary", use_container_width=True):
-                    inv_no = f"INV-{datetime.now().strftime('%Y%m%d%H%M%S')}"
-                    client_id = next((c["id"] for c in clients_for_inv if c["name"] == inv_client), 0)
-                    db_insert("invoices", {
-                        "invoice_no": inv_no,
-                        "client_id": client_id,
-                        "client_name": inv_client,
-                        "entries_json": json.dumps([dict(e) for e in unbilled]),
-                        "total": total,
-                        "status": "Draft",
-                        "created_at": datetime.now().isoformat(timespec="seconds"),
-                    })
-                    st.success(f"Invoice {inv_no} generated: ₦{total:,.2f}")
-                    st.rerun()
-            else:
-                st.info(f"No time entries for {inv_client}.")
-
-        st.markdown("### 📄 Existing Invoices")
-        invoices = db_fetch_all("invoices", order="id DESC")
-        if invoices:
-            for inv in invoices:
-                kind = "ok" if inv.get("status") == "Paid" else "warn" if inv.get("status") == "Sent" else "info"
-                with st.expander(f"{inv['invoice_no']} · {inv['client_name']} · ₦{inv.get('total', 0):,.2f} {badge(inv.get('status', ''), kind)}"):
-                    try:
-                        entries_data = json.loads(inv.get("entries_json", "[]"))
-                        for ed in entries_data:
-                            st.write(f"- {ed.get('description', '')[:100]} — ₦{ed.get('amount', 0):,.2f}")
-                    except Exception:
-                        st.write("(Could not parse entries.)")
-
-                    c1, c2, c3 = st.columns(3)
-                    with c1:
-                        if st.button("Mark Sent", key=f"inv_sent_{inv['id']}"):
-                            db_update("invoices", inv["id"], {"status": "Sent"})
-                            st.rerun()
-                    with c2:
-                        if st.button("Mark Paid", key=f"inv_paid_{inv['id']}"):
-                            db_update("invoices", inv["id"], {"status": "Paid"})
-                            st.rerun()
-                    with c3:
-                        if st.button("Delete", key=f"inv_del_{inv['id']}"):
-                            db_delete("invoices", inv["id"])
-                            st.rerun()
-        else:
-            st.info("No invoices yet.")
-
-    with tab3:
-        st.markdown("### 📊 Billing Summary")
-        entries = db_fetch_all("time_entries")
-        invoices = db_fetch_all("invoices")
-
-        total_logged = sum(float(e.get("amount", 0) or 0) for e in entries)
-        total_invoiced = sum(float(i.get("total", 0) or 0) for i in invoices)
-        total_paid = sum(float(i.get("total", 0) or 0) for i in invoices if i.get("status") == "Paid")
-
-        c1, c2, c3 = st.columns(3)
-        with c1:
-            metric_card("Time Logged", f"₦{total_logged:,.2f}")
-        with c2:
-            metric_card("Invoiced", f"₦{total_invoiced:,.2f}")
-        with c3:
-            metric_card("Paid", f"₦{total_paid:,.2f}")
-
-
-# ═══════════════════════════════════════════════════════
-# LEGAL REFERENCE TOOLS
-# ═══════════════════════════════════════════════════════
-def render_legal_tools():
-    section_header("📚 Legal Reference Tools", "Court hierarchy, limitation periods, Latin maxims, and document templates")
-
-    tab1, tab2, tab3, tab4 = st.tabs(["🏛️ Courts", "⏳ Limitation", "📜 Maxims", "📝 Templates"])
-
-    with tab1:
-        st.markdown("### Nigerian Court Hierarchy")
-        for court in COURT_HIERARCHY:
-            indent = "—" * (court["level"] - 1)
-            st.markdown(
-                f"""
-                <div class="custom-card">
-                    <strong>{court['icon']} {indent} {esc(court['name'])}</strong> (Level {court['level']})<br>
-                    <span style="opacity:.75">{esc(court['desc'])}</span>
-                </div>
-                """,
-                unsafe_allow_html=True,
-            )
-
-    with tab2:
-        st.markdown("### Limitation Periods")
-        periods = db_fetch_all("limitation_periods", order="cause ASC")
-        if periods:
-            for lp in periods:
-                st.markdown(
-                    f"""
-                    <div class="custom-card">
-                        <strong>{esc(lp['cause'])}</strong><br>
-                        Period: <strong>{esc(lp['period'])}</strong><br>
-                        Authority: {esc(lp.get('authority', '—'))}
-                    </div>
-                    """,
-                    unsafe_allow_html=True,
-                )
-
-        st.markdown("### ➕ Add Custom Entry")
-        with st.form("add_limitation", clear_on_submit=True):
-            cause = st.text_input("Cause of Action")
-            period = st.text_input("Limitation Period")
-            authority = st.text_input("Legal Authority")
-            if st.form_submit_button("Add"):
-                if cause.strip():
-                    db_insert("limitation_periods", {
-                        "cause": cause.strip(),
-                        "period": period.strip(),
-                        "authority": authority.strip(),
-                    })
-                    st.success("Entry added.")
-                    st.rerun()
-
-    with tab3:
-        st.markdown("### Latin Legal Maxims")
-        search = st.text_input("Search maxims", placeholder="e.g. audi alteram")
-        maxims = db_fetch_all("maxims", order="maxim ASC")
-        filtered = [m for m in maxims if search.lower() in m["maxim"].lower() or search.lower() in m["meaning"].lower()] if search else maxims
-        for m in filtered:
-            st.markdown(
-                f"""
-                <div class="custom-card">
-                    <strong><em>{esc(m['maxim'])}</em></strong><br>
-                    {esc(m['meaning'])}
-                </div>
-                """,
-                unsafe_allow_html=True,
-            )
-
-        st.markdown("### ➕ Add Custom Maxim")
-        with st.form("add_maxim", clear_on_submit=True):
-            maxim = st.text_input("Maxim (Latin)")
-            meaning = st.text_input("Meaning (English)")
-            if st.form_submit_button("Add"):
-                if maxim.strip():
-                    db_insert("maxims", {"maxim": maxim.strip(), "meaning": meaning.strip()})
-                    st.success("Maxim added.")
-                    st.rerun()
-
-    with tab4:
-        st.markdown("### Document Templates")
-        templates = db_fetch_all("templates", order="name ASC")
-        if templates:
-            for tmpl in templates:
-                with st.expander(f"{tmpl['name']} · {tmpl.get('cat', '')}"):
-                    st.code(tmpl.get("content", ""), language=None)
-                    if st.button("Load into Editor", key=f"load_tmpl_{tmpl['id']}"):
-                        st.session_state["loaded_template"] = tmpl.get("content", "")
-                        st.success("Template loaded — go to Template Editor.")
-                    if not tmpl.get("builtin"):
-                        if st.button("Delete", key=f"del_tmpl_{tmpl['id']}"):
-                            db_delete("templates", tmpl["id"])
-                            st.rerun()
-
-        st.markdown("### ➕ Add Custom Template")
-        with st.form("add_template", clear_on_submit=True):
-            name = st.text_input("Template Name")
-            cat = st.text_input("Category", value="Custom")
-            content = st.text_area("Template Content", height=300)
-            if st.form_submit_button("Save Template"):
-                if name.strip() and content.strip():
-                    db_insert("templates", {
-                        "name": name.strip(),
-                        "cat": cat.strip(),
-                        "content": content.strip(),
-                        "builtin": 0,
-                        "created_at": datetime.now().isoformat(timespec="seconds"),
-                    })
-                    st.success("Template saved.")
-                    st.rerun()
-
-
-# ═══════════════════════════════════════════════════════
-# TEMPLATE EDITOR
-# ═══════════════════════════════════════════════════════
-def render_template_editor():
-    section_header("✍️ Template Editor", "Edit loaded templates or draft new documents with AI assistance")
-
-    loaded = st.session_state.get("loaded_template", "")
-    content = st.text_area("Document Editor", value=loaded, height=450, key="template_editor_area")
-
-    col1, col2, col3 = st.columns(3)
-
-    with col1:
-        if st.button("📋 Copy to Clipboard Info", use_container_width=True):
-            st.info("Use Ctrl+A then Ctrl+C in the editor above to copy.")
-
-    with col2:
-        st.download_button(
-            "💾 Download as TXT",
-            data=content or "",
-            file_name="lexiassist_document.txt",
-            mime="text/plain",
-            use_container_width=True,
-        )
-
-    with col3:
-        if HAS_DOCX and content.strip():
-            try:
-                doc = export_docx(content, "Template Document")
-                import io
-                buf = io.BytesIO()
-                doc.save(buf)
-                st.download_button(
-                    "💾 Download as DOCX",
-                    data=buf.getvalue(),
-                    file_name="lexiassist_document.docx",
-                    mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-                    use_container_width=True,
-                )
-            except Exception:
-                st.caption("DOCX export unavailable.")
-
-    st.markdown("### 🤖 AI-Assisted Editing")
-    instruction = st.text_input("Editing instruction for AI", placeholder="e.g. Make this more formal, add penalty clauses, rewrite for Lagos State jurisdiction")
-    if st.button("Apply AI Edit", type="primary", use_container_width=True):
-        if not content.strip():
-            st.error("Editor is empty.")
-        elif not instruction.strip():
-            st.error("Enter an editing instruction.")
-        elif not _resolve_api_key():
-            st.error("API key not configured.")
-        else:
-            try:
-                edit_prompt = f"""
-You are a Nigerian legal document editor. Apply the following instruction to the document below.
-Return ONLY the revised document — no explanations.
-
-Instruction: {instruction.strip()}
-
-Document:
-{content.strip()}
+    /* ── Hide default Streamlit footer ── */
+    footer {visibility: hidden;}
+    #MainMenu {visibility: hidden;}
+</style>
 """
-                with st.spinner("Applying edits..."):
-                    result, tokens = call_gemini(edit_prompt, st.session_state.get("model"), "📝 Standard")
-                st.session_state["loaded_template"] = result
-                log_cost(st.session_state.get("model", ""), tokens, "Template edit")
-                st.success("Edits applied. Refresh the editor to see changes.")
-                st.rerun()
-            except Exception as exc:
-                st.error(str(exc))
+
+# ───────────────────────────────────────────────────────
+#  FOOTER
+# ───────────────────────────────────────────────────────
+FOOTER_HTML = """
+<div class="app-footer">
+    ⚖️ <strong>LexiAssist</strong> — AI-Powered Legal Workspace for Nigerian Lawyers<br>
+    <em>AI-generated content is for informational purposes only. Always verify citations
+    and consult qualified counsel before acting on any legal analysis.</em><br><br>
+    Built with ❤️ for the Nigerian Legal Community
+</div>
+"""
 
 
-# ═══════════════════════════════════════════════════════
-# AI COST TRACKER
-# ═══════════════════════════════════════════════════════
-def render_cost_tracker():
-    section_header("📊 AI Cost Tracker", "Monitor token usage and estimated costs across all AI queries")
-
-    c1, c2, c3 = st.columns(3)
-    with c1:
-        summary_all = summarize_costs("all")
-        metric_card("Total Cost (All Time)", f"${summary_all['cost']:.4f}")
-    with c2:
-        summary_7d = summarize_costs("7d")
-        metric_card("Cost (7 Days)", f"${summary_7d['cost']:.4f}")
-    with c3:
-        summary_24h = summarize_costs("24h")
-        metric_card("Cost (24h)", f"${summary_24h['cost']:.4f}")
-
-    logs = db_fetch_all("cost_log", order="id DESC")
-    if logs:
-        st.markdown("### 📝 Cost Log")
-        for log in logs[:30]:
-            st.markdown(
-                f"""
-                <div class="custom-card">
-                    <strong>{esc(log.get('model', ''))}</strong> · {esc(log.get('created_at', ''))}<br>
-                    Prompt: {log.get('prompt_tokens', 0):,} · Response: {log.get('response_tokens', 0):,} · 
-                    Cost: ${log.get('total_cost', 0):.6f}<br>
-                    <span style="opacity:.6">{esc(log.get('query_preview', '')[:120])}</span>
-                </div>
-                """,
-                unsafe_allow_html=True,
-            )
-
-        if st.button("🗑️ Clear All Cost Logs", use_container_width=True):
-            db_execute("DELETE FROM cost_log")
-            st.success("Cost logs cleared.")
-            st.rerun()
-    else:
-        st.info("No cost data yet.")
+# ───────────────────────────────────────────────────────
+#  PAGE ROUTER
+# ───────────────────────────────────────────────────────
+PAGE_MAP = {
+    "AI Assistant": page_ai_assistant,
+    "Cases & Hearings": page_cases,
+    "Clients & Billing": page_clients_billing,
+    "Legal References": page_references,
+    "Document Templates": page_templates,
+    "AI Usage & Costs": page_usage,
+    "Settings": page_settings,
+}
 
 
-# ═══════════════════════════════════════════════════════
-# SETTINGS & PROFILE
-# ═══════════════════════════════════════════════════════
-def render_settings():
-    section_header("⚙️ Settings & Profile", "Firm details, password protection, and system information")
-
-    profile = get_user_profile() or {}
-
-    st.markdown("### 🏢 Firm Profile")
-    with st.form("profile_form"):
-        firm_name = st.text_input("Firm Name", value=profile.get("firm_name", ""))
-        user_name = st.text_input("Your Name", value=profile.get("user_name", ""))
-        email = st.text_input("Email", value=profile.get("email", ""))
-
-        if st.form_submit_button("Save Profile", use_container_width=True):
-            save_user_profile({
-                "firm_name": firm_name.strip(),
-                "user_name": user_name.strip(),
-                "email": email.strip(),
-            })
-            st.success("Profile saved.")
-
-    st.markdown("### 🔐 Password Protection")
-    st.caption("Set a password to lock the sidebar. Enable AUTH_ENABLED=true in Streamlit secrets to activate.")
-
-    with st.form("password_form"):
-        new_pw = st.text_input("New Password", type="password")
-        confirm_pw = st.text_input("Confirm Password", type="password")
-        if st.form_submit_button("Set Password", use_container_width=True):
-            if not new_pw:
-                st.error("Password cannot be empty.")
-            elif new_pw != confirm_pw:
-                st.error("Passwords do not match.")
-            else:
-                save_user_profile({"password_hash": hash_password(new_pw)})
-                st.success("Password set.")
-
-    st.markdown("### 🖥️ System Information")
-    st.markdown(
-        f"""
-        <div class="custom-card">
-            <strong>Version:</strong> LexiAssist v8.0<br>
-            <strong>Database:</strong> {str(DB_PATH)}<br>
-            <strong>Gemini Model:</strong> {esc(st.session_state.get('model', 'Not set'))}<br>
-            <strong>API Configured:</strong> {'Yes' if st.session_state.get('api_configured') else 'No'}<br>
-            <strong>Theme:</strong> {esc(st.session_state.get('theme', 'Emerald'))}<br>
-            <strong>PDF Support:</strong> {'Yes' if HAS_PDF else 'No'}<br>
-            <strong>DOCX Support:</strong> {'Yes' if HAS_DOCX else 'No'}<br>
-            <strong>PDF Export:</strong> {'Yes' if HAS_FPDF else 'No'}<br>
-            <strong>Charts:</strong> {'Yes' if HAS_PLOTLY else 'No'}
-        </div>
-        """,
-        unsafe_allow_html=True,
+# ───────────────────────────────────────────────────────
+#  MAIN
+# ───────────────────────────────────────────────────────
+def main():
+    st.set_page_config(
+        page_title=APP_TITLE,
+        page_icon="⚖️",
+        layout="wide",
+        initial_sidebar_state="expanded",
     )
 
-    st.markdown("### 🗄️ Database Management")
-    c1, c2 = st.columns(2)
-    with c1:
-        if st.button("🗑️ Clear AI History", use_container_width=True):
-            db_execute("DELETE FROM chat_history")
-            st.success("AI history cleared.")
-            st.rerun()
-    with c2:
-        if st.button("🗑️ Clear All Data", use_container_width=True):
-            tables = ["cases", "case_notes", "clients", "time_entries", "invoices",
-                       "chat_history", "templates", "limitation_periods", "maxims", "cost_log"]
-            for table in tables:
-                db_execute(f"DELETE FROM {table}")
-            st.success("All data cleared. Restart to re-seed defaults.")
-            st.rerun()
+    # Inject custom CSS
+    st.markdown(CUSTOM_CSS, unsafe_allow_html=True)
 
+    # Initialise DB + session
+    init_db()
+    init_session_state()
 
-# ═══════════════════════════════════════════════════════
-# MAIN APPLICATION ENTRY POINT
-# ═══════════════════════════════════════════════════════
-def main():
-    ensure_db()
-    ensure_profile_exists()
-    ensure_api_configured()
-
-    st.markdown(get_theme_css(st.session_state["theme"]), unsafe_allow_html=True)
-
-    render_sidebar()
-
+    # ── Not logged in → show login page ──
     if not st.session_state.get("authenticated"):
-        st.warning("🔒 Please log in from the sidebar to access LexiAssist.")
+        page_login()
+        st.markdown(FOOTER_HTML, unsafe_allow_html=True)
         return
 
-    tabs = st.tabs([
-        "🏠 Dashboard",
-        "🤖 AI Assistant",
-        "🆚 Compare",
-        "📁 Cases",
-        "👥 Clients",
-        "💰 Billing",
-        "📚 Legal Tools",
-        "✍️ Editor",
-        "📊 Costs",
-        "⚙️ Settings",
-    ])
+    # ── Authenticated → full app ──
+    render_sidebar()
 
-    with tabs[0]:
-        render_dashboard()
-    with tabs[1]:
-        render_ai_assistant()
-    with tabs[2]:
-        render_analysis_comparison()
-    with tabs[3]:
-        render_cases()
-    with tabs[4]:
-        render_clients()
-    with tabs[5]:
-        render_billing()
-    with tabs[6]:
-        render_legal_tools()
-    with tabs[7]:
-        render_template_editor()
-    with tabs[8]:
-        render_cost_tracker()
-    with tabs[9]:
-        render_settings()
+    current_page = st.session_state.get("current_page", "AI Assistant")
+    page_fn = PAGE_MAP.get(current_page, page_ai_assistant)
+
+    try:
+        page_fn()
+    except Exception as e:
+        st.error(f"Something went wrong loading **{current_page}**.")
+        with st.expander("🔍 Error Details"):
+            st.code(str(e))
+        st.info("Try refreshing or switching to another page.")
+
+    # Footer
+    st.markdown(FOOTER_HTML, unsafe_allow_html=True)
 
 
+# ───────────────────────────────────────────────────────
+#  ENTRY POINT
+# ───────────────────────────────────────────────────────
 if __name__ == "__main__":
     main()
