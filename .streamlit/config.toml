@@ -1,24 +1,42 @@
+# ═══════════════════════════════════════════════════════
+# LexiAssist v8.0 — Streamlit Configuration
+# ═══════════════════════════════════════════════════════
+
 [global]
 developmentMode = false
+showWarningOnDirectExecution = false
 
 [server]
 headless = true
 port = 8501
+address = "0.0.0.0"
 enableCORS = false
 enableXsrfProtection = true
-maxUploadSize = 10
+maxUploadSize = 20
+maxMessageSize = 200
+runOnSave = false
+fileWatcherType = "none"
 
 [browser]
 gatherUsageStats = false
-serverAddress = "0.0.0.0"
+serverPort = 8501
 
-[theme]
-primaryColor = "#059669"
-backgroundColor = "#ffffff"
-secondaryBackgroundColor = "#f0fdf4"
-textColor = "#1e293b"
-font = "sans serif"
+[runner]
+magicEnabled = false
+fastReruns = true
 
 [client]
 showErrorDetails = false
 toolbarMode = "minimal"
+showSidebarNavigation = false
+
+[theme]
+base = "light"
+primaryColor = "#059669"
+backgroundColor = "#f8faf9"
+secondaryBackgroundColor = "#f0fdf4"
+textColor = "#1e293b"
+font = "sans serif"
+
+[logger]
+level = "warning"
