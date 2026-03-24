@@ -556,6 +556,7 @@ def db_count(table: str, where: str = "", params: tuple = ()) -> int:
         return conn.execute(sql, params).fetchone()[0]
     finally:
         conn.close()
+
 # ═══════════════════════════════════════════════════════
 # PART 2 — AI ENGINE · DOCUMENT PARSER · REFERENCES · UI
 # ═══════════════════════════════════════════════════════
@@ -1088,6 +1089,7 @@ def render_sidebar():
                 for key in list(st.session_state.keys()):
                     del st.session_state[key]
                 st.rerun()
+
 # ═══════════════════════════════════════════════════════
 # PART 3 — APPLICATION PAGES
 # ═══════════════════════════════════════════════════════
