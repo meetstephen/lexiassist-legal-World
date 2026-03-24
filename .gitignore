@@ -1,59 +1,26 @@
-# ── Python ───────────────────────────────────────────────────
+# Secrets
+.streamlit/secrets.toml
+
+# Database
+lexiassist_data.db
+
+# Python
 __pycache__/
-*.py[cod]
-*$py.class
-*.so
-*.egg
+*.pyc
+*.pyo
+.env
+venv/
+.venv/
 *.egg-info/
 dist/
 build/
-*.whl
 
-# ── Virtual Environments ─────────────────────────────────────
-.venv/
-venv/
-env/
-ENV/
-
-# ── IDE & Editors ────────────────────────────────────────────
+# IDE
 .vscode/
-!.vscode/settings.json
-!.vscode/extensions.json
 .idea/
 *.swp
 *.swo
-*~
+
+# OS
 .DS_Store
 Thumbs.db
-
-# ── Streamlit ────────────────────────────────────────────────
-.streamlit/secrets.toml
-
-# ── Environment & Secrets ────────────────────────────────────
-.env
-*.pem
-*.key
-
-# ── Data & Backups ───────────────────────────────────────────
-*.json
-!.devcontainer/devcontainer.json
-data/
-backups/
-lexiassist_backup_*.json
-
-# ── Logs ─────────────────────────────────────────────────────
-*.log
-logs/
-
-# ── Testing ──────────────────────────────────────────────────
-.pytest_cache/
-htmlcov/
-.coverage
-.coverage.*
-.tox/
-.nox/
-
-# ── Misc ─────────────────────────────────────────────────────
-*.bak
-*.tmp
-
