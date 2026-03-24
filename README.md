@@ -8,7 +8,7 @@
 
 **AI-powered legal workspace for Nigerian lawyers.**
 
-LexiAssist combines a jurisdiction-focused legal assistant with practical law-office tools for research, drafting, case tracking, client management, billing, and document handling — all in a single-file Streamlit deployment.
+LexiAssist combines a jurisdiction-focused legal assistant with practical law-office tools for research, drafting, case tracking, client management, billing, contract review, and document handling — with SQLite persistence, cost tracking, and user profiles — all in a single-file Streamlit deployment.
 
 <p align="center">
   <a href="https://lexiassist-legal-world.streamlit.app">
@@ -24,14 +24,22 @@ LexiAssist combines a jurisdiction-focused legal assistant with practical law-of
 
 ## Features
 
-- **AI Legal Assistant** — analysis, drafting, research, procedural guidance, statutory interpretation, strategic advisory
-- **Three response modes** — Brief · Standard · Comprehensive
-- **Case & hearing management** — track suits, courts, deadlines, and upcoming hearings
-- **Client records & billing** — time entries, invoicing, and billing reports
+- **AI Legal Assistant** — analysis, drafting, research, procedural guidance, statutory interpretation, strategic advisory, contract review
+- **Three response modes** — Brief · Standard · Comprehensive (up to 16K tokens)
+- **Contract Review mode** — clause-by-clause risk analysis with red flag matrix
+- **Save to Case** — attach any AI output directly to a case file for reference
+- **Analysis Comparison** — select two AI sessions and get a side-by-side AI verdict
+- **Case & hearing management** — track suits, courts, deadlines, upcoming hearings, and saved analyses per case
+- **Client records & billing** — time entries, invoicing, billing reports with charts
+- **AI Cost Tracker** — per-call Gemini usage logging with daily/monthly cost breakdowns
+- **SQLite persistence** — cases, clients, billing, history, and references survive restarts
 - **Document support** — import PDF, DOCX, TXT, RTF, XLSX, CSV, JSON as AI context
-- **Export** — download outputs as TXT, HTML, PDF, or DOCX
-- **Legal references** — limitation periods, court hierarchy, Latin maxims
-- **Document templates** — contracts, tenancy agreements, powers of attorney, demand letters, written addresses
+- **Export** — download outputs as TXT, HTML, PDF, or DOCX (with firm branding)
+- **Legal references** — limitation periods, court hierarchy, Latin maxims — all user-editable
+- **Document templates** — built-in and custom templates with add/edit/delete
+- **User profile** — firm name on exports, optional password protection
+- **Full backup/restore** — export and import all data as JSON
+- **5 themes** — Emerald · Midnight · Royal · Crimson · Sunset
 
 ## AI Models
 
@@ -39,6 +47,8 @@ LexiAssist combines a jurisdiction-focused legal assistant with practical law-of
 |---|---|
 | Gemini 2.5 Flash | `gemini-2.5-flash` |
 | Gemini 2.5 Flash Lite | `gemini-2.5-flash-lite` |
+
+Models are fully configurable via secrets or environment variables.
 
 ## Quick Start
 
@@ -54,7 +64,7 @@ git clone https://github.com/meetstephen/lexiassist-legal-World.git
 cd lexiassist-legal-World
 
 # Install
-pip install streamlit google-generativeai pandas plotly pdfplumber python-docx fpdf2 openpyxl
+pip install -r requirements.txt
 
 # Configure API key (option A — secrets)
 mkdir -p .streamlit
@@ -74,6 +84,52 @@ export GEMINI_API_KEY="your-api-key-here"
 streamlit run app.py
 ```
 
+## Configuration
+
+All options go in `.streamlit/secrets.toml`:
+
+| Key | Required | Description |
+|---|---|---|
+| `GEMINI_API_KEY` | Yes | Google Gemini API key |
+| `GEMINI_MODEL` | No | Default model (e.g. `gemini-2.5-flash`) |
+| `GEMINI_MODELS` | No | Comma-separated list of available models |
+| `AUTH_ENABLED` | No | Set `"true"` to require login on startup |
+
+## Response Modes
+
+| Mode | Description | Token Limit |
+|---|---|---|
+| ⚡ Brief | Direct answer, 3-5 sentences | 1,200 |
+| 📝 Standard | Structured analysis + strategy layer | 6,000 |
+| 🔬 Comprehensive | Full CREAC + Devil's Advocate + risk matrix | 16,384 |
+
+## Task Types
+
+| Task | Description |
+|---|---|
+| 💬 General Query | Any legal question |
+| 🔍 Legal Analysis | Issue spotting, CREAC reasoning |
+| 📄 Document Drafting | Contracts, pleadings, affidavits |
+| 📚 Legal Research | Case law, statutes, authorities |
+| 📋 Procedural Guidance | Filing rules, court practice |
+| 🎯 Strategic Advisory | Risk mapping, options, strategy |
+| ⚖️ Statutory Interpretation | Literal, Golden, Mischief rules |
+| 📑 Contract Review | Clause-by-clause risk analysis |
+
+## Data Persistence
+
+LexiAssist stores all data in a local SQLite database (`lexiassist_data.db`):
+
+- Cases and attached AI analyses
+- Clients
+- Time entries and invoices
+- Full chat history
+- API cost logs
+- Custom templates, limitation periods, and maxims
+- User profile
+
+Data survives browser refreshes, app restarts, and redeployments as long as the database file is preserved. Full JSON backup and restore is available from the sidebar and Profile tab.
+
 ## Tech Stack
 
 | Core | Optional |
@@ -82,14 +138,14 @@ streamlit run app.py
 | Streamlit | pdfplumber *(PDF import)* |
 | Google Gemini API | python-docx *(DOCX import/export)* |
 | Pandas | fpdf2 *(PDF export)* |
-| | openpyxl *(Excel import)* |
+| SQLite | openpyxl *(Excel import)* |
 
 ## Project Structure
 
 ```text
 .
 ├── .streamlit/
-│   └── secrets.toml        # Streamlit config and API key
+│   └── secrets.toml        # API key and configuration
 ├── .gitignore              # Git ignore rules
 ├── app.py                  # Entire application (single-file)
 ├── requirements.txt        # Dependencies
@@ -99,11 +155,11 @@ streamlit run app.py
 
 ## Who This Is For
 
-Lawyers, litigation teams, solo practitioners, and chambers working within the **Nigerian legal system** who need AI-assisted research, drafting, and matter management in one place.
+Lawyers, litigation teams, solo practitioners, and chambers working within the **Nigerian legal system** who need AI-assisted research, drafting, contract review, and matter management in one place.
 
 ## Disclaimer
 
-LexiAssist provides **AI-generated legal information** for workflow support, drafting, and research. It does **not** constitute legal advice. Always verify statutes, case citations, and procedural rules independently before reliance.
+LexiAssist provides **AI-generated legal information** for workflow support, drafting, and research. It does **not** constitute legal advice. Limitation periods in Nigeria are governed by **state-specific laws**, not a single federal statute — always verify for your jurisdiction. All statutes, case citations, and procedural rules should be independently verified before reliance.
 
 ---
 
