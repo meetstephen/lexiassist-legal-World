@@ -1952,6 +1952,7 @@ def page_settings():
                     st.rerun()
                 else:
                     st.error("Type DELETE to confirm.")
+
 # ═══════════════════════════════════════════════════════
 # PART 4 — MAIN APP ENTRY POINT
 # ═══════════════════════════════════════════════════════
