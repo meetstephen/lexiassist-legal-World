@@ -975,10 +975,12 @@ def export_html(text: str, title: str = "LexiAssist Analysis") -> str:
     body = esc(text).replace("\n", "<br>")
     return f"""<!DOCTYPE html><html><head><meta charset="utf-8">
 <title>{esc(title)}</title>
-<style>body{{font-family:Georgia,serif;max-width:800px;margin:2rem auto;padding:1rem;line-height:1.7;color:#1e293b}}
-h1{{color:#059669;border-bottom:2px solid #059669;padding-bottom:0.5rem}}
-.meta{{color:#64748b;font-size:0.9rem;margin-bottom:0.5rem}}
-.disclaimer{{background:#fef3c7;border-left:4px solid #f59e0b;padding:1rem;margin-top:2rem;font-size:0.85rem}}</style>
+<style>
+body {{font-family:Georgia,serif;max-width:800px;margin:2rem auto;padding:1rem;line-height:1.7;color:#1e293b}}
+h1 {{color:#059669;border-bottom:2px solid #059669;padding-bottom:0.5rem}}
+.meta {{color:#64748b;font-size:0.9rem;margin-bottom:0.5rem}}
+.disclaimer {{background:#fef3c7;border-left:4px solid #f59e0b;padding:1rem;margin-top:2rem;font-size:0.85rem}}
+</style>
 </head><body>
 <h1>{esc(title)}</h1>
 {firm_line}
