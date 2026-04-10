@@ -71,10 +71,18 @@ st.set_page_config(
 # CONSTANTS
 # ═══════════════════════════════════════════════════════
 def _get_db_url() -> str:
+    url = ""
     try:
-        return st.secrets["DATABASE_URL"]
+        url = st.secrets["DATABASE_URL"]
     except Exception:
-        return os.getenv("DATABASE_URL", "")
+        url = os.getenv("DATABASE_URL", "")
+    if not url or not url.strip():
+        st.error("❌ DATABASE_URL is not set. Add it to your Streamlit secrets.")
+        st.stop()
+    # Streamlit Cloud / psycopg2 requires postgresql:// not postgres://
+    if url.startswith("postgres://"):
+        url = url.replace("postgres://", "postgresql://", 1)
+    return url.strip()
 
 def _parse_models_config():
     models_str = ""
