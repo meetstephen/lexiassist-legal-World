@@ -12,7 +12,7 @@ import json
 import logging
 import os
 import re
-import sqlite3
+import psycopg2
 import time
 import uuid
 from datetime import datetime, date
@@ -70,7 +70,11 @@ st.set_page_config(
 # ═══════════════════════════════════════════════════════
 # CONSTANTS
 # ═══════════════════════════════════════════════════════
-DB_PATH = "lexiassist_data.db"
+def _get_db_url() -> str:
+    try:
+        return st.secrets["DATABASE_URL"]
+    except Exception:
+        return os.getenv("DATABASE_URL", "")
 
 def _parse_models_config():
     models_str = ""
@@ -423,163 +427,100 @@ def get_theme_css(theme_name: str) -> str:
 # ═══════════════════════════════════════════════════════
 # SQLITE DATABASE LAYER
 # ═══════════════════════════════════════════════════════
+# ═══════════════════════════════════════════════════════
+# SUPABASE POSTGRESQL DATABASE LAYER (Super Simple)
+# ═══════════════════════════════════════════════════════
 class Database:
-    """SQLite persistence for all LexiAssist data."""
+    """PostgreSQL (Supabase) persistence for all LexiAssist data."""
 
-    def __init__(self, path: str = DB_PATH):
-        self.path = path
-        self.conn = sqlite3.connect(path, check_same_thread=False)
-        self.conn.execute("PRAGMA journal_mode=WAL")
+    def __init__(self):
+        self.url = _get_db_url()
+        self.conn = self._connect()
         self._init_tables()
 
+    def _connect(self):
+        conn = psycopg2.connect(self.url)
+        conn.autocommit = False
+        return conn
+
+    def _execute(self, sql: str, params=None):
+        try:
+            cur = self.conn.cursor()
+            cur.execute(sql, params or ())
+            return cur
+        except (psycopg2.OperationalError, psycopg2.InterfaceError):
+            self.conn = self._connect()
+            cur = self.conn.cursor()
+            cur.execute(sql, params or ())
+            return cur
+
     def _init_tables(self):
-        self.conn.executescript("""
-            CREATE TABLE IF NOT EXISTS kv_store (
-                key TEXT PRIMARY KEY,
-                value TEXT NOT NULL DEFAULT '[]'
-            );
-            CREATE TABLE IF NOT EXISTS user_profile (
-                id INTEGER PRIMARY KEY CHECK (id = 1),
-                firm_name TEXT DEFAULT '',
-                lawyer_name TEXT DEFAULT '',
-                email TEXT DEFAULT '',
-                phone TEXT DEFAULT '',
-                address TEXT DEFAULT '',
-                password_hash TEXT DEFAULT ''
-            );
-            CREATE TABLE IF NOT EXISTS cost_logs (
-                id TEXT PRIMARY KEY,
-                timestamp TEXT,
-                model TEXT,
-                task TEXT,
-                mode TEXT,
-                input_chars INTEGER DEFAULT 0,
-                output_chars INTEGER DEFAULT 0,
-                estimated_cost REAL DEFAULT 0,
-                query_preview TEXT DEFAULT ''
-            );
-            CREATE TABLE IF NOT EXISTS case_analyses (
-                id TEXT PRIMARY KEY,
-                case_id TEXT NOT NULL,
-                query TEXT,
-                response TEXT,
-                task TEXT,
-                mode TEXT,
-                timestamp TEXT
-            );
-        """)
-        self.conn.execute("INSERT OR IGNORE INTO user_profile (id) VALUES (1)")
+        statements = [
+            """CREATE TABLE IF NOT EXISTS kv_store (key TEXT PRIMARY KEY, value TEXT NOT NULL DEFAULT '[]')""",
+            """CREATE TABLE IF NOT EXISTS user_profile (id INTEGER PRIMARY KEY CHECK (id = 1), firm_name TEXT DEFAULT '', lawyer_name TEXT DEFAULT '', email TEXT DEFAULT '', phone TEXT DEFAULT '', address TEXT DEFAULT '', password_hash TEXT DEFAULT '')""",
+            """CREATE TABLE IF NOT EXISTS cost_logs (id TEXT PRIMARY KEY, timestamp TEXT, model TEXT, task TEXT, mode TEXT, input_chars INTEGER DEFAULT 0, output_chars INTEGER DEFAULT 0, estimated_cost REAL DEFAULT 0, query_preview TEXT DEFAULT '')""",
+            """CREATE TABLE IF NOT EXISTS case_analyses (id TEXT PRIMARY KEY, case_id TEXT NOT NULL, query TEXT, response TEXT, task TEXT, mode TEXT, timestamp TEXT)""",
+        ]
+        for stmt in statements:
+            self._execute(stmt)
+        self._execute("INSERT INTO user_profile (id) VALUES (1) ON CONFLICT DO NOTHING")
         self.conn.commit()
 
-    # ── KV Store ──
     def save_list(self, key: str, data: list):
-        self.conn.execute(
-            "INSERT OR REPLACE INTO kv_store (key, value) VALUES (?, ?)",
-            (key, json.dumps(data, default=str)),
-        )
+        self._execute("INSERT INTO kv_store (key, value) VALUES (%s, %s) ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value", (key, json.dumps(data, default=str)))
         self.conn.commit()
 
     def load_list(self, key: str) -> list:
-        row = self.conn.execute(
-            "SELECT value FROM kv_store WHERE key = ?", (key,)
-        ).fetchone()
+        cur = self._execute("SELECT value FROM kv_store WHERE key = %s", (key,))
+        row = cur.fetchone()
         if row:
-            try:
-                return json.loads(row[0])
-            except Exception:
-                return []
+            try: return json.loads(row[0])
+            except: return []
         return []
 
-    # ── User Profile ──
     def get_profile(self) -> dict:
-        row = self.conn.execute(
-            "SELECT firm_name, lawyer_name, email, phone, address, password_hash "
-            "FROM user_profile WHERE id = 1"
-        ).fetchone()
+        cur = self._execute("SELECT firm_name, lawyer_name, email, phone, address, password_hash FROM user_profile WHERE id = 1")
+        row = cur.fetchone()
         if row:
-            return {
-                "firm_name": row[0] or "", "lawyer_name": row[1] or "",
-                "email": row[2] or "", "phone": row[3] or "",
-                "address": row[4] or "", "password_hash": row[5] or "",
-            }
+            return {"firm_name": row[0] or "", "lawyer_name": row[1] or "", "email": row[2] or "", "phone": row[3] or "", "address": row[4] or "", "password_hash": row[5] or ""}
         return {"firm_name": "", "lawyer_name": "", "email": "", "phone": "", "address": "", "password_hash": ""}
 
     def save_profile(self, profile: dict):
-        self.conn.execute(
-            "UPDATE user_profile SET firm_name=?, lawyer_name=?, email=?, phone=?, address=?, password_hash=? WHERE id=1",
-            (profile.get("firm_name", ""), profile.get("lawyer_name", ""),
-             profile.get("email", ""), profile.get("phone", ""),
-             profile.get("address", ""), profile.get("password_hash", "")),
-        )
+        self._execute("UPDATE user_profile SET firm_name=%s, lawyer_name=%s, email=%s, phone=%s, address=%s, password_hash=%s WHERE id=1", (profile.get("firm_name",""), profile.get("lawyer_name",""), profile.get("email",""), profile.get("phone",""), profile.get("address",""), profile.get("password_hash","")))
         self.conn.commit()
 
-    # ── Cost Logs ──
     def add_cost_log(self, entry: dict):
-        self.conn.execute(
-            "INSERT INTO cost_logs (id, timestamp, model, task, mode, input_chars, output_chars, estimated_cost, query_preview) "
-            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
-            (entry.get("id", uuid.uuid4().hex[:8]), entry.get("timestamp", datetime.now().isoformat()),
-             entry.get("model", ""), entry.get("task", ""), entry.get("mode", ""),
-             entry.get("input_chars", 0), entry.get("output_chars", 0),
-             entry.get("estimated_cost", 0.0), entry.get("query_preview", "")),
-        )
+        self._execute("INSERT INTO cost_logs (id, timestamp, model, task, mode, input_chars, output_chars, estimated_cost, query_preview) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s) ON CONFLICT DO NOTHING", (entry.get("id", uuid.uuid4().hex[:8]), entry.get("timestamp", datetime.now().isoformat()), entry.get("model",""), entry.get("task",""), entry.get("mode",""), entry.get("input_chars",0), entry.get("output_chars",0), entry.get("estimated_cost",0.0), entry.get("query_preview","")))
         self.conn.commit()
 
     def get_cost_logs(self, limit: int = 200) -> list:
-        rows = self.conn.execute(
-            "SELECT id, timestamp, model, task, mode, input_chars, output_chars, estimated_cost, query_preview "
-            "FROM cost_logs ORDER BY timestamp DESC LIMIT ?", (limit,)
-        ).fetchall()
-        return [
-            {"id": r[0], "timestamp": r[1], "model": r[2], "task": r[3], "mode": r[4],
-             "input_chars": r[5], "output_chars": r[6], "estimated_cost": r[7], "query_preview": r[8]}
-            for r in rows
-        ]
+        cur = self._execute("SELECT id, timestamp, model, task, mode, input_chars, output_chars, estimated_cost, query_preview FROM cost_logs ORDER BY timestamp DESC LIMIT %s", (limit,))
+        rows = cur.fetchall()
+        return [{"id": r[0], "timestamp": r[1], "model": r[2], "task": r[3], "mode": r[4], "input_chars": r[5], "output_chars": r[6], "estimated_cost": r[7], "query_preview": r[8]} for r in rows]
 
     def get_cost_summary(self) -> dict:
         today = date.today().isoformat()
         month_start = date.today().replace(day=1).isoformat()
-        total = self.conn.execute("SELECT COALESCE(SUM(estimated_cost),0), COUNT(*) FROM cost_logs").fetchone()
-        daily = self.conn.execute(
-            "SELECT COALESCE(SUM(estimated_cost),0), COUNT(*) FROM cost_logs WHERE timestamp >= ?", (today,)
-        ).fetchone()
-        monthly = self.conn.execute(
-            "SELECT COALESCE(SUM(estimated_cost),0), COUNT(*) FROM cost_logs WHERE timestamp >= ?", (month_start,)
-        ).fetchone()
-        return {
-            "total_cost": total[0], "total_calls": total[1],
-            "daily_cost": daily[0], "daily_calls": daily[1],
-            "monthly_cost": monthly[0], "monthly_calls": monthly[1],
-        }
+        total = self._execute("SELECT COALESCE(SUM(estimated_cost),0), COUNT(*) FROM cost_logs").fetchone()
+        daily = self._execute("SELECT COALESCE(SUM(estimated_cost),0), COUNT(*) FROM cost_logs WHERE timestamp >= %s", (today,)).fetchone()
+        monthly = self._execute("SELECT COALESCE(SUM(estimated_cost),0), COUNT(*) FROM cost_logs WHERE timestamp >= %s", (month_start,)).fetchone()
+        return {"total_cost": total[0], "total_calls": total[1], "daily_cost": daily[0], "daily_calls": daily[1], "monthly_cost": monthly[0], "monthly_calls": monthly[1]}
 
-    # ── Case Analyses ──
     def add_case_analysis(self, case_id: str, data: dict):
-        self.conn.execute(
-            "INSERT INTO case_analyses (id, case_id, query, response, task, mode, timestamp) "
-            "VALUES (?, ?, ?, ?, ?, ?, ?)",
-            (data.get("id", uuid.uuid4().hex[:8]), case_id,
-             data.get("query", ""), data.get("response", ""),
-             data.get("task", ""), data.get("mode", ""),
-             data.get("timestamp", datetime.now().isoformat())),
-        )
+        self._execute("INSERT INTO case_analyses (id, case_id, query, response, task, mode, timestamp) VALUES (%s, %s, %s, %s, %s, %s, %s) ON CONFLICT DO NOTHING", (data.get("id", uuid.uuid4().hex[:8]), case_id, data.get("query",""), data.get("response",""), data.get("task",""), data.get("mode",""), data.get("timestamp", datetime.now().isoformat())))
         self.conn.commit()
 
     def get_case_analyses(self, case_id: str) -> list:
-        rows = self.conn.execute(
-            "SELECT id, query, response, task, mode, timestamp FROM case_analyses "
-            "WHERE case_id = ? ORDER BY timestamp DESC", (case_id,)
-        ).fetchall()
-        return [
-            {"id": r[0], "query": r[1], "response": r[2], "task": r[3], "mode": r[4], "timestamp": r[5]}
-            for r in rows
-        ]
+        cur = self._execute("SELECT id, query, response, task, mode, timestamp FROM case_analyses WHERE case_id = %s ORDER BY timestamp DESC", (case_id,))
+        rows = cur.fetchall()
+        return [{"id": r[0], "query": r[1], "response": r[2], "task": r[3], "mode": r[4], "timestamp": r[5]} for r in rows]
 
     def delete_case_analysis(self, analysis_id: str):
-        self.conn.execute("DELETE FROM case_analyses WHERE id = ?", (analysis_id,))
+        self._execute("DELETE FROM case_analyses WHERE id = %s", (analysis_id,))
         self.conn.commit()
 
     def delete_case_analyses_for_case(self, case_id: str):
-        self.conn.execute("DELETE FROM case_analyses WHERE case_id = ?", (case_id,))
+        self._execute("DELETE FROM case_analyses WHERE case_id = %s", (case_id,))
         self.conn.commit()
 
     def close(self):
@@ -588,8 +529,7 @@ class Database:
 
 @st.cache_resource
 def get_db() -> Database:
-    """Singleton DB connection per Streamlit server process."""
-    return Database(DB_PATH)
+    return Database()
 
 
 def persist(key: str):
