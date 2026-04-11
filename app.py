@@ -84,18 +84,26 @@ def _get_db_url() -> str:
         url = url.replace("postgres://", "postgresql://", 1)
     return url.strip()
 
+# ═══════════════════════════════════════════════════════
+# GEMINI MODELS (Best Free Tier – April 2026)
+# ═══════════════════════════════════════════════════════
 def _parse_models_config():
-    models_str = ""
+    models_str = "" 
     try:
         models_str = st.secrets["GEMINI_MODELS"]
     except Exception:
         models_str = os.getenv("GEMINI_MODELS", "")
     if models_str and models_str.strip():
         return [m.strip() for m in models_str.split(",") if m.strip()]
-    return ["gemini-2.5-flash", "gemini-2.5-flash-lite"]
+    # Best free models available right now
+    return [
+        "gemini-2.5-pro",           # ← Highest reasoning quality
+        "gemini-2.5-flash",         # ← Best everyday balance (recommended default)
+        "gemini-2.5-flash-lite"     # ← Maximum volume when you hit limits
+    ]
 
 SUPPORTED_MODELS = _parse_models_config()
-DEFAULT_MODEL = SUPPORTED_MODELS[0] if SUPPORTED_MODELS else "gemini-2.5-flash"
+DEFAULT_MODEL = "gemini-2.5-flash"   # Change to "gemini-2.5-pro" if you want max quality by default
 
 CASE_STATUSES = ["Active", "Pending", "Completed", "Archived"]
 CLIENT_TYPES = ["Individual", "Corporate", "Government", "NGO"]
