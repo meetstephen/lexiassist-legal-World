@@ -6,6 +6,10 @@ Save to Case · Editable References · Custom Templates · Auth Support
 """
 from __future__ import annotations
 
+import time
+import smtplib
+from email.mime.text import MIMEText
+from email.mime.multipart import MIMEMultipart
 import hashlib
 import html as html_mod
 import json
@@ -2818,7 +2822,7 @@ def render_profile():
 
     profile = st.session_state.profile
 
-    tab_info, tab_security, tab_data = st.tabs(["🏢 Firm Details", "🔐 Security", "💾 Data Management"])
+    tab_info, tab_security, tab_notif, tab_data = st.tabs(["🏢 Firm Details", "🔐 Security", "🔔 Notifications", "💾 Data Management"])
 
     # ── Firm Details ──
     with tab_info:
@@ -2857,6 +2861,120 @@ def render_profile():
                 📍 {esc(profile.get('address', ''))}
             </div>""", unsafe_allow_html=True)
 
+    # ── Notifications ──
+    with tab_notif:
+        st.markdown("#### 🔔 Hearing Reminder Emails")
+        st.caption("Receive automatic email alerts 7 days and 1 day before each hearing.")
+        st.info("💡 Requires a Gmail account with an App Password. Get one at: Google Account → Security → 2-Step Verification → App Passwords")
+        with st.form("notif_form"):
+            notif_email = st.text_input(
+                "Your Email Address (recipient)",
+                value=st.session_state.profile.get("notif_email", ""),
+                placeholder="yourname@gmail.com",
+                key="notif_email_inp",
+            )
+            notif_smtp_user = st.text_input(
+                "Gmail Address (sender)",
+                value=st.session_state.profile.get("notif_smtp_user", ""),
+                placeholder="sender@gmail.com",
+                key="notif_smtp_inp",
+            )
+            notif_smtp_pass = st.text_input(
+                "Gmail App Password",
+                type="password",
+                key="notif_smtp_pass_inp",
+                help="16-character app password from Google Account → Security → App Passwords",
+            )
+            if st.form_submit_button("💾 Save Notification Settings", type="primary"):
+                st.session_state.profile["notif_email"] = notif_email.strip()
+                st.session_state.profile["notif_smtp_user"] = notif_smtp_user.strip()
+                st.session_state.profile["notif_smtp_pass"] = notif_smtp_pass.strip()
+                persist_profile()
+                st.success("✅ Notification settings saved!")
+        st.markdown("---")
+        st.markdown("##### 📬 Send Reminders Now")
+        hearings = get_hearings()
+        upcoming = [h for h in hearings if 0 <= days_until(h["date"]) <= 7]
+        has_email_config = (
+            st.session_state.profile.get("notif_email") and
+            st.session_state.profile.get("notif_smtp_user") and
+            st.session_state.profile.get("notif_smtp_pass")
+        )
+        if upcoming and has_email_config:
+            st.markdown(f"**{len(upcoming)} hearing(s)** within the next 7 days:")
+            for h in upcoming:
+                d = days_until(h["date"])
+                badge = "badge-err" if d <= 1 else ("badge-warn" if d <= 3 else "badge-ok")
+                st.markdown(f"""<div class="history-item">
+                    <strong>{esc(h['title'])}</strong> ·
+                    {esc(h['court'])} ·
+                    📅 {esc(fmt_date(h['date']))}
+                    <span class="badge {badge}">{esc(relative_date(h['date']))}</span>
+                </div>""", unsafe_allow_html=True)
+            if st.button(
+                "📬 Send Reminder Emails for All Upcoming Hearings",
+                key="send_reminders_btn",
+                type="primary",
+                use_container_width=True,
+            ):
+                sent, failed = 0, 0
+                firm = get_firm_name()
+                for h in upcoming:
+                    try:
+                        msg = MIMEMultipart("alternative")
+                        msg["Subject"] = f"⚖️ Hearing Reminder: {h['title']} — {fmt_date(h['date'])}"
+                        msg["From"] = st.session_state.profile["notif_smtp_user"]
+                        msg["To"] = st.session_state.profile["notif_email"]
+                        body = f"""
+<html>
+<body style="font-family:Georgia,serif;max-width:600px;margin:auto;padding:20px;color:#1e293b;">
+  <h2 style="color:#059669;border-bottom:2px solid #059669;padding-bottom:10px;">
+    ⚖️ LexiAssist Hearing Reminder
+  </h2>
+  <div style="background:#f0fdf4;border-left:4px solid #059669;
+  padding:15px;border-radius:8px;margin:20px 0;">
+    <h3 style="margin:0 0 10px 0;">{esc(h['title'])}</h3>
+    <p style="margin:5px 0;"><strong>Suit Number:</strong> {esc(h['suit'])}</p>
+    <p style="margin:5px 0;"><strong>Court:</strong> {esc(h['court'])}</p>
+    <p style="margin:5px 0;"><strong>Hearing Date:</strong> {esc(fmt_date(h['date']))}</p>
+    <p style="margin:5px 0;"><strong>Days Remaining:</strong>
+      <span style="color:#dc2626;font-weight:bold;">{days_until(h['date'])} day(s)</span>
+    </p>
+  </div>
+  <p style="background:#fef3c7;padding:10px;border-radius:6px;">
+    ⚠️ Please ensure all court processes, briefs, and appearances
+    are prepared well in advance.
+  </p>
+  <p style="color:#6b7280;font-size:12px;margin-top:30px;
+  border-top:1px solid #e5e7eb;padding-top:10px;">
+    Sent by <strong>{esc(firm)}</strong> via LexiAssist v8.0 ·
+    {datetime.now().strftime('%d %B %Y at %H:%M')}
+  </p>
+</body>
+</html>"""
+                        msg.attach(MIMEText(body, "html"))
+                        with smtplib.SMTP_SSL("smtp.gmail.com", 465) as server:
+                            server.login(
+                                st.session_state.profile["notif_smtp_user"],
+                                st.session_state.profile["notif_smtp_pass"],
+                            )
+                            server.sendmail(
+                                st.session_state.profile["notif_smtp_user"],
+                                st.session_state.profile["notif_email"],
+                                msg.as_string(),
+                            )
+                        sent += 1
+                    except Exception as e:
+                        failed += 1
+                        logger.warning(f"Email send failed: {e}")
+                if sent:
+                    st.success(f"✅ {sent} reminder email(s) sent to {st.session_state.profile['notif_email']}")
+                if failed:
+                    st.error(f"❌ {failed} email(s) failed. Check your Gmail App Password and make sure 2-Step Verification is enabled.")
+        elif not has_email_config:
+            st.info("⚙️ Configure your email settings in the form above to enable reminders.")
+        else:
+            st.info("✅ No hearings within the next 7 days. You are clear.")
     # ── Security ──
     with tab_security:
         st.markdown("#### 🔐 Password Protection")
