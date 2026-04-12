@@ -3396,7 +3396,7 @@ def main():
     render_sidebar()
 
     # ── TOP NAVIGATION TABS ──
- tabs = st.tabs([
+    tabs = st.tabs([
         "🏠 Home",
         "🧠 AI Assistant",
         "📚 Research",
@@ -3408,7 +3408,7 @@ def main():
         "🔧 Tools",
         "📝 Notes → Brief",
         "👤 Profile",
-    ]) 
+    ])
     
 
     with tabs[0]:
