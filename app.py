@@ -1787,6 +1787,52 @@ def render_ai():
 
         st.markdown(f'<div class="response-box">{esc(response)}</div>', unsafe_allow_html=True)
 
+        # ── CASE STRENGTH METER ──
+        if st.session_state.get("last_task") in ("analysis", "advisory", "contract_review"):
+            with st.expander("📊 Case Strength Meter", expanded=True):
+                st.caption("AI-assessed win probability per party based on the analysis above.")
+                if st.button("⚡ Generate Strength Assessment", key="strength_meter_btn", type="primary"):
+                    strength_prompt = f"""
+Based on this legal analysis, extract ALL parties mentioned and estimate each party's
+litigation strength as a percentage.
+Respond ONLY in this exact JSON format, nothing else:
+{{
+  "parties": [
+    {{"name": "Party Name", "role": "Claimant/Defendant/Third Party", "strength": 75, "reason": "One sentence why"}},
+    {{"name": "Party Name", "role": "Defendant", "strength": 35, "reason": "One sentence why"}}
+  ],
+  "overall_complexity": "Low/Medium/High/Extreme",
+  "recommended_action": "One sentence immediate action"
+}}
+ANALYSIS:
+{response[:6000]}
+"""
+                    with st.spinner("Calculating case strength..."):
+                        raw = generate(strength_prompt, IDENTITY_CORE, "brief", "analysis")
+                    try:
+                        clean = raw.strip().replace("```json","").replace("```","").strip()
+                        data = json.loads(clean)
+                        for p in data.get("parties", []):
+                            strength = int(p.get("strength", 50))
+                            color = "#dc2626" if strength < 40 else ("#f59e0b" if strength < 65 else "#059669")
+                            bar_html = f"""
+<div style="margin-bottom:1rem;">
+  <div style="display:flex;justify-content:space-between;margin-bottom:4px;">
+    <strong>{esc(p['name'])}</strong>
+    <span class="badge badge-info">{esc(p['role'])}</span>
+    <strong style="color:{color};">{strength}%</strong>
+  </div>
+  <div style="background:#e5e7eb;border-radius:999px;height:14px;">
+    <div style="width:{strength}%;background:{color};height:14px;border-radius:999px;"></div>
+  </div>
+  <small style="color:#6b7280;">{esc(p.get('reason',''))}</small>
+</div>"""
+                            st.markdown(bar_html, unsafe_allow_html=True)
+                        st.markdown(f"**Complexity:** `{data.get('overall_complexity','—')}`")
+                        st.markdown(f"**Immediate Action:** {esc(data.get('recommended_action','—'))}")
+                    except Exception:
+                        st.markdown(raw)
+
         # ── SAVE TO CASE ──
         cases = st.session_state.cases
         if cases:
