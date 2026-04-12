@@ -3396,7 +3396,7 @@ def main():
     render_sidebar()
 
     # ── TOP NAVIGATION TABS ──
-   tabs = st.tabs([
+ tabs = st.tabs([
         "🏠 Home",
         "🧠 AI Assistant",
         "📚 Research",
@@ -3408,7 +3408,7 @@ def main():
         "🔧 Tools",
         "📝 Notes → Brief",
         "👤 Profile",
-    ])
+    ]) 
     
 
     with tabs[0]:
@@ -3429,7 +3429,7 @@ def main():
         render_billing()
     with tabs[8]:
         render_tools()
-     with tabs[9]:
+    with tabs[9]:
         render_notes_converter()
     with tabs[10]:
         render_profile()
