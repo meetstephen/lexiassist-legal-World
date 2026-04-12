@@ -2588,8 +2588,8 @@ def render_tools():
         <p>Limitation periods · Court hierarchy · Legal maxims — view and customise</p>
     </div>""", unsafe_allow_html=True)
 
-    tab_lim, tab_court, tab_maxim = st.tabs(
-        ["⏳ Limitation Periods", "🏛️ Court Hierarchy", "📜 Legal Maxims"]
+    tab_lim, tab_calc, tab_court, tab_maxim = st.tabs(
+        ["⏳ Limitation Periods", "🧮 Deadline Calculator", "🏛️ Court Hierarchy", "📜 Legal Maxims"]
     )
 
     # ── Limitation Periods (editable) ──
@@ -2646,6 +2646,99 @@ def render_tools():
                     else:
                         st.error("❌ All fields required.")
 
+    
+    # ── Smart Deadline Calculator ──
+    with tab_calc:
+        st.markdown("#### 🧮 AI Limitation Deadline Calculator")
+        st.caption("Describe your case facts and the AI will compute your exact limitation deadline and days remaining.")
+        calc_facts = st.text_area(
+            "Case Facts",
+            height=150,
+            placeholder="e.g. My client was involved in a road accident on 15 March 2022 in Lagos. The negligent driver works for a government ministry. No action has been filed yet.",
+            key="calc_facts_ta",
+        )
+        calc_btn = st.button(
+            "🧮 Calculate Deadline",
+            type="primary",
+            disabled=not calc_facts.strip(),
+            key="calc_deadline_btn",
+            use_container_width=True,
+        )
+        if calc_btn and calc_facts.strip():
+            calc_prompt = f"""
+You are a Nigerian limitation period expert. Analyse these facts and compute ALL applicable
+limitation periods. Today's date is {date.today().strftime('%d %B %Y')}.
+
+Respond ONLY in this exact JSON format, nothing else:
+{{
+  "causes_of_action": [
+    {{
+      "cause": "Negligence/Tort",
+      "limitation_period": "3 years",
+      "authority": "Limitation Act Cap L16 LFN 2004, s.8(1)(b)",
+      "event_date": "2022-03-15",
+      "deadline_date": "2025-03-15",
+      "days_remaining": 0,
+      "status": "EXPIRED/URGENT/WARNING/SAFE",
+      "special_notes": "Any special rule e.g. POPA notice requirement"
+    }}
+  ],
+  "most_urgent": "Name of most urgent cause of action",
+  "immediate_action": "What lawyer must do right now"
+}}
+
+FACTS: {calc_facts}
+"""
+            with st.spinner("⏱️ Computing limitation deadlines..."):
+                raw = generate(calc_prompt, IDENTITY_CORE, "brief", "analysis")
+            try:
+                clean = raw.strip().replace("```json", "").replace("```", "").strip()
+                data = json.loads(clean)
+                causes = data.get("causes_of_action", [])
+                st.markdown("---")
+                for ca in causes:
+                    status = ca.get("status", "SAFE")
+                    days = int(ca.get("days_remaining", 0))
+                    if status == "EXPIRED":
+                        card_color = "#fee2e2"
+                        badge_class = "badge-err"
+                        icon = "🔴"
+                        days_text = f"EXPIRED {abs(days)} days ago"
+                    elif status == "URGENT":
+                        card_color = "#fef3c7"
+                        badge_class = "badge-warn"
+                        icon = "🟡"
+                        days_text = f"{days} days remaining"
+                    elif status == "WARNING":
+                        card_color = "#fefce8"
+                        badge_class = "badge-warn"
+                        icon = "🟠"
+                        days_text = f"{days} days remaining"
+                    else:
+                        card_color = "#f0fdf4"
+                        badge_class = "badge-ok"
+                        icon = "🟢"
+                        days_text = f"{days} days remaining"
+                    st.markdown(f"""
+<div style="background:{card_color};border-radius:0.75rem;padding:1.2rem;
+margin-bottom:1rem;border:1px solid #e5e7eb;">
+  <div style="display:flex;justify-content:space-between;align-items:center;">
+    <h4 style="margin:0;">{icon} {esc(ca.get('cause',''))}</h4>
+    <span class="badge {badge_class}">{esc(days_text)}</span>
+  </div>
+  <div style="margin-top:0.5rem;">
+    ⏳ <strong>Limitation Period:</strong> {esc(ca.get('limitation_period',''))}
+    &nbsp;|&nbsp;
+    📅 <strong>Deadline:</strong> {esc(ca.get('deadline_date',''))}
+  </div>
+  <div>📖 <strong>Authority:</strong> {esc(ca.get('authority',''))}</div>
+  {f"<div>⚠️ <strong>Note:</strong> {esc(ca.get('special_notes',''))}</div>"
+    if ca.get('special_notes') else ""}
+</div>""", unsafe_allow_html=True)
+                st.error(f"🚨 Most Urgent: **{data.get('most_urgent', '')}**")
+                st.warning(f"⚡ Immediate Action: {data.get('immediate_action', '')}")
+            except Exception:
+                st.markdown(raw)
     # ── Court Hierarchy ──
     with tab_court:
         st.markdown("#### 🏛️ Nigerian Court Hierarchy")
