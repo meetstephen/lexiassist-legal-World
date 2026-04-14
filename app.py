@@ -3046,6 +3046,310 @@ margin-bottom:1rem;border:1px solid #e5e7eb;">
                         st.rerun()
                     else:
                         st.error("❌ Both fields required.")
+
+# ═══════════════════════════════════════════════════════
+# PAGE: SMART PLEADINGS DRAFTER
+# ═══════════════════════════════════════════════════════
+PLEADING_TYPES = {
+    "statement_of_claim": {
+        "label": "📄 Statement of Claim",
+        "desc": "Originating pleading setting out claimant's facts and reliefs",
+    },
+    "statement_of_defence": {
+        "label": "🛡️ Statement of Defence",
+        "desc": "Defendant's response admitting or denying each allegation",
+    },
+    "reply": {
+        "label": "↩️ Reply to Defence",
+        "desc": "Claimant's response to new matters raised in defence",
+    },
+    "counterclaim": {
+        "label": "⚔️ Counter-Claim",
+        "desc": "Defendant's claim against the claimant",
+    },
+    "originating_summons": {
+        "label": "📋 Originating Summons",
+        "desc": "For matters begun by summons — questions of law or construction",
+    },
+    "motion_on_notice": {
+        "label": "📬 Motion on Notice",
+        "desc": "Interlocutory application with supporting affidavit",
+    },
+    "affidavit": {
+        "label": "📜 Supporting Affidavit",
+        "desc": "Sworn statement of facts in support of a motion or application",
+    },
+    "written_address": {
+        "label": "✍️ Written Address",
+        "desc": "Final address or skeleton argument for court",
+    },
+    "notice_of_appeal": {
+        "label": "🔔 Notice of Appeal",
+        "desc": "Formal notice of appeal with grounds",
+    },
+    "writ_of_summons": {
+        "label": "📃 Writ of Summons",
+        "desc": "Originating process for High Court actions",
+    },
+}
+
+PLEADING_PROMPT = """
+You are a senior Nigerian litigation lawyer drafting court documents.
+Draft the {pleading_type} described below in full, professional Nigerian court format.
+
+STRICT RULES:
+1. Use the exact suit number, parties, and court provided
+2. Use [PLACEHOLDER] only for information not provided
+3. Include all mandatory formal requirements for this document type in Nigerian courts
+4. Number all paragraphs correctly
+5. Include proper heading, title, body, relief/prayer section, and signature block
+6. Apply the correct rules of court for the specified court
+7. Do NOT add commentary or strategy — draft only
+
+CASE DETAILS:
+Case Title: {case_title}
+Suit Number: {suit_no}
+Court: {court}
+Claimant: {claimant}
+Defendant: {defendant}
+Case Type: {case_type}
+Key Facts: {facts}
+Specific Instructions: {instructions}
+
+Draft the complete {pleading_type} now:
+"""
+
+
+def render_pleadings():
+    st.markdown("""<div class="page-header">
+        <h2>📜 Smart Pleadings Drafter</h2>
+        <p>Generate court-ready pleadings pulled directly from your case file —
+        no manual typing of parties, court, or suit number</p>
+    </div>""", unsafe_allow_html=True)
+
+    if not st.session_state.api_configured:
+        st.warning("⚠️ Connect your API key first.")
+        return
+
+    cases = st.session_state.cases
+    if not cases:
+        st.info("No cases found. Add a case in the 📁 Cases tab first — "
+                "the drafter pulls parties, court, and suit number from your case file automatically.")
+        return
+
+    # ── Case selector ──
+    st.markdown("### 📁 Select Case")
+    st.caption("All case details are pulled automatically from your saved case file.")
+
+    case_names = [
+        f"{c.get('title', 'Untitled')} ({c.get('suit_no', '—')})"
+        for c in cases
+    ]
+    pc1, pc2 = st.columns([3, 1])
+    with pc1:
+        selected_case_name = st.selectbox(
+            "Choose case",
+            case_names,
+            key="pleading_case_sel",
+            label_visibility="collapsed",
+        )
+    selected_idx = case_names.index(selected_case_name)
+    selected_case = cases[selected_idx]
+
+    with pc2:
+        st.metric("Status", selected_case.get("status", "—"))
+
+    # ── Auto-populated case details ──
+    st.markdown("---")
+    st.markdown("### 📋 Case Details (Auto-Populated)")
+    st.caption("Review and edit any field before generating.")
+
+    pd1, pd2 = st.columns(2)
+    with pd1:
+        case_title = st.text_input(
+            "Case Title",
+            value=selected_case.get("title", ""),
+            key="pl_case_title",
+        )
+        suit_no = st.text_input(
+            "Suit Number",
+            value=selected_case.get("suit_no", ""),
+            key="pl_suit_no",
+        )
+        court = st.text_input(
+            "Court",
+            value=selected_case.get("court", ""),
+            key="pl_court",
+        )
+    with pd2:
+        claimant = st.text_input(
+            "Claimant / Applicant",
+            value="",
+            placeholder="e.g. Chief Emeka Obi",
+            key="pl_claimant",
+        )
+        defendant = st.text_input(
+            "Defendant / Respondent",
+            value="",
+            placeholder="e.g. Lagos State Government",
+            key="pl_defendant",
+        )
+        case_type_pl = st.text_input(
+            "Case Type",
+            value="",
+            placeholder="e.g. Breach of Contract, Land Dispute",
+            key="pl_case_type",
+        )
+
+    facts = st.text_area(
+        "Key Facts",
+        value=selected_case.get("notes", ""),
+        height=120,
+        key="pl_facts",
+        placeholder="""e.g. Claimant and Defendant entered into a contract on 1 Jan 2023.
+Defendant received goods worth ₦12M and refused payment.
+Demand letters sent on 1 March and 1 April 2023. No response.""",
+    )
+
+    # ── Pleading type selector ──
+    st.markdown("---")
+    st.markdown("### 📄 Select Document to Draft")
+
+    pl_keys = list(PLEADING_TYPES.keys())
+    pleading_type_key = st.selectbox(
+        "Document Type",
+        pl_keys,
+        format_func=lambda x: f"{PLEADING_TYPES[x]['label']} — {PLEADING_TYPES[x]['desc']}",
+        key="pleading_type_sel",
+    )
+    selected_pleading = PLEADING_TYPES[pleading_type_key]
+
+    # Special instructions
+    instructions = st.text_area(
+        "Special Instructions (optional)",
+        height=80,
+        key="pl_instructions",
+        placeholder="""e.g. Include a claim for general damages of ₦5M and special damages of ₦12M.
+Add an application for accelerated hearing.
+This is a counter-claim so defendant becomes counter-claimant.""",
+    )
+
+    mode = st.session_state.response_mode
+    st.info(f"**Mode:** {RESPONSE_MODES[mode]['label']} — "
+            f"Comprehensive mode produces the most complete pleadings.")
+
+    # ── Generate button ──
+    generate_btn = st.button(
+        f"📜 Draft {selected_pleading['label']}",
+        type="primary",
+        use_container_width=True,
+        key="pleading_generate_btn",
+        disabled=not (case_title.strip() and court.strip()),
+    )
+
+    if generate_btn:
+        prompt = PLEADING_PROMPT.format(
+            pleading_type=selected_pleading["label"],
+            case_title=case_title.strip(),
+            suit_no=suit_no.strip() or "[SUIT NUMBER TO BE ASSIGNED]",
+            court=court.strip(),
+            claimant=claimant.strip() or "[CLAIMANT NAME]",
+            defendant=defendant.strip() or "[DEFENDANT NAME]",
+            case_type=case_type_pl.strip() or "General Civil Matter",
+            facts=facts.strip() or "As will be adduced at trial",
+            instructions=instructions.strip() or "None",
+        )
+        system = build_system_prompt("drafting", mode)
+        with st.spinner(
+            f"📜 Drafting {selected_pleading['label']}..."
+        ):
+            result = generate(prompt, system, mode, "drafting")
+
+        st.session_state["pleading_result"] = result
+        st.session_state["pleading_title"] = selected_pleading["label"]
+        st.session_state["pleading_case_id"] = selected_case["id"]
+        st.session_state["pleading_case_title"] = case_title
+        add_to_history(
+            f"[Pleading] {selected_pleading['label']} — {case_title}",
+            result, "drafting", mode,
+        )
+        st.rerun()
+
+    # ── Display result ──
+    result = st.session_state.get("pleading_result", "")
+    pleading_title = st.session_state.get("pleading_title", "Pleading")
+    pleading_case_id = st.session_state.get("pleading_case_id", "")
+    pleading_case_title = st.session_state.get("pleading_case_title", "")
+
+    if result:
+        st.markdown("---")
+        st.markdown(f"### {pleading_title}")
+        st.caption(f"Case: {esc(pleading_case_title)}")
+
+        # ── Export row ──
+        fname = (
+            f"LexiAssist_{pleading_type_key}_{pleading_case_title.replace(' ','_')}"
+            f"_{datetime.now():%Y%m%d_%H%M}"
+        )
+        ex1, ex2, ex3, ex4 = st.columns(4)
+        with ex1:
+            st.download_button(
+                "📥 TXT",
+                export_txt(result, pleading_title),
+                f"{fname}.txt", "text/plain",
+                key="pl_dl_txt", use_container_width=True,
+            )
+        with ex2:
+            st.download_button(
+                "📥 HTML",
+                export_html(result, pleading_title),
+                f"{fname}.html", "text/html",
+                key="pl_dl_html", use_container_width=True,
+            )
+        with ex3:
+            safe_pdf_download(result, pleading_title, fname, "pl_dl_pdf")
+        with ex4:
+            safe_docx_download(result, pleading_title, fname, "pl_dl_docx")
+
+        st.markdown(
+            f'<div class="response-box">{esc(result)}</div>',
+            unsafe_allow_html=True,
+        )
+
+        # ── Save to Case ──
+        if pleading_case_id:
+            sv1, sv2 = st.columns([3, 1])
+            with sv1:
+                st.caption(f"Save this pleading to: **{esc(pleading_case_title)}**")
+            with sv2:
+                if st.button(
+                    "💾 Save to Case",
+                    key="pl_save_case_btn",
+                    type="primary",
+                    use_container_width=True,
+                ):
+                    save_analysis_to_case(
+                        pleading_case_id,
+                        f"[{pleading_title}]",
+                        result, "drafting", mode,
+                    )
+                    st.success(
+                        f"✅ {pleading_title} saved to case: {pleading_case_title}"
+                    )
+
+        # ── Clear ──
+        if st.button("🗑️ Clear Draft", key="pl_clear_btn", use_container_width=True):
+            st.session_state["pleading_result"] = ""
+            st.session_state["pleading_title"] = ""
+            st.rerun()
+
+        st.markdown("""<div class="disclaimer">
+            <strong>⚖️ Disclaimer:</strong> Review all AI-drafted pleadings
+            carefully before filing. Verify all facts, parties, and reliefs
+            against your instructions. Counsel remains responsible for all
+            documents filed in court.
+        </div>""", unsafe_allow_html=True)
+
 # ═══════════════════════════════════════════════════════
 # PAGE: MATTER LIFECYCLE AUTOMATION
 # ═══════════════════════════════════════════════════════
@@ -3940,6 +4244,7 @@ def main():
         "📚 Research",
         "📁 Cases",
         "⚡ Lifecycle",
+        "📜 Pleadings",
         "📅 Calendar",
         "📋 Templates",
         "👥 Clients",
@@ -3961,18 +4266,20 @@ def main():
     with tabs[4]:
         render_lifecycle()
     with tabs[5]:
-        render_calendar()
+        render_pleadings()
     with tabs[6]:
-        render_templates()
+        render_calendar()
     with tabs[7]:
-        render_clients()
+        render_templates()
     with tabs[8]:
-        render_billing()
+        render_clients()
     with tabs[9]:
-        render_tools()
+        render_billing()
     with tabs[10]:
-        render_notes_converter()
+        render_tools()
     with tabs[11]:
+        render_notes_converter()
+    with tabs[12]:
         render_profile()
 
     # Footer
