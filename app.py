@@ -1854,6 +1854,159 @@ ANALYSIS:
                     except Exception:
                         st.markdown(raw)
 
+                # ── STRATEGY SIMULATOR (inside same expander) ──
+                st.markdown("---")
+                st.markdown("#### 🎯 Strategy Simulator — *What If We Do X?*")
+                st.caption("Simulate any litigation move and get AI probability, risks, and opponent counter-strategy.")
+
+                sim_cols = st.columns([3, 1])
+                with sim_cols[0]:
+                    sim_action = st.text_input(
+                        "Proposed Action",
+                        placeholder="e.g. File a preliminary objection challenging jurisdiction",
+                        key="sim_action_inp",
+                        label_visibility="collapsed",
+                    )
+                with sim_cols[1]:
+                    sim_btn = st.button(
+                        "🎯 Simulate",
+                        key="sim_run_btn",
+                        type="primary",
+                        use_container_width=True,
+                        disabled=not sim_action.strip(),
+                    )
+
+                # Quick action buttons
+                st.caption("Quick simulations:")
+                qa1, qa2, qa3, qa4 = st.columns(4)
+                with qa1:
+                    if st.button("Preliminary Objection", key="qa1_btn", use_container_width=True):
+                        st.session_state["sim_prefill"] = "File a preliminary objection challenging the court's jurisdiction"
+                        st.rerun()
+                with qa2:
+                    if st.button("Strike Out Application", key="qa2_btn", use_container_width=True):
+                        st.session_state["sim_prefill"] = "File an application to strike out the suit for want of locus standi"
+                        st.rerun()
+                with qa3:
+                    if st.button("Interlocutory Injunction", key="qa3_btn", use_container_width=True):
+                        st.session_state["sim_prefill"] = "Apply for an interlocutory injunction to preserve the subject matter"
+                        st.rerun()
+                with qa4:
+                    if st.button("Settlement Offer", key="qa4_btn", use_container_width=True):
+                        st.session_state["sim_prefill"] = "Make a without-prejudice settlement offer to the opposing party"
+                        st.rerun()
+
+                # Apply prefill if set
+                if st.session_state.get("sim_prefill"):
+                    sim_action = st.session_state.pop("sim_prefill")
+
+                if sim_btn and sim_action.strip():
+                    sim_prompt = f"""
+You are a senior Nigerian litigation strategist. A lawyer is considering the following
+litigation action in the case described below. Analyse it fully.
+
+Respond ONLY in this exact JSON format, nothing else:
+{{
+  "action": "The proposed action",
+  "probability_of_success": 72,
+  "verdict": "RECOMMENDED/RISKY/DO NOT PROCEED",
+  "reasoning": "2-3 sentences explaining the probability",
+  "risks": [
+    "Risk 1",
+    "Risk 2",
+    "Risk 3"
+  ],
+  "opponent_counter_strategy": [
+    "What opponent will likely do in response 1",
+    "What opponent will likely do in response 2"
+  ],
+  "our_counter_to_counter": [
+    "How we neutralise opponent response 1",
+    "How we neutralise opponent response 2"
+  ],
+  "better_alternative": "A better action to consider, or empty string if this is already optimal",
+  "nigerian_authority": "The most relevant Nigerian case or statute supporting or opposing this action"
+}}
+
+CASE ANALYSIS CONTEXT:
+{response[:5000]}
+
+PROPOSED ACTION: {sim_action}
+"""
+                    with st.spinner("🎯 Simulating strategy..."):
+                        sim_raw = generate(sim_prompt, IDENTITY_CORE, "brief", "advisory")
+                    try:
+                        sim_clean = sim_raw.strip().replace("```json","").replace("```","").strip()
+                        sim_data = json.loads(sim_clean)
+
+                        prob = int(sim_data.get("probability_of_success", 50))
+                        verdict = sim_data.get("verdict", "RISKY")
+
+                        if verdict == "RECOMMENDED":
+                            verdict_color = "#059669"
+                            verdict_bg = "#f0fdf4"
+                            verdict_icon = "✅"
+                        elif verdict == "DO NOT PROCEED":
+                            verdict_color = "#dc2626"
+                            verdict_bg = "#fef2f2"
+                            verdict_icon = "🚫"
+                        else:
+                            verdict_color = "#d97706"
+                            verdict_bg = "#fffbeb"
+                            verdict_icon = "⚠️"
+
+                        prob_color = "#dc2626" if prob < 40 else ("#f59e0b" if prob < 65 else "#059669")
+
+                        st.markdown(f"""
+<div style="background:{verdict_bg};border:2px solid {verdict_color};
+border-radius:0.75rem;padding:1.2rem;margin-top:1rem;">
+  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:0.8rem;">
+    <h4 style="margin:0;color:{verdict_color};">
+      {verdict_icon} {esc(sim_data.get('action',''))}
+    </h4>
+    <span style="font-size:1.6rem;font-weight:800;color:{prob_color};">{prob}%</span>
+  </div>
+  <div style="background:#e5e7eb;border-radius:999px;height:12px;margin-bottom:0.8rem;">
+    <div style="width:{prob}%;background:{prob_color};height:12px;border-radius:999px;"></div>
+  </div>
+  <p style="margin:0;">{esc(sim_data.get('reasoning',''))}</p>
+</div>""", unsafe_allow_html=True)
+
+                        sr1, sr2 = st.columns(2)
+                        with sr1:
+                            st.markdown("**🔴 Risks:**")
+                            for r in sim_data.get("risks", []):
+                                st.markdown(f"- {esc(r)}")
+                            st.markdown("**⚔️ Opponent Will:**")
+                            for c in sim_data.get("opponent_counter_strategy", []):
+                                st.markdown(f"- {esc(c)}")
+                        with sr2:
+                            st.markdown("**🛡️ Our Counter:**")
+                            for cc in sim_data.get("our_counter_to_counter", []):
+                                st.markdown(f"- {esc(cc)}")
+                            if sim_data.get("nigerian_authority"):
+                                st.markdown(f"**📖 Authority:** {esc(sim_data['nigerian_authority'])}")
+
+                        if sim_data.get("better_alternative"):
+                            st.info(f"💡 **Better Alternative:** {sim_data['better_alternative']}")
+
+                        # Save simulation to case history
+                        if st.session_state.cases:
+                            sim_text = (
+                                f"STRATEGY SIMULATION\n"
+                                f"Action: {sim_data.get('action','')}\n"
+                                f"Probability: {prob}%\n"
+                                f"Verdict: {verdict}\n"
+                                f"Reasoning: {sim_data.get('reasoning','')}\n"
+                            )
+                            add_to_history(
+                                f"[Strategy Sim] {sim_action[:80]}",
+                                sim_text, "advisory", "brief",
+                            )
+
+                    except Exception:
+                        st.markdown(sim_raw)
+
         # ── SAVE TO CASE ──
         cases = st.session_state.cases
         if cases:
