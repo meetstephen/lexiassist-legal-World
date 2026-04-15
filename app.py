@@ -2980,6 +2980,256 @@ margin-bottom:1rem;border:1px solid #e5e7eb;">
                 st.warning(f"⚡ Immediate Action: {data.get('immediate_action', '')}")
             except Exception:
                 st.markdown(raw)
+    # ── PRE-ACTION NOTICE CHECKER (merged into same tab) ──
+        st.markdown("---")
+        st.markdown("#### ⚠️ Pre-Action Notice & Compliance Checker")
+        st.caption(
+            "Find out exactly what you must do BEFORE filing suit — "
+            "notices, time gaps, letters, and statutory requirements. "
+            "Missing these kills cases before they start."
+        )
+
+        pre_facts = st.text_area(
+            "Case Facts for Pre-Action Check",
+            height=130,
+            key="pre_action_facts_ta",
+            placeholder="""e.g. Client wants to sue the Lagos State Government
+for wrongful termination of a contract worth ₦50M.
+The contract was terminated in January 2024.
+No pre-action steps have been taken yet.""",
+        )
+
+        pre_btn = st.button(
+            "⚠️ Check Pre-Action Requirements",
+            type="primary",
+            disabled=not pre_facts.strip(),
+            key="pre_action_btn",
+            use_container_width=True,
+        )
+
+        if pre_btn and pre_facts.strip():
+            pre_prompt = f"""
+You are a senior Nigerian litigation lawyer. Analyse the facts below and
+identify ALL pre-action requirements that must be satisfied before filing
+suit in Nigeria. Today's date is {date.today().strftime('%d %B %Y')}.
+
+Respond ONLY in this exact JSON format, nothing else:
+{{
+  "can_sue_immediately": false,
+  "overall_status": "PRE-ACTION REQUIRED / READY TO FILE / INCOMPLETE",
+  "summary": "One paragraph explaining the pre-action position",
+  "requirements": [
+    {{
+      "requirement": "Pre-Action Notice to Government",
+      "authority": "Public Officers Protection Act, s.2 / Attorney General Notice",
+      "is_mandatory": true,
+      "deadline_to_comply": "30 days before filing",
+      "action_required": "Serve statutory notice on the relevant Ministry",
+      "sample_wording": "One sentence sample wording for the notice or letter",
+      "consequence_of_omission": "Suit will be statute-barred / struck out",
+      "status": "PENDING/DONE/NOT APPLICABLE"
+    }}
+  ],
+  "total_waiting_period": "Total days to wait before filing e.g. 30 days",
+  "earliest_filing_date": "Estimated earliest date suit can be filed",
+  "immediate_actions": [
+    "Action 1 to take right now",
+    "Action 2 to take right now"
+  ],
+  "common_mistakes": [
+    "Common mistake lawyers make in this type of case"
+  ]
+}}
+
+CASE FACTS: {pre_facts}
+"""
+            with st.spinner("⚠️ Checking pre-action requirements..."):
+                pre_raw = generate(
+                    pre_prompt, IDENTITY_CORE, "brief", "procedure"
+                )
+            try:
+                pre_clean = (
+                    pre_raw.strip()
+                    .replace("```json", "")
+                    .replace("```", "")
+                    .strip()
+                )
+                pre_data = json.loads(pre_clean)
+
+                # ── Overall status banner ──
+                overall = pre_data.get("overall_status", "PRE-ACTION REQUIRED")
+                can_sue = pre_data.get("can_sue_immediately", False)
+
+                if can_sue:
+                    banner_color = "#f0fdf4"
+                    banner_border = "#059669"
+                    banner_icon = "✅"
+                    banner_text_color = "#059669"
+                else:
+                    banner_color = "#fef3c7"
+                    banner_border = "#f59e0b"
+                    banner_icon = "⚠️"
+                    banner_text_color = "#d97706"
+
+                st.markdown(f"""
+<div style="background:{banner_color};border:2px solid {banner_border};
+border-radius:0.75rem;padding:1.2rem;margin:1rem 0;">
+  <h4 style="margin:0;color:{banner_text_color};">
+    {banner_icon} {esc(overall)}
+  </h4>
+  <p style="margin:0.6rem 0 0 0;">{esc(pre_data.get('summary',''))}</p>
+  <div style="margin-top:0.6rem;">
+    ⏳ <strong>Total waiting period:</strong>
+    {esc(pre_data.get('total_waiting_period',''))} &nbsp;|&nbsp;
+    📅 <strong>Earliest filing date:</strong>
+    {esc(pre_data.get('earliest_filing_date',''))}
+  </div>
+</div>""", unsafe_allow_html=True)
+
+                # ── Requirements ──
+                reqs = pre_data.get("requirements", [])
+                if reqs:
+                    st.markdown(
+                        f"##### 📋 {len(reqs)} Pre-Action Requirement(s)"
+                    )
+                    for req in reqs:
+                        is_mandatory = req.get("is_mandatory", False)
+                        status = req.get("status", "PENDING")
+
+                        if status == "NOT APPLICABLE":
+                            req_bg = "#f8fafc"
+                            req_border = "#cbd5e1"
+                            status_badge = "badge-info"
+                        elif status == "DONE":
+                            req_bg = "#f0fdf4"
+                            req_border = "#059669"
+                            status_badge = "badge-ok"
+                        else:
+                            req_bg = "#fef3c7"
+                            req_border = "#f59e0b"
+                            status_badge = "badge-warn"
+
+                        mandatory_html = (
+                            '<span class="badge badge-err">MANDATORY</span>'
+                            if is_mandatory
+                            else '<span class="badge badge-info">Recommended</span>'
+                        )
+
+                        st.markdown(f"""
+<div style="background:{req_bg};border-left:4px solid {req_border};
+border-radius:0.5rem;padding:1rem;margin-bottom:0.8rem;">
+  <div style="display:flex;justify-content:space-between;
+  align-items:flex-start;margin-bottom:0.4rem;">
+    <strong>{esc(req.get('requirement',''))}</strong>
+    <div>
+      {mandatory_html}
+      <span class="badge {status_badge}">{esc(status)}</span>
+    </div>
+  </div>
+  <div>
+    📖 <strong>Authority:</strong>
+    <code>{esc(req.get('authority',''))}</code>
+  </div>
+  <div>
+    ⏱️ <strong>Deadline:</strong> {esc(req.get('deadline_to_comply',''))}
+  </div>
+  <div>
+    ✅ <strong>Action:</strong> {esc(req.get('action_required',''))}
+  </div>
+  {f'<div>📝 <strong>Sample wording:</strong> <em>{esc(req.get("sample_wording",""))}</em></div>'
+    if req.get('sample_wording') else ''}
+  <div style="color:#dc2626;">
+    🚫 <strong>If omitted:</strong>
+    {esc(req.get('consequence_of_omission',''))}
+  </div>
+</div>""", unsafe_allow_html=True)
+
+                # ── Immediate actions ──
+                immediate = pre_data.get("immediate_actions", [])
+                if immediate:
+                    st.markdown("##### ⚡ Immediate Actions")
+                    for ia in immediate:
+                        st.markdown(f"- {esc(ia)}")
+
+                # ── Common mistakes ──
+                mistakes = pre_data.get("common_mistakes", [])
+                if mistakes:
+                    with st.expander(
+                        "🚨 Common Mistakes to Avoid", expanded=False
+                    ):
+                        for m in mistakes:
+                            st.markdown(f"- {esc(m)}")
+
+                # ── Export ──
+                pre_report = (
+                    f"PRE-ACTION COMPLIANCE REPORT\n"
+                    f"Date: {datetime.now():%d %B %Y at %H:%M}\n"
+                    f"Status: {overall}\n"
+                    f"Earliest Filing: "
+                    f"{pre_data.get('earliest_filing_date','')}\n\n"
+                    f"SUMMARY:\n{pre_data.get('summary','')}\n\n"
+                    f"REQUIREMENTS:\n"
+                )
+                for req in reqs:
+                    pre_report += (
+                        f"- {req.get('requirement','')} | "
+                        f"{req.get('authority','')} | "
+                        f"Deadline: {req.get('deadline_to_comply','')}\n"
+                        f"  Action: {req.get('action_required','')}\n"
+                        f"  If omitted: "
+                        f"{req.get('consequence_of_omission','')}\n\n"
+                    )
+                if immediate:
+                    pre_report += "IMMEDIATE ACTIONS:\n"
+                    for ia in immediate:
+                        pre_report += f"- {ia}\n"
+
+                pre_fname = (
+                    f"PreAction_Report_{datetime.now():%Y%m%d_%H%M}"
+                )
+                pe1, pe2, pe3 = st.columns(3)
+                with pe1:
+                    st.download_button(
+                        "📥 TXT Report",
+                        export_txt(
+                            pre_report,
+                            "Pre-Action Compliance Report",
+                        ),
+                        f"{pre_fname}.txt",
+                        "text/plain",
+                        key="pre_dl_txt",
+                        use_container_width=True,
+                    )
+                with pe2:
+                    st.download_button(
+                        "📥 HTML Report",
+                        export_html(
+                            pre_report,
+                            "Pre-Action Compliance Report",
+                        ),
+                        f"{pre_fname}.html",
+                        "text/html",
+                        key="pre_dl_html",
+                        use_container_width=True,
+                    )
+                with pe3:
+                    safe_pdf_download(
+                        pre_report,
+                        "Pre-Action Compliance Report",
+                        pre_fname,
+                        "pre_dl_pdf",
+                    )
+
+                st.markdown("""<div class="disclaimer">
+                    <strong>⚖️ Disclaimer:</strong>
+                    Pre-action requirements vary by state, court, and
+                    defendant type. Always verify requirements for the
+                    specific jurisdiction and court before filing.
+                </div>""", unsafe_allow_html=True)
+
+            except Exception:
+                st.markdown(pre_raw)
+    
     # ── Court Hierarchy ──
     with tab_court:
         st.markdown("#### 🏛️ Nigerian Court Hierarchy")
