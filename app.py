@@ -283,6 +283,226 @@ Structure your comparison as:
 Keep to 300-500 words. Be decisive in your verdict."""
 
 # ═══════════════════════════════════════════════════════
+# WITNESS PREPARATION ENGINE — PROMPTS
+# ═══════════════════════════════════════════════════════
+WITNESS_PREP_SYSTEM = IDENTITY_CORE + """
+TASK: Witness Preparation for Nigerian Trial.
+You are preparing a witness for court. Your output must be:
+1. Examination-in-Chief questions: open-ended, non-leading, logically sequenced, designed to bring out the witness's full account in Nigerian court format.
+2. Cross-Examination Risks: realistic, precise attack lines a skilled opponent would deploy — credibility, prior inconsistencies, bias, motive, demeanour weaknesses.
+3. Coaching Notes: concise, practical, plain-English instructions the witness can follow.
+
+STRICT RULES:
+- Tailor EVERYTHING strictly to the case facts and witness role provided. No generic content.
+- Use Nigerian court tone and procedure throughout.
+- All questions must be numbered.
+- Coaching notes must be actionable, not theoretical.
+- Do NOT fabricate facts not given. Flag missing facts with [CLARIFY].
+- Keep each section clearly separated with its header.
+"""
+
+WITNESS_PREP_PROMPT = """
+CASE FACTS:
+{case_facts}
+
+WITNESS ROLE: {witness_role}
+CASE TYPE: {case_type}
+
+Generate the three sections below. Each section must be clearly labelled.
+
+═══════════════════════════════════
+SECTION 1 — EXAMINATION-IN-CHIEF QUESTIONS
+═══════════════════════════════════
+(Numbered open-ended questions. Non-leading. Structured to build narrative chronologically.)
+
+═══════════════════════════════════
+SECTION 2 — CROSS-EXAMINATION RISKS
+═══════════════════════════════════
+(Bullet-point attack lines. For each: the attack angle, the likely question the opponent asks, and the vulnerability it exploits.)
+
+═══════════════════════════════════
+SECTION 3 — COACHING NOTES FOR THE WITNESS
+═══════════════════════════════════
+(Concise, practical, numbered instructions. What to do, what to avoid, how to behave in the box.)
+"""
+
+NEWS_FEED_SUBJECTS = [
+    "All Areas",
+    "Constitutional Law",
+    "Criminal Law & Procedure",
+    "Commercial / Contract Law",
+    "Company Law",
+    "Land / Property Law",
+    "Employment & Labour Law",
+    "Tax Law",
+    "Banking & Finance",
+    "Intellectual Property",
+    "Family Law",
+    "Admiralty / Maritime",
+    "Human Rights",
+    "Electoral Law",
+    "Oil & Gas / Energy",
+    "Practice Directions & Court Rules",
+    "Legislation Updates",
+]
+
+NEWS_FEED_SYSTEM = IDENTITY_CORE + """
+TASK: Nigerian Legal News Digest.
+You are producing a daily legal intelligence briefing for Nigerian lawyers.
+Each item must cover a REAL category of development — new Supreme Court/Court of Appeal decisions,
+new legislation, new practice directions, regulatory changes, or notable tribunal rulings.
+Do NOT invent specific case names or citation numbers. Describe legal developments at the principle level.
+Mark all case references as [CITATION TO BE VERIFIED].
+Keep each item tight, practical, and instantly usable by a working lawyer.
+
+STRICT OUTPUT FORMAT — respond ONLY in this exact JSON. Nothing else:
+{{
+  "generated_date": "DD MMMM YYYY",
+  "subject_area": "Subject area covered",
+  "items": [
+    {{
+      "id": 1,
+      "title": "Headline title of the development",
+      "summary": "2-4 sentence factual summary of what changed or was decided",
+      "key_takeaway": "Single sentence — the most critical legal point",
+      "practice_impact": "1-2 sentences — what this means for a practising lawyer right now"
+    }}
+  ]
+}}
+"""
+
+NEWS_FEED_PROMPT = """
+Generate a legal news digest for Nigerian lawyers covering: {subject_area}.
+Focus on developments that would have occurred in the last 30-90 days (you may use representative/
+typical examples if specific recent cases are uncertain — but mark them [REPRESENTATIVE EXAMPLE]).
+Generate exactly 6 news items.
+Today's reference date: {today}.
+"""
+
+# ═══════════════════════════════════════════════════════
+# WITNESS RE-EXAMINATION PROMPT
+# ═══════════════════════════════════════════════════════
+REEXAM_SYSTEM = IDENTITY_CORE + """
+TASK: Generate Re-Examination (Re-Direct) Questions for a Nigerian trial witness.
+You are given the cross-examination attack points that the opponent used or will likely use.
+Your job is to generate precise, non-leading re-examination questions that REHABILITATE the witness
+on each attack point — restoring credibility, clarifying inconsistencies, and neutralising bias allegations.
+
+RULES:
+- Only re-examine on matters arising from cross-examination. Do not introduce new matters.
+- Questions must be open-ended and non-leading (as required in Nigerian courts under Evidence Act 2011).
+- For each attack point addressed, label it clearly.
+- End with a brief "Re-examination Strategy Note" on sequencing and emphasis.
+- Nigerian court procedure throughout.
+"""
+
+REEXAM_PROMPT = """
+WITNESS ROLE: {witness_role}
+CASE FACTS: {case_facts}
+
+CROSS-EXAMINATION ATTACK POINTS IDENTIFIED:
+{cross_exam_risks}
+
+Generate targeted re-examination questions to rehabilitate this witness on each attack point above.
+Number each question. Label each attack point being addressed.
+End with a Re-examination Strategy Note (3-5 sentences).
+"""
+
+# ═══════════════════════════════════════════════════════
+# WITNESS CONTRADICTION DETECTOR PROMPT
+# ═══════════════════════════════════════════════════════
+CONTRADICTION_SYSTEM = IDENTITY_CORE + """
+TASK: Multi-Witness Contradiction Analysis for Nigerian trial preparation.
+You are given the prepared briefs of two or more witnesses. Your job is to:
+1. Identify DIRECT CONTRADICTIONS — where witnesses give conflicting accounts of the same fact
+2. Identify GAPS — where one witness's account raises questions the other doesn't address
+3. Identify CORROBORATIONS — strong points where accounts align and reinforce each other
+4. Provide a Reconciliation Strategy — how counsel can address contradictions before trial
+
+CRITICAL: A contradiction in a prosecution witness and a defence witness may be a strategic advantage.
+Distinguish between intra-party contradictions (dangerous) and inter-party ones (expected/exploitable).
+Be specific. Quote the conflicting passages directly.
+"""
+
+CONTRADICTION_PROMPT = """
+Below are the prepared witness briefs for {count} witnesses in this matter.
+Analyse for contradictions, gaps, and corroborations.
+
+{witness_summaries}
+
+Structure your output:
+1. DIRECT CONTRADICTIONS (each numbered, with both versions quoted)
+2. GAPS & UNANSWERED QUESTIONS
+3. STRONG CORROBORATIONS
+4. RECONCILIATION STRATEGY FOR COUNSEL
+"""
+
+# ═══════════════════════════════════════════════════════
+# NEWS DEEP DIVE PROMPT
+# ═══════════════════════════════════════════════════════
+NEWS_DEEPDIVE_SYSTEM = IDENTITY_CORE + STRATEGY_BLOCK + """
+TASK: Full legal analysis of a recent Nigerian legal development.
+You are given a news item describing a recent case, legislation, or practice direction.
+Provide a comprehensive analysis covering: what it means legally, how it changes the law (if at all),
+the practical impact on specific practice areas, potential challenges or arguments against it,
+and what actions a prudent lawyer should take now.
+Use Nigerian law throughout. Mark all case citations as [CITATION TO BE VERIFIED].
+"""
+
+NEWS_DEEPDIVE_PROMPT = """
+Analyse this Nigerian legal development in full:
+
+TITLE: {title}
+SUMMARY: {summary}
+KEY TAKEAWAY: {takeaway}
+PRACTICE IMPACT: {impact}
+
+Provide a comprehensive Standard-mode legal analysis. Cover:
+1. Legal significance and how it fits into existing Nigerian law
+2. Which practice areas are affected and how
+3. Arguments for and against the position taken
+4. Immediate actions a practising lawyer should take
+5. Strategic advisory for affected clients
+"""
+
+# ═══════════════════════════════════════════════════════
+# NEWS RELEVANCE SCAN PROMPT
+# ═══════════════════════════════════════════════════════
+NEWS_RELEVANCE_SYSTEM = IDENTITY_CORE + """
+TASK: Case Relevance Scanner.
+You are given a lawyer's case facts and a list of recent Nigerian legal developments.
+Score each development for relevance to the case facts on a scale of 0-10.
+For each relevant item (score ≥ 5), explain precisely how it affects the case — favourable,
+unfavourable, or procedural implications.
+Sort output from most relevant to least relevant.
+Respond ONLY in this exact JSON format, nothing else:
+{
+  "scan_summary": "1-2 sentence overview of the most important findings",
+  "items": [
+    {
+      "id": 1,
+      "title": "Title of the news item",
+      "relevance_score": 8,
+      "relevance_label": "HIGH / MEDIUM / LOW / NOT RELEVANT",
+      "how_it_affects_case": "Specific explanation of impact on the facts given",
+      "favourable_or_unfavourable": "FAVOURABLE / UNFAVOURABLE / NEUTRAL / PROCEDURAL"
+    }
+  ]
+}
+"""
+
+NEWS_RELEVANCE_PROMPT = """
+CASE FACTS:
+{case_facts}
+
+RECENT LEGAL DEVELOPMENTS TO SCAN:
+{news_items}
+
+Score each development for relevance to these case facts. Include ALL items in your response,
+even those with score 0. Sort by relevance_score descending.
+"""
+
+# ═══════════════════════════════════════════════════════
 # REFERENCE DATA (BUILT-IN DEFAULTS)
 # ═══════════════════════════════════════════════════════
 DEFAULT_LIMITATION_PERIODS = [
@@ -4351,6 +4571,890 @@ border-radius:0.75rem;padding:1.2rem;">
             use_container_width=True,
         )
 # ═══════════════════════════════════════════════════════
+# PAGE: WITNESS PREPARATION ENGINE
+# ═══════════════════════════════════════════════════════
+def _wp_extract_section(text: str, header_fragment: str) -> str:
+    """Extract text between two witness prep section headers."""
+    lines = text.split("\n")
+    capture = False
+    collected = []
+    for line in lines:
+        if header_fragment.upper() in line.upper() and "═" in line:
+            capture = True
+            continue
+        if capture and "═══" in line and collected:
+            break
+        if capture:
+            collected.append(line)
+    return "\n".join(collected).strip()
+
+
+def render_witness_prep():
+    st.markdown("""<div class="page-header">
+        <h2>🎯 Witness Preparation Engine</h2>
+        <p>Input case facts and witness role → Examination-in-chief · Cross-exam risks ·
+        Re-examination · Coaching notes · Multi-witness contradiction check</p>
+    </div>""", unsafe_allow_html=True)
+
+    if not st.session_state.api_configured:
+        st.warning("⚠️ Connect your API key first.")
+        return
+
+    # Ensure session log exists
+    if "wp_witness_log" not in st.session_state:
+        st.session_state["wp_witness_log"] = []
+
+    # ── Main tabs ──
+    tab_prep, tab_log, tab_contra = st.tabs([
+        "🎯 Prepare a Witness",
+        f"👥 Witness Log ({len(st.session_state['wp_witness_log'])})",
+        "🔍 Contradiction Check",
+    ])
+
+    # ═══════════════════════════════════════════════════
+    # TAB 1 — PREPARE A WITNESS
+    # ═══════════════════════════════════════════════════
+    with tab_prep:
+        wp1, wp2 = st.columns([2, 1])
+        with wp1:
+            wp_facts = st.text_area(
+                "Case Facts *",
+                height=210,
+                key="wp_facts_ta",
+                placeholder="""Describe the key facts of the case as they relate to this witness.
+
+Example: The witness, Mrs Amaka Obi, is a neighbour of the claimant. She was present on
+3 January 2024 when the defendant's vehicle collided with the claimant's gate at Ikeja.
+She heard the crash, came outside within 2 minutes, saw the defendant exit the vehicle,
+and heard him say 'I lost control'. She took three photographs on her phone.
+Opponent may argue she was too far away to hear clearly and has a prior land dispute
+with the defendant.""",
+            )
+        with wp2:
+            wp_role = st.text_input(
+                "Witness Role *",
+                key="wp_role_inp",
+                placeholder="e.g. Eyewitness, Expert (valuation), Claimant",
+            )
+            wp_name = st.text_input(
+                "Witness Name (optional)",
+                key="wp_name_inp",
+                placeholder="e.g. Mrs Amaka Obi",
+            )
+            wp_case_type = st.selectbox(
+                "Case Type (optional)",
+                ["— Select —"] + CASE_TYPE_OPTIONS,
+                key="wp_case_type_sel",
+            )
+            case_type_val = "" if wp_case_type == "— Select —" else wp_case_type
+            mode = st.session_state.response_mode
+            st.info(f"Mode: {RESPONSE_MODES[mode]['label']}")
+            wp_generate_btn = st.button(
+                "🎯 Prepare Witness",
+                type="primary",
+                use_container_width=True,
+                key="wp_generate_btn",
+                disabled=not (wp_facts.strip() and wp_role.strip()),
+            )
+
+        if wp_generate_btn and wp_facts.strip() and wp_role.strip():
+            prompt = WITNESS_PREP_PROMPT.format(
+                case_facts=wp_facts.strip(),
+                witness_role=wp_role.strip(),
+                case_type=case_type_val or "Not specified",
+            )
+            with st.spinner("🎯 Preparing witness brief…"):
+                raw = generate(prompt, WITNESS_PREP_SYSTEM, mode, "analysis")
+            label = wp_name.strip() or wp_role.strip()
+            st.session_state["wp_result"] = raw
+            st.session_state["wp_role_label"] = label
+            st.session_state["wp_facts_saved"] = wp_facts.strip()
+            # Add to witness log
+            st.session_state["wp_witness_log"].append({
+                "id": new_id(),
+                "name": wp_name.strip() or f"Witness {len(st.session_state['wp_witness_log'])+1}",
+                "role": wp_role.strip(),
+                "case_type": case_type_val or "Not specified",
+                "facts": wp_facts.strip(),
+                "result": raw,
+                "timestamp": datetime.now().strftime("%d %b %Y %H:%M"),
+            })
+            st.rerun()
+
+        # ── Display result ──
+        result = st.session_state.get("wp_result", "")
+        role_label = st.session_state.get("wp_role_label", "Witness")
+        facts_saved = st.session_state.get("wp_facts_saved", "")
+
+        if result:
+            st.markdown("---")
+            sec1 = _wp_extract_section(result, "EXAMINATION-IN-CHIEF")
+            sec2 = _wp_extract_section(result, "CROSS-EXAMINATION")
+            sec3 = _wp_extract_section(result, "COACHING NOTES")
+
+            if not (sec1 and sec2 and sec3):
+                st.markdown(f'<div class="response-box">{esc(result)}</div>', unsafe_allow_html=True)
+            else:
+                s1_tab, s2_tab, s3_tab, s4_tab = st.tabs([
+                    "📋 Examination-in-Chief",
+                    "⚔️ Cross-Examination Risks",
+                    "🧭 Coaching Notes",
+                    "↩️ Re-Examination",
+                ])
+
+                with s1_tab:
+                    st.markdown(f"""
+<div style="background:#f0fdf4;border-left:4px solid #059669;border-radius:0.75rem;
+padding:1.5rem;line-height:1.8;">
+  <h4 style="margin:0 0 1rem 0;color:#059669;">📋 Examination-in-Chief — {esc(role_label)}</h4>
+  <div style="white-space:pre-wrap;font-size:0.95rem;">{esc(sec1)}</div>
+</div>""", unsafe_allow_html=True)
+
+                with s2_tab:
+                    st.markdown(f"""
+<div style="background:#fef2f2;border-left:4px solid #dc2626;border-radius:0.75rem;
+padding:1.5rem;line-height:1.8;">
+  <h4 style="margin:0 0 1rem 0;color:#dc2626;">⚔️ Cross-Examination Risks</h4>
+  <div style="white-space:pre-wrap;font-size:0.95rem;">{esc(sec2)}</div>
+</div>""", unsafe_allow_html=True)
+
+                with s3_tab:
+                    st.markdown(f"""
+<div style="background:#fffbeb;border-left:4px solid #f59e0b;border-radius:0.75rem;
+padding:1.5rem;line-height:1.8;">
+  <h4 style="margin:0 0 1rem 0;color:#d97706;">🧭 Coaching Notes for the Witness</h4>
+  <div style="white-space:pre-wrap;font-size:0.95rem;">{esc(sec3)}</div>
+</div>""", unsafe_allow_html=True)
+
+                with s4_tab:
+                    st.markdown("""
+<div style="background:#eff6ff;border-left:4px solid #3b82f6;border-radius:0.6rem;
+padding:0.9rem 1.2rem;margin-bottom:1rem;">
+  <strong style="color:#1d4ed8;">↩️ Re-Examination Questions</strong><br>
+  <small style="color:#475569;">Generated from the cross-examination attack points above.
+  Re-examination is limited to matters arising from cross-examination (Evidence Act 2011, s.215).</small>
+</div>""", unsafe_allow_html=True)
+
+                    reexam_result = st.session_state.get("wp_reexam_result", "")
+                    if not reexam_result:
+                        if st.button(
+                            "↩️ Generate Re-Examination Questions",
+                            type="primary",
+                            key="wp_reexam_btn",
+                            use_container_width=True,
+                        ):
+                            reexam_p = REEXAM_PROMPT.format(
+                                witness_role=role_label,
+                                case_facts=facts_saved,
+                                cross_exam_risks=sec2,
+                            )
+                            with st.spinner("↩️ Generating re-examination questions…"):
+                                reexam_result = generate(reexam_p, REEXAM_SYSTEM, "standard", "analysis")
+                            st.session_state["wp_reexam_result"] = reexam_result
+                            st.rerun()
+                    else:
+                        st.markdown(f"""
+<div style="background:#eff6ff;border-left:4px solid #3b82f6;border-radius:0.75rem;
+padding:1.5rem;line-height:1.8;white-space:pre-wrap;font-size:0.95rem;">
+{esc(reexam_result)}</div>""", unsafe_allow_html=True)
+                        re1, re2 = st.columns(2)
+                        with re1:
+                            st.download_button(
+                                "📥 Download Re-Examination (TXT)",
+                                export_txt(reexam_result, f"Re-Examination — {role_label}"),
+                                f"ReExam_{role_label.replace(' ','_')}_{datetime.now():%Y%m%d}.txt",
+                                "text/plain", key="wp_reexam_dl_txt", use_container_width=True,
+                            )
+                        with re2:
+                            if st.button("🔄 Regenerate", key="wp_reexam_regen", use_container_width=True):
+                                st.session_state["wp_reexam_result"] = ""
+                                st.rerun()
+
+            # ── Save to Case ──
+            st.markdown("---")
+            cases = st.session_state.cases
+            if cases:
+                st.markdown("##### 💾 Save to Case File")
+                sv1, sv2 = st.columns([3, 1])
+                with sv1:
+                    save_case_options = {c["id"]: f"{c.get('title','Untitled')} [{c.get('status','')}]"
+                                         for c in cases}
+                    save_case_id = st.selectbox(
+                        "Select Case",
+                        list(save_case_options.keys()),
+                        format_func=lambda x: save_case_options[x],
+                        key="wp_save_case_sel",
+                    )
+                with sv2:
+                    st.markdown("<br>", unsafe_allow_html=True)
+                    if st.button("💾 Save", type="primary", key="wp_save_case_btn", use_container_width=True):
+                        save_analysis_to_case(
+                            save_case_id,
+                            f"[Witness Prep] {role_label}",
+                            result, "analysis", mode,
+                        )
+                        st.success(f"✅ Saved to case: {save_case_options[save_case_id]}")
+
+            # ── Export row ──
+            st.markdown("##### 📥 Export")
+            fname = f"WitnessPrep_{role_label.replace(' ','_')}_{datetime.now():%Y%m%d_%H%M}"
+            ex1, ex2, ex3, ex4 = st.columns(4)
+            with ex1:
+                st.download_button("📥 TXT", export_txt(result, f"Witness Prep — {role_label}"),
+                    f"{fname}.txt", "text/plain", key="wp_dl_txt", use_container_width=True)
+            with ex2:
+                st.download_button("📥 HTML", export_html(result, f"Witness Prep — {role_label}"),
+                    f"{fname}.html", "text/html", key="wp_dl_html", use_container_width=True)
+            with ex3:
+                safe_pdf_download(result, f"Witness Prep — {role_label}", fname, "wp_dl_pdf")
+            with ex4:
+                safe_docx_download(result, f"Witness Prep — {role_label}", fname, "wp_dl_docx")
+
+            if st.button("🗑️ Clear Current Brief", key="wp_clear_btn", use_container_width=True):
+                for k in ["wp_result", "wp_role_label", "wp_facts_saved", "wp_reexam_result"]:
+                    st.session_state[k] = ""
+                st.rerun()
+
+            st.markdown("""<div class="disclaimer">
+                <strong>⚖️ Disclaimer:</strong> AI-generated witness preparation materials are a
+                drafting aid only. Review all questions against actual witness statements. Do not
+                share coaching notes or cross-exam analysis with opposing counsel.
+            </div>""", unsafe_allow_html=True)
+
+    # ═══════════════════════════════════════════════════
+    # TAB 2 — WITNESS SESSION LOG
+    # ═══════════════════════════════════════════════════
+    with tab_log:
+        log = st.session_state["wp_witness_log"]
+        if not log:
+            st.info("No witnesses prepared yet in this session. Use the 'Prepare a Witness' tab to get started.")
+        else:
+            st.markdown(f"##### 👥 {len(log)} Witness(es) Prepared This Session")
+            st.caption("All witness briefs are held in memory for this session. Use the Contradiction Check tab to compare accounts.")
+
+            for i, entry in enumerate(log):
+                with st.expander(
+                    f"{'👤'} {esc(entry['name'])} — {esc(entry['role'])} "
+                    f"· {esc(entry['timestamp'])}",
+                    expanded=False,
+                ):
+                    log_sec1 = _wp_extract_section(entry["result"], "EXAMINATION-IN-CHIEF")
+                    log_sec2 = _wp_extract_section(entry["result"], "CROSS-EXAMINATION")
+                    log_sec3 = _wp_extract_section(entry["result"], "COACHING NOTES")
+
+                    if log_sec1 and log_sec2 and log_sec3:
+                        lt1, lt2, lt3 = st.tabs(["📋 Exam-in-Chief", "⚔️ Cross-Exam Risks", "🧭 Coaching"])
+                        with lt1:
+                            st.markdown(f'<div style="white-space:pre-wrap;font-size:0.9rem;'
+                                        f'background:#f0fdf4;padding:1rem;border-radius:0.5rem;">'
+                                        f'{esc(log_sec1)}</div>', unsafe_allow_html=True)
+                        with lt2:
+                            st.markdown(f'<div style="white-space:pre-wrap;font-size:0.9rem;'
+                                        f'background:#fef2f2;padding:1rem;border-radius:0.5rem;">'
+                                        f'{esc(log_sec2)}</div>', unsafe_allow_html=True)
+                        with lt3:
+                            st.markdown(f'<div style="white-space:pre-wrap;font-size:0.9rem;'
+                                        f'background:#fffbeb;padding:1rem;border-radius:0.5rem;">'
+                                        f'{esc(log_sec3)}</div>', unsafe_allow_html=True)
+                    else:
+                        st.markdown(f'<div class="response-box" style="font-size:0.88rem;">'
+                                    f'{esc(entry["result"])}</div>', unsafe_allow_html=True)
+
+                    # Quick export per witness
+                    loge1, loge2, loge3 = st.columns(3)
+                    lname = entry["name"].replace(" ", "_")
+                    with loge1:
+                        st.download_button(
+                            "📥 TXT", export_txt(entry["result"], f"Witness Prep — {entry['name']}"),
+                            f"WitnessPrep_{lname}.txt", "text/plain",
+                            key=f"wp_log_dl_{i}", use_container_width=True,
+                        )
+                    with loge2:
+                        safe_pdf_download(
+                            entry["result"], f"Witness Prep — {entry['name']}",
+                            f"WitnessPrep_{lname}", f"wp_log_pdf_{i}",
+                        )
+                    with loge3:
+                        if st.button("🗑️ Remove from Log", key=f"wp_log_del_{i}", use_container_width=True):
+                            st.session_state["wp_witness_log"].pop(i)
+                            st.rerun()
+
+            if st.button("🗑️ Clear Entire Witness Log", key="wp_log_clear_all", use_container_width=True):
+                st.session_state["wp_witness_log"] = []
+                st.rerun()
+
+    # ═══════════════════════════════════════════════════
+    # TAB 3 — CONTRADICTION CHECK
+    # ═══════════════════════════════════════════════════
+    with tab_contra:
+        log = st.session_state["wp_witness_log"]
+        st.markdown("#### 🔍 Multi-Witness Contradiction Detector")
+        st.caption(
+            "Select two or more witnesses from your session log. "
+            "AI will identify contradictions, gaps, and corroborations between their accounts — "
+            "and suggest how to reconcile them before trial."
+        )
+
+        if len(log) < 2:
+            st.warning(
+                "⚠️ You need at least 2 prepared witnesses in your session log to run a contradiction check. "
+                "Prepare more witnesses first."
+            )
+        else:
+            # Multi-select from log
+            witness_options = {entry["id"]: f"{entry['name']} ({entry['role']})" for entry in log}
+            selected_ids = st.multiselect(
+                "Select Witnesses to Compare (minimum 2)",
+                list(witness_options.keys()),
+                format_func=lambda x: witness_options[x],
+                default=list(witness_options.keys())[:min(2, len(witness_options))],
+                key="wp_contra_sel",
+            )
+
+            contra_btn = st.button(
+                "🔍 Run Contradiction Check",
+                type="primary",
+                use_container_width=True,
+                key="wp_contra_btn",
+                disabled=len(selected_ids) < 2,
+            )
+
+            if contra_btn and len(selected_ids) >= 2:
+                selected_entries = [e for e in log if e["id"] in selected_ids]
+                summaries = ""
+                for idx, entry in enumerate(selected_entries, 1):
+                    summaries += f"\n{'='*50}\nWITNESS {idx}: {entry['name']} ({entry['role']})\n"
+                    summaries += f"Case Type: {entry['case_type']}\n\n"
+                    summaries += f"PREPARED BRIEF:\n{entry['result'][:3000]}\n"
+
+                contra_prompt = CONTRADICTION_PROMPT.format(
+                    count=len(selected_entries),
+                    witness_summaries=summaries,
+                )
+                with st.spinner(f"🔍 Analysing {len(selected_entries)} witnesses for contradictions…"):
+                    contra_result = generate(contra_prompt, CONTRADICTION_SYSTEM, "standard", "analysis")
+                st.session_state["wp_contra_result"] = contra_result
+                st.rerun()
+
+            contra_result = st.session_state.get("wp_contra_result", "")
+            if contra_result:
+                st.markdown("---")
+                st.markdown(f'<div class="response-box">{esc(contra_result)}</div>',
+                            unsafe_allow_html=True)
+                st.markdown("---")
+                cd1, cd2, cd3 = st.columns(3)
+                with cd1:
+                    st.download_button(
+                        "📥 Export Contradiction Report (TXT)",
+                        export_txt(contra_result, "Witness Contradiction Analysis"),
+                        f"ContradictionCheck_{datetime.now():%Y%m%d_%H%M}.txt",
+                        "text/plain", key="wp_contra_dl_txt", use_container_width=True,
+                    )
+                with cd2:
+                    safe_pdf_download(
+                        contra_result, "Witness Contradiction Analysis",
+                        f"ContradictionCheck_{datetime.now():%Y%m%d_%H%M}", "wp_contra_dl_pdf",
+                    )
+                with cd3:
+                    if st.button("🗑️ Clear Result", key="wp_contra_clear", use_container_width=True):
+                        st.session_state["wp_contra_result"] = ""
+                        st.rerun()
+
+                st.markdown("""<div class="disclaimer">
+                    <strong>⚖️ Disclaimer:</strong> Contradiction analysis is AI-assisted.
+                    Counsel must independently review all witness statements before trial.
+                    Intra-party contradictions must be resolved before witnesses take the box.
+                </div>""", unsafe_allow_html=True)
+
+
+# ═══════════════════════════════════════════════════════
+# PAGE: LEGAL NEWS FEED
+# ═══════════════════════════════════════════════════════
+def render_legal_news():
+    st.markdown("""<div class="page-header">
+        <h2>📰 Nigerian Legal News Feed</h2>
+        <p>AI-powered digest of recent legal developments · Bookmarks · Case Relevance Scan ·
+        Deep Dive analysis — searchable by subject area</p>
+    </div>""", unsafe_allow_html=True)
+
+    if not st.session_state.api_configured:
+        st.warning("⚠️ Connect your API key first.")
+        return
+
+    # Ensure bookmarks list exists in session
+    if "nf_bookmarks" not in st.session_state:
+        st.session_state["nf_bookmarks"] = []
+
+    bookmarks = st.session_state["nf_bookmarks"]
+
+    # ── Top-level tabs ──
+    tab_feed, tab_bookmarks, tab_scan = st.tabs([
+        "📰 Live Feed",
+        f"📌 Reading List ({len(bookmarks)})",
+        "🎯 Case Relevance Scan",
+    ])
+
+    # ═══════════════════════════════════════════════════
+    # TAB 1 — LIVE FEED
+    # ═══════════════════════════════════════════════════
+    with tab_feed:
+        # ── Controls ──
+        nf1, nf2, nf3 = st.columns([2, 2, 1])
+        with nf1:
+            nf_subject = st.selectbox(
+                "Subject Area",
+                NEWS_FEED_SUBJECTS,
+                key="nf_subject_sel",
+            )
+        with nf2:
+            nf_search = st.text_input(
+                "🔍 Search within feed",
+                key="nf_search_inp",
+                placeholder="e.g. land registration, employment, tax",
+            )
+        with nf3:
+            st.markdown("<br>", unsafe_allow_html=True)
+            nf_generate_btn = st.button(
+                "🔄 Fetch Latest",
+                type="primary",
+                use_container_width=True,
+                key="nf_generate_btn",
+            )
+
+        if nf_generate_btn:
+            subject_val = nf_subject if nf_subject != "All Areas" else "all major practice areas of Nigerian law"
+            prompt = NEWS_FEED_PROMPT.format(
+                subject_area=subject_val,
+                today=date.today().strftime("%d %B %Y"),
+            )
+            with st.spinner(f"📰 Fetching legal developments — {nf_subject}…"):
+                raw = generate(prompt, NEWS_FEED_SYSTEM, "brief", "research")
+            try:
+                clean = raw.strip().replace("```json", "").replace("```", "").strip()
+                feed_data = json.loads(clean)
+                st.session_state["nf_feed_data"] = feed_data
+                st.session_state["nf_subject_loaded"] = nf_subject
+                # Clear any stale deep-dive results
+                st.session_state["nf_deepdive"] = {}
+            except Exception:
+                st.session_state["nf_feed_data"] = {"_raw": raw, "items": []}
+                st.session_state["nf_subject_loaded"] = nf_subject
+
+        feed_data = st.session_state.get("nf_feed_data", None)
+        subject_loaded = st.session_state.get("nf_subject_loaded", "")
+        if "nf_deepdive" not in st.session_state:
+            st.session_state["nf_deepdive"] = {}
+
+        if feed_data is None:
+            st.markdown("""
+<div style="background:#f8fafc;border:1.5px dashed #cbd5e1;border-radius:0.85rem;
+padding:2.5rem;text-align:center;color:#64748b;">
+  <h3 style="margin:0 0 0.5rem 0;">📰 Your Legal Feed is Empty</h3>
+  <p style="margin:0;">Select a subject area and click <strong>Fetch Latest</strong>
+  to load Nigerian legal developments.</p>
+</div>""", unsafe_allow_html=True)
+
+        elif "_raw" in feed_data:
+            st.warning("⚠️ Could not parse as structured data. Showing raw output:")
+            st.markdown(f'<div class="response-box">{esc(feed_data["_raw"])}</div>',
+                        unsafe_allow_html=True)
+
+        else:
+            items = feed_data.get("items", [])
+            gen_date = feed_data.get("generated_date", date.today().strftime("%d %B %Y"))
+
+            # ── Header ──
+            hd1, hd2 = st.columns([3, 1])
+            with hd1:
+                st.markdown(f"""
+<div style="padding:0.6rem 1rem;background:#f1f5f9;border-radius:0.5rem;
+display:inline-block;font-size:0.9rem;">
+  📅 <strong>Ref date:</strong> {esc(gen_date)} &nbsp;|&nbsp;
+  📂 <strong>Subject:</strong> {esc(subject_loaded)} &nbsp;|&nbsp;
+  📰 <strong>{len(items)} items</strong> &nbsp;|&nbsp;
+  📌 <strong>{len(bookmarks)} bookmarked</strong>
+</div>""", unsafe_allow_html=True)
+            with hd2:
+                if st.button("🗑️ Clear Feed", key="nf_clear_btn", use_container_width=True):
+                    st.session_state["nf_feed_data"] = None
+                    st.session_state["nf_subject_loaded"] = ""
+                    st.session_state["nf_deepdive"] = {}
+                    st.rerun()
+
+            st.markdown("<br>", unsafe_allow_html=True)
+
+            # ── Filter by search ──
+            search_val = nf_search.strip().lower()
+            display_items = items
+            if search_val:
+                display_items = [
+                    item for item in items
+                    if search_val in item.get("title", "").lower()
+                    or search_val in item.get("summary", "").lower()
+                    or search_val in item.get("key_takeaway", "").lower()
+                    or search_val in item.get("practice_impact", "").lower()
+                ]
+
+            if not display_items:
+                st.info(f"No items match '{nf_search}'. Try a different term or clear the filter.")
+            else:
+                for item in display_items:
+                    item_id = str(item.get("id", 0))
+                    title = item.get("title", "Untitled Development")
+                    summary = item.get("summary", "")
+                    takeaway = item.get("key_takeaway", "")
+                    impact = item.get("practice_impact", "")
+
+                    # Check if bookmarked
+                    is_bookmarked = any(b.get("id") == item_id for b in bookmarks)
+                    bm_icon = "📌" if is_bookmarked else "🔖"
+
+                    with st.expander(f"{'📌' if is_bookmarked else '📰'} {esc(title)}", expanded=False):
+                        st.markdown(f"""
+<div style="background:#ffffff;border:1px solid #e2e8f0;border-radius:0.75rem;padding:1.2rem;">
+  <p style="margin:0 0 0.9rem 0;font-size:0.95rem;line-height:1.7;color:#1e293b;">{esc(summary)}</p>
+  <div style="background:#f0fdf4;border-left:3px solid #059669;padding:0.7rem 1rem;
+  border-radius:0.4rem;margin-bottom:0.7rem;">
+    <strong style="color:#059669;">🔑 Key Takeaway:</strong>
+    <span style="font-size:0.93rem;"> {esc(takeaway)}</span>
+  </div>
+  <div style="background:#eff6ff;border-left:3px solid #3b82f6;padding:0.7rem 1rem;
+  border-radius:0.4rem;">
+    <strong style="color:#1d4ed8;">⚖️ Practice Impact:</strong>
+    <span style="font-size:0.93rem;"> {esc(impact)}</span>
+  </div>
+</div>""", unsafe_allow_html=True)
+
+                        # ── Action buttons ──
+                        act1, act2, act3 = st.columns(3)
+
+                        with act1:
+                            bm_label = "📌 Bookmarked" if is_bookmarked else "🔖 Bookmark"
+                            if st.button(bm_label, key=f"nf_bm_{item_id}", use_container_width=True):
+                                if is_bookmarked:
+                                    st.session_state["nf_bookmarks"] = [
+                                        b for b in bookmarks if b.get("id") != item_id
+                                    ]
+                                    st.success("Removed from Reading List.")
+                                else:
+                                    st.session_state["nf_bookmarks"].append({
+                                        "id": item_id,
+                                        "title": title,
+                                        "summary": summary,
+                                        "key_takeaway": takeaway,
+                                        "practice_impact": impact,
+                                        "subject": subject_loaded,
+                                        "saved_at": datetime.now().strftime("%d %b %Y %H:%M"),
+                                    })
+                                    st.success("✅ Added to Reading List.")
+                                st.rerun()
+
+                        with act2:
+                            dd_key = f"nf_dd_{item_id}"
+                            dd_result = st.session_state["nf_deepdive"].get(item_id, "")
+                            if not dd_result:
+                                if st.button("🔬 Deep Dive Analysis", key=dd_key, use_container_width=True):
+                                    dd_prompt = NEWS_DEEPDIVE_PROMPT.format(
+                                        title=title, summary=summary,
+                                        takeaway=takeaway, impact=impact,
+                                    )
+                                    with st.spinner(f"🔬 Analysing: {title[:50]}…"):
+                                        dd_result = generate(dd_prompt, NEWS_DEEPDIVE_SYSTEM, "standard", "analysis")
+                                    st.session_state["nf_deepdive"][item_id] = dd_result
+                                    st.rerun()
+                            else:
+                                if st.button("🔬 Hide Deep Dive", key=dd_key, use_container_width=True):
+                                    st.session_state["nf_deepdive"].pop(item_id, None)
+                                    st.rerun()
+
+                        with act3:
+                            st.download_button(
+                                "📥 Export Item",
+                                export_txt(
+                                    f"TITLE: {title}\n\nSUMMARY:\n{summary}\n\n"
+                                    f"KEY TAKEAWAY:\n{takeaway}\n\nPRACTICE IMPACT:\n{impact}",
+                                    title,
+                                ),
+                                f"LegalNews_{item_id}_{datetime.now():%Y%m%d}.txt",
+                                "text/plain",
+                                key=f"nf_dl_{item_id}",
+                                use_container_width=True,
+                            )
+
+                        # ── Deep Dive result ──
+                        if dd_result:
+                            st.markdown(f"""
+<div style="margin-top:1rem;background:#f8fafc;border:1px solid #cbd5e1;
+border-radius:0.75rem;padding:1.4rem;">
+  <h5 style="margin:0 0 0.8rem 0;color:#1e293b;">🔬 Full Legal Analysis</h5>
+  <div style="white-space:pre-wrap;font-size:0.92rem;line-height:1.75;">{esc(dd_result)}</div>
+</div>""", unsafe_allow_html=True)
+                            safe_pdf_download(
+                                dd_result, f"Deep Dive — {title}",
+                                f"DeepDive_{item_id}_{datetime.now():%Y%m%d}",
+                                f"nf_dd_pdf_{item_id}",
+                            )
+
+            # ── Export full feed ──
+            st.markdown("---")
+            if items:
+                feed_text = f"NIGERIAN LEGAL NEWS FEED\nSubject: {subject_loaded}\nDate: {gen_date}\n\n"
+                for item in items:
+                    feed_text += f"{'='*60}\n{item.get('title','')}\n\n"
+                    feed_text += f"SUMMARY:\n{item.get('summary','')}\n\n"
+                    feed_text += f"KEY TAKEAWAY:\n{item.get('key_takeaway','')}\n\n"
+                    feed_text += f"PRACTICE IMPACT:\n{item.get('practice_impact','')}\n\n"
+
+                ef1, ef2 = st.columns(2)
+                fname = f"LegalNewsFeed_{subject_loaded.replace(' ','_').replace('/','_')}_{datetime.now():%Y%m%d_%H%M}"
+                with ef1:
+                    st.download_button(
+                        "📥 Export Full Feed (TXT)",
+                        export_txt(feed_text, f"Nigerian Legal News Feed — {subject_loaded}"),
+                        f"{fname}.txt", "text/plain",
+                        key="nf_dl_txt", use_container_width=True,
+                    )
+                with ef2:
+                    st.download_button(
+                        "📥 Export Full Feed (HTML)",
+                        export_html(feed_text, f"Nigerian Legal News Feed — {subject_loaded}"),
+                        f"{fname}.html", "text/html",
+                        key="nf_dl_html", use_container_width=True,
+                    )
+
+        st.markdown("""<div class="disclaimer">
+            <strong>⚖️ Disclaimer:</strong> This feed is AI-generated. All case citations are
+            [CITATION TO BE VERIFIED]. Verify all developments against official law reports
+            and primary sources before relying on them in practice.
+        </div>""", unsafe_allow_html=True)
+
+    # ═══════════════════════════════════════════════════
+    # TAB 2 — READING LIST / BOOKMARKS
+    # ═══════════════════════════════════════════════════
+    with tab_bookmarks:
+        bookmarks = st.session_state["nf_bookmarks"]
+        if not bookmarks:
+            st.info("📌 No items bookmarked yet. Open any feed item and click 🔖 Bookmark to save it here.")
+        else:
+            st.markdown(f"##### 📌 {len(bookmarks)} Saved Item(s)")
+
+            bm_search = st.text_input("🔍 Search reading list", key="bm_search_inp",
+                                       placeholder="Search your bookmarks...")
+            bm_search_val = bm_search.strip().lower()
+            display_bm = bookmarks
+            if bm_search_val:
+                display_bm = [b for b in bookmarks
+                               if bm_search_val in b.get("title", "").lower()
+                               or bm_search_val in b.get("summary", "").lower()]
+
+            for i, bm in enumerate(display_bm):
+                with st.expander(f"📌 {esc(bm.get('title',''))}"
+                                 f" · {esc(bm.get('subject',''))} · {esc(bm.get('saved_at',''))}",
+                                 expanded=False):
+                    st.markdown(f"""
+<div style="background:#fff;border:1px solid #e2e8f0;border-radius:0.75rem;padding:1.1rem;">
+  <p style="margin:0 0 0.8rem 0;font-size:0.93rem;line-height:1.7;">{esc(bm.get('summary',''))}</p>
+  <div style="background:#f0fdf4;border-left:3px solid #059669;padding:0.6rem 0.9rem;
+  border-radius:0.4rem;margin-bottom:0.6rem;">
+    <strong style="color:#059669;">🔑</strong> {esc(bm.get('key_takeaway',''))}
+  </div>
+  <div style="background:#eff6ff;border-left:3px solid #3b82f6;padding:0.6rem 0.9rem;
+  border-radius:0.4rem;">
+    <strong style="color:#1d4ed8;">⚖️</strong> {esc(bm.get('practice_impact',''))}
+  </div>
+</div>""", unsafe_allow_html=True)
+
+                    bm_act1, bm_act2 = st.columns(2)
+                    with bm_act1:
+                        st.download_button(
+                            "📥 Export (TXT)",
+                            export_txt(
+                                f"TITLE: {bm.get('title','')}\n\n"
+                                f"SUMMARY:\n{bm.get('summary','')}\n\n"
+                                f"KEY TAKEAWAY:\n{bm.get('key_takeaway','')}\n\n"
+                                f"PRACTICE IMPACT:\n{bm.get('practice_impact','')}",
+                                bm.get("title", ""),
+                            ),
+                            f"Bookmark_{bm.get('id','x')}_{datetime.now():%Y%m%d}.txt",
+                            "text/plain",
+                            key=f"bm_dl_{i}",
+                            use_container_width=True,
+                        )
+                    with bm_act2:
+                        if st.button("🗑️ Remove", key=f"bm_del_{i}", use_container_width=True):
+                            bm_id = bm.get("id")
+                            st.session_state["nf_bookmarks"] = [
+                                b for b in st.session_state["nf_bookmarks"] if b.get("id") != bm_id
+                            ]
+                            st.rerun()
+
+            st.markdown("---")
+            if st.button("🗑️ Clear All Bookmarks", key="bm_clear_all", use_container_width=True):
+                st.session_state["nf_bookmarks"] = []
+                st.rerun()
+
+    # ═══════════════════════════════════════════════════
+    # TAB 3 — CASE RELEVANCE SCAN
+    # ═══════════════════════════════════════════════════
+    with tab_scan:
+        st.markdown("#### 🎯 Case Relevance Scan")
+        st.caption(
+            "Paste your case facts below. The AI will scan every item in your current feed "
+            "and rank them by relevance to your matter — identifying which developments help, "
+            "which hurt, and which raise procedural flags."
+        )
+
+        feed_data = st.session_state.get("nf_feed_data", None)
+        feed_items = feed_data.get("items", []) if (feed_data and "_raw" not in feed_data) else []
+
+        if not feed_items:
+            st.warning("⚠️ Load a news feed first (use the 'Live Feed' tab → Fetch Latest). "
+                       "The scanner needs items to check against.")
+        else:
+            st.info(f"📰 {len(feed_items)} item(s) loaded from feed: **{st.session_state.get('nf_subject_loaded', '')}**")
+
+            scan_facts = st.text_area(
+                "Your Case Facts *",
+                height=200,
+                key="nf_scan_facts_ta",
+                placeholder="""Describe your current matter. Example:
+
+Client is a tenant in Lagos who was issued a Notice to Quit in January 2024.
+The tenancy is a yearly tenancy at ₦800,000 per annum. Landlord claims breach of
+tenancy covenants (subletting). Client denies subletting and has receipts of all rent
+paid. Matter is before the Lagos State Rent Tribunal.""",
+            )
+
+            scan_btn = st.button(
+                "🎯 Scan Feed for Relevance",
+                type="primary",
+                use_container_width=True,
+                key="nf_scan_btn",
+                disabled=not scan_facts.strip(),
+            )
+
+            if scan_btn and scan_facts.strip():
+                news_text = ""
+                for item in feed_items:
+                    news_text += (
+                        f"\n[Item {item.get('id',0)}] TITLE: {item.get('title','')}\n"
+                        f"SUMMARY: {item.get('summary','')}\n"
+                        f"TAKEAWAY: {item.get('key_takeaway','')}\n"
+                        f"PRACTICE IMPACT: {item.get('practice_impact','')}\n"
+                    )
+
+                scan_prompt = NEWS_RELEVANCE_PROMPT.format(
+                    case_facts=scan_facts.strip(),
+                    news_items=news_text,
+                )
+                with st.spinner(f"🎯 Scanning {len(feed_items)} items against your case facts…"):
+                    raw_scan = generate(scan_prompt, NEWS_RELEVANCE_SYSTEM, "brief", "analysis")
+
+                try:
+                    clean_scan = raw_scan.strip().replace("```json", "").replace("```", "").strip()
+                    scan_data = json.loads(clean_scan)
+                    st.session_state["nf_scan_result"] = scan_data
+                except Exception:
+                    st.session_state["nf_scan_result"] = {"_raw": raw_scan}
+                st.rerun()
+
+            scan_result = st.session_state.get("nf_scan_result", None)
+
+            if scan_result:
+                st.markdown("---")
+
+                if "_raw" in scan_result:
+                    st.markdown(f'<div class="response-box">{esc(scan_result["_raw"])}</div>',
+                                unsafe_allow_html=True)
+                else:
+                    # Summary banner
+                    summary_text = scan_result.get("scan_summary", "")
+                    if summary_text:
+                        st.markdown(f"""
+<div style="background:#f0fdf4;border:2px solid #059669;border-radius:0.75rem;
+padding:1rem 1.4rem;margin-bottom:1.2rem;">
+  <strong style="color:#059669;">🎯 Scan Summary:</strong>
+  <span style="font-size:0.95rem;"> {esc(summary_text)}</span>
+</div>""", unsafe_allow_html=True)
+
+                    scan_items = scan_result.get("items", [])
+                    # Sort by score descending
+                    scan_items = sorted(scan_items, key=lambda x: x.get("relevance_score", 0), reverse=True)
+
+                    for si in scan_items:
+                        score = si.get("relevance_score", 0)
+                        label = si.get("relevance_label", "")
+                        fav = si.get("favourable_or_unfavourable", "NEUTRAL")
+                        how = si.get("how_it_affects_case", "")
+                        si_title = si.get("title", "")
+
+                        if score >= 7:
+                            score_color = "#059669"; bg = "#f0fdf4"; border = "#059669"
+                        elif score >= 5:
+                            score_color = "#d97706"; bg = "#fffbeb"; border = "#f59e0b"
+                        elif score >= 1:
+                            score_color = "#64748b"; bg = "#f8fafc"; border = "#cbd5e1"
+                        else:
+                            score_color = "#94a3b8"; bg = "#f8fafc"; border = "#e2e8f0"
+
+                        fav_icons = {
+                            "FAVOURABLE": "🟢 Favourable",
+                            "UNFAVOURABLE": "🔴 Unfavourable",
+                            "NEUTRAL": "⚪ Neutral",
+                            "PROCEDURAL": "🔵 Procedural",
+                        }
+                        fav_label = fav_icons.get(fav, fav)
+
+                        st.markdown(f"""
+<div style="background:{bg};border:1px solid {border};border-radius:0.75rem;
+padding:1rem 1.2rem;margin-bottom:0.7rem;">
+  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:0.5rem;">
+    <strong style="font-size:0.95rem;">{esc(si_title)}</strong>
+    <div style="display:flex;gap:0.5rem;align-items:center;">
+      <span style="background:{score_color};color:white;font-weight:700;font-size:0.8rem;
+      padding:0.2rem 0.6rem;border-radius:1rem;">{score}/10</span>
+      <span style="font-size:0.8rem;color:{score_color};font-weight:600;">{esc(label)}</span>
+      <span style="font-size:0.8rem;">{esc(fav_label)}</span>
+    </div>
+  </div>
+  {f'<p style="margin:0;font-size:0.9rem;color:#374151;line-height:1.6;">{esc(how)}</p>' if how else ''}
+</div>""", unsafe_allow_html=True)
+
+                    # Export scan report
+                    scan_report = f"CASE RELEVANCE SCAN REPORT\nDate: {datetime.now():%d %B %Y at %H:%M}\n\n"
+                    scan_report += f"CASE FACTS:\n{st.session_state.get('nf_scan_facts_ta','')}\n\n"
+                    scan_report += f"SCAN SUMMARY:\n{summary_text}\n\n"
+                    scan_report += "RANKED ITEMS:\n"
+                    for si in scan_items:
+                        scan_report += (
+                            f"\n[Score {si.get('relevance_score',0)}/10 | "
+                            f"{si.get('relevance_label','')} | "
+                            f"{si.get('favourable_or_unfavourable','')}]\n"
+                            f"{si.get('title','')}\n"
+                            f"{si.get('how_it_affects_case','')}\n"
+                        )
+
+                    sc1, sc2 = st.columns(2)
+                    with sc1:
+                        st.download_button(
+                            "📥 Export Scan Report (TXT)",
+                            export_txt(scan_report, "Case Relevance Scan Report"),
+                            f"RelevanceScan_{datetime.now():%Y%m%d_%H%M}.txt",
+                            "text/plain", key="nf_scan_dl_txt", use_container_width=True,
+                        )
+                    with sc2:
+                        if st.button("🗑️ Clear Scan", key="nf_scan_clear", use_container_width=True):
+                            st.session_state["nf_scan_result"] = None
+                            st.rerun()
+
+        st.markdown("""<div class="disclaimer">
+            <strong>⚖️ Disclaimer:</strong> Relevance scores are AI-generated assessments.
+            Independent legal judgment is required before relying on any matched development.
+            Verify all citations against primary sources.
+        </div>""", unsafe_allow_html=True)
+
+
+# ═══════════════════════════════════════════════════════
 # PAGE: NOTES → LEGAL BRIEF CONVERTER
 # ═══════════════════════════════════════════════════════
 def render_notes_converter():
@@ -4883,6 +5987,8 @@ def main():
         "💰 Billing",
         "🔧 Tools",
         "📝 Notes → Brief",
+        "🎯 Witness Prep",
+        "📰 Legal News",
         "👤 Profile",
     ])
     
@@ -4914,6 +6020,10 @@ def main():
     with tabs[12]:
         render_notes_converter()
     with tabs[13]:
+        render_witness_prep()
+    with tabs[14]:
+        render_legal_news()
+    with tabs[15]:
         render_profile()
 
     # Footer
