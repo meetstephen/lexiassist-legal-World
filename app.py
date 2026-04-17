@@ -698,6 +698,19 @@ class Database:
                 key TEXT PRIMARY KEY,
                 value TEXT NOT NULL DEFAULT '[]'
             )""",
+            """CREATE TABLE IF NOT EXISTS users (
+                user_id TEXT PRIMARY KEY,
+                username TEXT UNIQUE NOT NULL,
+                email TEXT DEFAULT '',
+                password_hash TEXT NOT NULL,
+                firm_name TEXT DEFAULT '',
+                lawyer_name TEXT DEFAULT '',
+                phone TEXT DEFAULT '',
+                address TEXT DEFAULT '',
+                role TEXT DEFAULT 'user',
+                created_at TEXT DEFAULT '',
+                last_login TEXT DEFAULT ''
+            )""",
             """CREATE TABLE IF NOT EXISTS user_profile (
                 id INTEGER PRIMARY KEY CHECK (id = 1),
                 firm_name TEXT DEFAULT '',
@@ -716,7 +729,8 @@ class Database:
                 input_chars INTEGER DEFAULT 0,
                 output_chars INTEGER DEFAULT 0,
                 estimated_cost REAL DEFAULT 0,
-                query_preview TEXT DEFAULT ''
+                query_preview TEXT DEFAULT '',
+                user_id TEXT DEFAULT 'legacy'
             )""",
             """CREATE TABLE IF NOT EXISTS case_analyses (
                 id TEXT PRIMARY KEY,
@@ -725,18 +739,32 @@ class Database:
                 response TEXT,
                 task TEXT,
                 mode TEXT,
-                timestamp TEXT
+                timestamp TEXT,
+                user_id TEXT DEFAULT 'legacy'
             )""",
         ]
         for stmt in statements:
             self._execute(stmt)
-        self._execute(
-            "INSERT INTO user_profile (id) VALUES (1) ON CONFLICT DO NOTHING"
-        )
+        for tbl in ("cost_logs", "case_analyses"):
+            try:
+                self._execute(
+                    f"ALTER TABLE {tbl} ADD COLUMN IF NOT EXISTS user_id TEXT DEFAULT 'legacy'"
+                )
+            except Exception:
+                pass
+        self._execute("INSERT INTO user_profile (id) VALUES (1) ON CONFLICT DO NOTHING")
         self.conn.commit()
 
-    # ── KV Store ──
-    def save_list(self, key: str, data: list):
+    def _uid(self) -> str:
+        """Return current user_id from Streamlit session, fallback to 'legacy'."""
+        try:
+            uid = st.session_state.get("current_user_id", "")
+            return uid if uid else "legacy"
+        except Exception:
+            return "legacy"
+
+    # ── KV Store — raw (keep for internal use) ──
+    def _save_list_raw(self, key: str, data: list):
         self._execute(
             "INSERT INTO kv_store (key, value) VALUES (%s, %s) "
             "ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value",
@@ -744,10 +772,8 @@ class Database:
         )
         self.conn.commit()
 
-    def load_list(self, key: str) -> list:
-        cur = self._execute(
-            "SELECT value FROM kv_store WHERE key = %s", (key,)
-        )
+    def _load_list_raw(self, key: str) -> list:
+        cur = self._execute("SELECT value FROM kv_store WHERE key = %s", (key,))
         row = cur.fetchone()
         if row:
             try:
@@ -756,8 +782,24 @@ class Database:
                 return []
         return []
 
+    # ── KV Store — user-namespaced (primary API) ──
+    def save_list(self, key: str, data: list):
+        """Save data namespaced to the current user."""
+        uid = self._uid()
+        self._save_list_raw(f"u:{uid}:{key}", data)
+
+    def load_list(self, key: str) -> list:
+        """Load data namespaced to the current user."""
+        uid = self._uid()
+        return self._load_list_raw(f"u:{uid}:{key}")
+
     # ── User Profile ──
     def get_profile(self) -> dict:
+        """Load current user's profile from users table + extended kv fields."""
+        uid = self._uid()
+        if uid and uid != "legacy":
+            return self.get_user_profile(uid)
+        # Fallback for legacy / unauthenticated
         cur = self._execute(
             "SELECT firm_name, lawyer_name, email, phone, address, password_hash "
             "FROM user_profile WHERE id = 1"
@@ -769,45 +811,182 @@ class Database:
                 "email": row[2] or "", "phone": row[3] or "",
                 "address": row[4] or "", "password_hash": row[5] or "",
             }
-        return {
+        return {"firm_name": "", "lawyer_name": "", "email": "", "phone": "", "address": "", "password_hash": ""}
+
+    def save_profile(self, profile: dict):
+        """Save current user's profile."""
+        uid = self._uid()
+        if uid and uid != "legacy":
+            self.save_user_profile(uid, profile)
+        else:
+            self._execute(
+                "UPDATE user_profile SET firm_name=%s, lawyer_name=%s, email=%s, "
+                "phone=%s, address=%s, password_hash=%s WHERE id=1",
+                (
+                    profile.get("firm_name", ""), profile.get("lawyer_name", ""),
+                    profile.get("email", ""), profile.get("phone", ""),
+                    profile.get("address", ""), profile.get("password_hash", ""),
+                ),
+            )
+            self.conn.commit()
+
+    # ── Users table CRUD ──
+    def has_any_users(self) -> bool:
+        cur = self._execute("SELECT COUNT(*) FROM users")
+        return cur.fetchone()[0] > 0
+
+    def create_user(self, data: dict) -> bool:
+        try:
+            self._execute(
+                "INSERT INTO users (user_id, username, email, password_hash, firm_name, "
+                "lawyer_name, phone, address, role, created_at) "
+                "VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)",
+                (
+                    data.get("user_id", uuid.uuid4().hex[:12]),
+                    data.get("username", "").lower().strip(),
+                    data.get("email", ""),
+                    data.get("password_hash", ""),
+                    data.get("firm_name", ""),
+                    data.get("lawyer_name", ""),
+                    data.get("phone", ""),
+                    data.get("address", ""),
+                    data.get("role", "user"),
+                    datetime.now().isoformat(),
+                ),
+            )
+            self.conn.commit()
+            return True
+        except Exception as e:
+            logger.error(f"create_user failed: {e}")
+            try:
+                self.conn.rollback()
+            except Exception:
+                pass
+            return False
+
+    def get_user_by_username(self, username: str) -> Optional[dict]:
+        cur = self._execute(
+            "SELECT user_id, username, email, password_hash, firm_name, lawyer_name, "
+            "phone, address, role, created_at, last_login FROM users WHERE username = %s",
+            (username.lower().strip(),),
+        )
+        row = cur.fetchone()
+        if row:
+            return {
+                "user_id": row[0], "username": row[1], "email": row[2],
+                "password_hash": row[3], "firm_name": row[4], "lawyer_name": row[5],
+                "phone": row[6], "address": row[7], "role": row[8],
+                "created_at": row[9], "last_login": row[10],
+            }
+        return None
+
+    def get_user_by_id(self, user_id: str) -> Optional[dict]:
+        cur = self._execute(
+            "SELECT user_id, username, email, password_hash, firm_name, lawyer_name, "
+            "phone, address, role, created_at, last_login FROM users WHERE user_id = %s",
+            (user_id,),
+        )
+        row = cur.fetchone()
+        if row:
+            return {
+                "user_id": row[0], "username": row[1], "email": row[2],
+                "password_hash": row[3], "firm_name": row[4], "lawyer_name": row[5],
+                "phone": row[6], "address": row[7], "role": row[8],
+                "created_at": row[9], "last_login": row[10],
+            }
+        return None
+
+    def list_users(self) -> list:
+        cur = self._execute(
+            "SELECT user_id, username, email, firm_name, lawyer_name, role, created_at, last_login "
+            "FROM users ORDER BY created_at ASC"
+        )
+        rows = cur.fetchall()
+        return [
+            {
+                "user_id": r[0], "username": r[1], "email": r[2],
+                "firm_name": r[3], "lawyer_name": r[4], "role": r[5],
+                "created_at": r[6], "last_login": r[7],
+            }
+            for r in rows
+        ]
+
+    def update_user(self, user_id: str, updates: dict):
+        allowed = ("email", "password_hash", "firm_name", "lawyer_name",
+                   "phone", "address", "role", "last_login")
+        fields = [f"{k} = %s" for k in updates if k in allowed]
+        values = [v for k, v in updates.items() if k in allowed]
+        if not fields:
+            return
+        values.append(user_id)
+        self._execute(f"UPDATE users SET {', '.join(fields)} WHERE user_id = %s", values)
+        self.conn.commit()
+
+    def delete_user(self, user_id: str):
+        self._execute("DELETE FROM users WHERE user_id = %s", (user_id,))
+        self._execute("DELETE FROM case_analyses WHERE user_id = %s", (user_id,))
+        self._execute("DELETE FROM cost_logs WHERE user_id = %s", (user_id,))
+        self._execute("DELETE FROM kv_store WHERE key LIKE %s", (f"u:{user_id}:%",))
+        self.conn.commit()
+
+    def update_user_last_login(self, user_id: str):
+        self.update_user(user_id, {"last_login": datetime.now().isoformat()})
+
+    def get_user_profile(self, user_id: str) -> dict:
+        user = self.get_user_by_id(user_id)
+        base = {
             "firm_name": "", "lawyer_name": "", "email": "",
             "phone": "", "address": "", "password_hash": "",
         }
+        if user:
+            base.update({
+                "firm_name": user.get("firm_name", ""),
+                "lawyer_name": user.get("lawyer_name", ""),
+                "email": user.get("email", ""),
+                "phone": user.get("phone", ""),
+                "address": user.get("address", ""),
+                "password_hash": user.get("password_hash", ""),
+            })
+        # Merge extended profile fields (notification settings etc.)
+        ext_data = self._load_list_raw(f"u:{user_id}:profile_extended")
+        if ext_data and isinstance(ext_data, list) and ext_data:
+            base.update(ext_data[0])
+        return base
 
-    def save_profile(self, profile: dict):
-        self._execute(
-            "UPDATE user_profile SET firm_name=%s, lawyer_name=%s, email=%s, "
-            "phone=%s, address=%s, password_hash=%s WHERE id=1",
-            (
-                profile.get("firm_name", ""), profile.get("lawyer_name", ""),
-                profile.get("email", ""), profile.get("phone", ""),
-                profile.get("address", ""), profile.get("password_hash", ""),
-            ),
-        )
-        self.conn.commit()
+    def save_user_profile(self, user_id: str, profile: dict):
+        core_fields = ("firm_name", "lawyer_name", "email", "phone", "address", "password_hash")
+        core = {k: profile.get(k, "") for k in core_fields}
+        self.update_user(user_id, core)
+        # Save extended fields (notifications etc.) separately
+        extended = {k: v for k, v in profile.items() if k not in core_fields}
+        if extended:
+            self._save_list_raw(f"u:{user_id}:profile_extended", [extended])
 
-    # ── Cost Logs ──
+    # ── Cost Logs (user-scoped) ──
     def add_cost_log(self, entry: dict):
+        uid = self._uid()
         self._execute(
             "INSERT INTO cost_logs "
-            "(id, timestamp, model, task, mode, input_chars, output_chars, estimated_cost, query_preview) "
-            "VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s) ON CONFLICT DO NOTHING",
+            "(id, timestamp, model, task, mode, input_chars, output_chars, "
+            "estimated_cost, query_preview, user_id) "
+            "VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s) ON CONFLICT DO NOTHING",
             (
                 entry.get("id", uuid.uuid4().hex[:8]),
                 entry.get("timestamp", datetime.now().isoformat()),
                 entry.get("model", ""), entry.get("task", ""), entry.get("mode", ""),
                 entry.get("input_chars", 0), entry.get("output_chars", 0),
-                entry.get("estimated_cost", 0.0), entry.get("query_preview", ""),
+                entry.get("estimated_cost", 0.0), entry.get("query_preview", ""), uid,
             ),
         )
         self.conn.commit()
 
     def get_cost_logs(self, limit: int = 200) -> list:
+        uid = self._uid()
         cur = self._execute(
             "SELECT id, timestamp, model, task, mode, input_chars, output_chars, "
             "estimated_cost, query_preview FROM cost_logs "
-            "ORDER BY timestamp DESC LIMIT %s",
-            (limit,),
+            "WHERE user_id = %s ORDER BY timestamp DESC LIMIT %s",
+            (uid, limit),
         )
         rows = cur.fetchall()
         return [
@@ -820,18 +999,20 @@ class Database:
         ]
 
     def get_cost_summary(self) -> dict:
+        uid = self._uid()
         today = date.today().isoformat()
         month_start = date.today().replace(day=1).isoformat()
         total = self._execute(
-            "SELECT COALESCE(SUM(estimated_cost),0), COUNT(*) FROM cost_logs"
+            "SELECT COALESCE(SUM(estimated_cost),0), COUNT(*) FROM cost_logs WHERE user_id = %s",
+            (uid,)
         ).fetchone()
         daily = self._execute(
             "SELECT COALESCE(SUM(estimated_cost),0), COUNT(*) FROM cost_logs "
-            "WHERE timestamp >= %s", (today,)
+            "WHERE user_id = %s AND timestamp >= %s", (uid, today)
         ).fetchone()
         monthly = self._execute(
             "SELECT COALESCE(SUM(estimated_cost),0), COUNT(*) FROM cost_logs "
-            "WHERE timestamp >= %s", (month_start,)
+            "WHERE user_id = %s AND timestamp >= %s", (uid, month_start)
         ).fetchone()
         return {
             "total_cost": total[0], "total_calls": total[1],
@@ -839,25 +1020,27 @@ class Database:
             "monthly_cost": monthly[0], "monthly_calls": monthly[1],
         }
 
-    # ── Case Analyses ──
+    # ── Case Analyses (user-scoped) ──
     def add_case_analysis(self, case_id: str, data: dict):
+        uid = self._uid()
         self._execute(
-            "INSERT INTO case_analyses (id, case_id, query, response, task, mode, timestamp) "
-            "VALUES (%s, %s, %s, %s, %s, %s, %s) ON CONFLICT DO NOTHING",
+            "INSERT INTO case_analyses (id, case_id, query, response, task, mode, timestamp, user_id) "
+            "VALUES (%s, %s, %s, %s, %s, %s, %s, %s) ON CONFLICT DO NOTHING",
             (
                 data.get("id", uuid.uuid4().hex[:8]), case_id,
                 data.get("query", ""), data.get("response", ""),
                 data.get("task", ""), data.get("mode", ""),
-                data.get("timestamp", datetime.now().isoformat()),
+                data.get("timestamp", datetime.now().isoformat()), uid,
             ),
         )
         self.conn.commit()
 
     def get_case_analyses(self, case_id: str) -> list:
+        uid = self._uid()
         cur = self._execute(
             "SELECT id, query, response, task, mode, timestamp FROM case_analyses "
-            "WHERE case_id = %s ORDER BY timestamp DESC",
-            (case_id,),
+            "WHERE case_id = %s AND user_id = %s ORDER BY timestamp DESC",
+            (case_id, uid),
         )
         rows = cur.fetchall()
         return [
@@ -873,9 +1056,14 @@ class Database:
         self.conn.commit()
 
     def delete_case_analyses_for_case(self, case_id: str):
-        self._execute("DELETE FROM case_analyses WHERE case_id = %s", (case_id,))
+        uid = self._uid()
+        self._execute(
+            "DELETE FROM case_analyses WHERE case_id = %s AND user_id = %s",
+            (case_id, uid)
+        )
         self.conn.commit()
-# ── Lifecycle ──
+
+    # ── Lifecycle (user-scoped via namespaced kv) ──
     def save_lifecycle(self, case_id: str, data: dict):
         self.save_list(f"lifecycle_{case_id}", [data])
 
@@ -893,6 +1081,59 @@ class Database:
         if result and isinstance(result, list) and len(result) > 0:
             return result[0]
         return {}
+
+    # ── Migration: copy legacy un-namespaced data to a new user account ──
+    def has_legacy_data(self) -> bool:
+        for key in ("cases", "clients", "time_entries", "invoices", "chat_history"):
+            cur = self._execute("SELECT value FROM kv_store WHERE key = %s", (key,))
+            row = cur.fetchone()
+            if row and row[0] and row[0] not in ("[]", "{}", ""):
+                try:
+                    if json.loads(row[0]):
+                        return True
+                except Exception:
+                    pass
+        return False
+
+    def migrate_legacy_data_to_user(self, user_id: str) -> int:
+        migrated = 0
+        legacy_keys = ["cases", "clients", "time_entries", "invoices", "chat_history",
+                       "custom_templates", "custom_limitation_periods", "custom_maxims"]
+        for key in legacy_keys:
+            cur = self._execute("SELECT value FROM kv_store WHERE key = %s", (key,))
+            row = cur.fetchone()
+            if row and row[0] and row[0] != "[]":
+                namespaced = f"u:{user_id}:{key}"
+                self._execute(
+                    "INSERT INTO kv_store (key, value) VALUES (%s, %s) "
+                    "ON CONFLICT (key) DO NOTHING",
+                    (namespaced, row[0]),
+                )
+                migrated += 1
+        # Migrate lifecycle keys
+        cur2 = self._execute(
+            "SELECT key, value FROM kv_store WHERE key LIKE 'lifecycle_%'"
+        )
+        for lkey, lval in (cur2.fetchall() or []):
+            nkey = f"u:{user_id}:{lkey}"
+            self._execute(
+                "INSERT INTO kv_store (key, value) VALUES (%s, %s) ON CONFLICT DO NOTHING",
+                (nkey, lval),
+            )
+            migrated += 1
+        # Migrate case analyses
+        self._execute(
+            "UPDATE case_analyses SET user_id = %s WHERE user_id IN ('legacy', '') OR user_id IS NULL",
+            (user_id,)
+        )
+        # Migrate cost logs
+        self._execute(
+            "UPDATE cost_logs SET user_id = %s WHERE user_id IN ('legacy', '') OR user_id IS NULL",
+            (user_id,)
+        )
+        self.conn.commit()
+        return migrated
+
     def close(self):
         self.conn.close()
 
@@ -903,39 +1144,78 @@ def get_db() -> Database:
     return Database()
 
 def persist(key: str):
-    """Save a session_state list to SQLite."""
-    db = get_db()
-    db.save_list(key, st.session_state.get(key, []))
+    """Save a session_state list to DB under the current user's namespace."""
+    get_db().save_list(key, st.session_state.get(key, []))
 
 
 def persist_profile():
-    """Save profile to SQLite."""
+    """Save current user's full profile to DB."""
+    get_db().save_profile(st.session_state.get("profile", {}))
+
+
+def load_user_data():
+    """Load all user-specific data from DB into session state. Called once after login."""
+    if not st.session_state.get("current_user_id"):
+        return
     db = get_db()
-    db.save_profile(st.session_state.get("profile", {}))
+    st.session_state.cases = db.load_list("cases") or []
+    st.session_state.clients = db.load_list("clients") or []
+    st.session_state.time_entries = db.load_list("time_entries") or []
+    st.session_state.invoices = db.load_list("invoices") or []
+    st.session_state.chat_history = db.load_list("chat_history") or []
+    st.session_state.custom_templates = db.load_list("custom_templates") or []
+    st.session_state.custom_limitation_periods = db.load_list("custom_limitation_periods") or []
+    st.session_state.custom_maxims = db.load_list("custom_maxims") or []
+    st.session_state.profile = db.get_profile()
 
 
 # ═══════════════════════════════════════════════════════
-# AUTH
+# MULTI-USER AUTH
 # ═══════════════════════════════════════════════════════
 def hash_password(password: str) -> str:
     return hashlib.sha256(password.encode()).hexdigest()
 
 
-def is_auth_required() -> bool:
+def is_allow_registration() -> bool:
     try:
-        return str(st.secrets["AUTH_ENABLED"]).lower() == "true"
+        return str(st.secrets.get("ALLOW_REGISTRATION", "false")).lower() == "true"
     except Exception:
-        return os.getenv("AUTH_ENABLED", "").lower() == "true"
+        return os.getenv("ALLOW_REGISTRATION", "false").lower() == "true"
 
 
-def check_auth() -> bool:
-    """Return True if user is authenticated or auth is not required."""
-    if not is_auth_required():
-        return True
-    profile = st.session_state.get("profile", {})
-    if not profile.get("password_hash"):
-        return True  # No password set yet
-    return st.session_state.get("authenticated", False)
+def do_login(username: str, password: str) -> bool:
+    """Authenticate user, load their data into session. Returns True on success."""
+    db = get_db()
+    user = db.get_user_by_username(username.strip())
+    if not user:
+        return False
+    if hash_password(password) != user["password_hash"]:
+        return False
+    st.session_state.authenticated = True
+    st.session_state.current_user_id = user["user_id"]
+    st.session_state.current_username = user["username"]
+    st.session_state.current_user_role = user["role"]
+    db.update_user_last_login(user["user_id"])
+    load_user_data()
+    st.session_state.user_data_loaded = True
+    return True
+
+
+def do_logout():
+    """Clear all user-specific session state and force re-login."""
+    clear_keys = [
+        "authenticated", "current_user_id", "current_username", "current_user_role",
+        "user_data_loaded", "cases", "clients", "time_entries", "invoices",
+        "chat_history", "custom_templates", "custom_limitation_periods", "custom_maxims",
+        "profile", "last_response", "original_query", "research_results",
+        "loaded_template", "imported_doc",
+        "wp_result", "wp_role_label", "wp_facts_saved", "wp_reexam_result",
+        "wp_witness_log", "wp_contra_result",
+        "nf_feed_data", "nf_subject_loaded", "nf_deepdive", "nf_bookmarks", "nf_scan_result",
+    ]
+    for k in clear_keys:
+        st.session_state.pop(k, None)
+    st.rerun()
 
 
 def render_login_screen():
@@ -944,27 +1224,140 @@ def render_login_screen():
     <div class="hero">
         <h1>⚖️ LexiAssist v8.0</h1>
         <p>Elite AI Legal Engine for Nigerian Lawyers</p>
-    </div>
-    """, unsafe_allow_html=True)
-    st.markdown("### 🔐 Authentication Required")
-    with st.form("login_form"):
-        password = st.text_input("Enter Password", type="password", key="login_pw")
-        if st.form_submit_button("🔐 Login", type="primary", use_container_width=True):
-            profile = st.session_state.get("profile", {})
-            if hash_password(password) == profile.get("password_hash", ""):
-                st.session_state.authenticated = True
-                st.rerun()
+    </div>""", unsafe_allow_html=True)
+
+    col1, col2, col3 = st.columns([1, 2, 1])
+    with col2:
+        st.markdown("### 🔐 Sign In to Your Account")
+        tab_login, tab_reg = st.tabs(
+            ["🔐 Login", "📝 Register"] if is_allow_registration() else ["🔐 Login"]
+        )
+
+        with tab_login:
+            with st.form("login_form", clear_on_submit=False):
+                username_inp = st.text_input(
+                    "Username", placeholder="your.username", key="login_username_inp"
+                )
+                password_inp = st.text_input(
+                    "Password", type="password", key="login_password_inp"
+                )
+                if st.form_submit_button("🔐 Sign In", type="primary", use_container_width=True):
+                    if not username_inp.strip() or not password_inp:
+                        st.error("❌ Enter both username and password.")
+                    elif do_login(username_inp.strip(), password_inp):
+                        st.success(f"✅ Welcome, {st.session_state.current_username}!")
+                        time.sleep(0.5)
+                        st.rerun()
+                    else:
+                        st.error("❌ Invalid username or password.")
+
+        if is_allow_registration() and len(st.tabs(["x"])) > 0:
+            with tab_reg:
+                render_register_form("reg_self")
+
+        st.markdown("""
+<div style="text-align:center;margin-top:1.5rem;color:#64748b;font-size:0.85rem;">
+  Contact your firm administrator to create an account, or ask them to enable
+  self-registration via <code>ALLOW_REGISTRATION = "true"</code> in Streamlit secrets.
+</div>""", unsafe_allow_html=True)
+
+
+def render_register_form(key_prefix: str, admin_mode: bool = False):
+    """Reusable registration / account-creation form."""
+    db = get_db()
+    is_first_user = not db.has_any_users()
+
+    with st.form(f"{key_prefix}_form", clear_on_submit=True):
+        r1, r2 = st.columns(2)
+        with r1:
+            reg_username = st.text_input("Username *", placeholder="e.g. amaka.obi", key=f"{key_prefix}_uname")
+            reg_pw = st.text_input("Password *", type="password", key=f"{key_prefix}_pw")
+            reg_confirm = st.text_input("Confirm Password *", type="password", key=f"{key_prefix}_confirm")
+        with r2:
+            reg_lawyer = st.text_input("Full Name *", placeholder="Barr. Amaka Obi", key=f"{key_prefix}_lname")
+            reg_firm = st.text_input("Firm Name", placeholder="Obi & Associates", key=f"{key_prefix}_firm")
+            reg_email = st.text_input("Email", placeholder="amaka@obilaw.com", key=f"{key_prefix}_email")
+
+        role_options = ["user", "admin"] if admin_mode else ["user"]
+        reg_role = st.selectbox("Role", role_options, key=f"{key_prefix}_role") if admin_mode else "user"
+
+        btn_label = "🛡️ Create Admin Account" if is_first_user else "✅ Create Account"
+        if st.form_submit_button(btn_label, type="primary", use_container_width=True):
+            uname = reg_username.strip().lower()
+            if not uname or not reg_pw or not reg_lawyer.strip():
+                st.error("❌ Username, password, and full name are required.")
+                return False
+            if len(uname) < 3:
+                st.error("❌ Username must be at least 3 characters.")
+                return False
+            if reg_pw != reg_confirm:
+                st.error("❌ Passwords do not match.")
+                return False
+            if len(reg_pw) < 6:
+                st.error("❌ Password must be at least 6 characters.")
+                return False
+            if db.get_user_by_username(uname):
+                st.error(f"❌ Username '{uname}' is already taken.")
+                return False
+
+            role = "admin" if (is_first_user or reg_role == "admin") else "user"
+            user_id = uuid.uuid4().hex[:12]
+            ok = db.create_user({
+                "user_id": user_id,
+                "username": uname,
+                "password_hash": hash_password(reg_pw),
+                "firm_name": reg_firm.strip(),
+                "lawyer_name": reg_lawyer.strip(),
+                "email": reg_email.strip(),
+                "role": role,
+            })
+            if ok:
+                if is_first_user:
+                    # Migrate any legacy data to this admin account
+                    migrated = db.migrate_legacy_data_to_user(user_id)
+                    if migrated > 0:
+                        st.info(f"ℹ️ {migrated} legacy data item(s) migrated to your account.")
+                if not admin_mode:
+                    # Auto-login after self-registration
+                    do_login(uname, reg_pw)
+                    st.success(f"✅ Account created! Welcome, {reg_lawyer.strip()}.")
+                    time.sleep(0.5)
+                    st.rerun()
+                else:
+                    st.success(f"✅ Account created for {reg_lawyer.strip()} (@{uname}) [{role}].")
+                return True
             else:
-                st.error("❌ Incorrect password.")
+                st.error("❌ Account creation failed. Try a different username.")
+                return False
+    return False
+
+
+def render_create_admin_screen():
+    """First-run screen shown when no users exist in the database."""
+    st.markdown(get_theme_css(st.session_state.get("theme", "🌿 Emerald")), unsafe_allow_html=True)
+    st.markdown("""
+    <div class="hero">
+        <h1>⚖️ LexiAssist v8.0</h1>
+        <p>Elite AI Legal Engine for Nigerian Lawyers</p>
+    </div>""", unsafe_allow_html=True)
+
+    col1, col2, col3 = st.columns([1, 2, 1])
+    with col2:
+        st.markdown("""
+<div style="background:#f0fdf4;border:2px solid #059669;border-radius:1rem;
+padding:1.5rem;margin-bottom:1.5rem;text-align:center;">
+  <h3 style="margin:0 0 0.5rem 0;color:#059669;">🛡️ First-Time Setup</h3>
+  <p style="margin:0;color:#374151;">Create your Admin account to get started.
+  You can add other users from the Admin panel after logging in.</p>
+</div>""", unsafe_allow_html=True)
+        render_register_form("admin_create", admin_mode=False)
 
 
 # ═══════════════════════════════════════════════════════
 # SESSION STATE INITIALIZATION
 # ═══════════════════════════════════════════════════════
 def init_session_state():
-    """Load persisted data from SQLite on first access; set defaults."""
-    db = get_db()
-
+    """Set non-user-specific session defaults. Called every render cycle."""
     simple_defaults = {
         "api_key": "",
         "api_configured": False,
@@ -972,6 +1365,10 @@ def init_session_state():
         "theme": "🌿 Emerald",
         "response_mode": "standard",
         "authenticated": False,
+        "current_user_id": "",
+        "current_username": "",
+        "current_user_role": "",
+        "user_data_loaded": False,
         "last_response": "",
         "original_query": "",
         "last_task": "general",
@@ -985,18 +1382,6 @@ def init_session_state():
     for k, v in simple_defaults.items():
         if k not in st.session_state:
             st.session_state[k] = v
-
-    if "db_loaded" not in st.session_state:
-        st.session_state.cases = db.load_list("cases") or []
-        st.session_state.clients = db.load_list("clients") or []
-        st.session_state.time_entries = db.load_list("time_entries") or []
-        st.session_state.invoices = db.load_list("invoices") or []
-        st.session_state.chat_history = db.load_list("chat_history") or []
-        st.session_state.custom_templates = db.load_list("custom_templates") or []
-        st.session_state.custom_limitation_periods = db.load_list("custom_limitation_periods") or []
-        st.session_state.custom_maxims = db.load_list("custom_maxims") or []
-        st.session_state.profile = db.get_profile()
-        st.session_state.db_loaded = True
 
 
 # ═══════════════════════════════════════════════════════
@@ -1537,7 +1922,7 @@ def render_setup_screen():
 
     st.divider()
     st.caption("💡 **Tip:** To skip this screen permanently, add to `.streamlit/secrets.toml`:")
-    st.code('GEMINI_API_KEY = "your-key-here"\nGEMINI_MODEL = "gemini-2.5-flash"\n# AUTH_ENABLED = "true"  # optional login', language="toml")
+    st.code('GEMINI_API_KEY = "your-key-here"\nGEMINI_MODEL = "gemini-2.5-flash"\n# ALLOW_REGISTRATION = "true"  # let users self-register', language="toml")
 
 
 # ═══════════════════════════════════════════════════════
@@ -1552,6 +1937,21 @@ def render_sidebar():
         else:
             st.markdown("### ⚖️ LexiAssist v8.0")
             st.caption("Elite AI Legal Engine")
+        st.divider()
+
+        # ── Logged-in user ──
+        uname = st.session_state.get("current_username", "")
+        urole = st.session_state.get("current_user_role", "")
+        if uname:
+            role_badge = "🛡️ Admin" if urole == "admin" else "👤 User"
+            st.markdown(f"""
+<div style="background:#f0fdf4;border:1px solid #059669;border-radius:0.6rem;
+padding:0.6rem 0.8rem;margin-bottom:0.5rem;">
+  <div style="font-weight:700;color:#059669;">@{esc(uname)}</div>
+  <div style="font-size:0.78rem;color:#64748b;">{role_badge}</div>
+</div>""", unsafe_allow_html=True)
+            if st.button("🚪 Sign Out", key="sidebar_logout_btn", use_container_width=True):
+                do_logout()
         st.divider()
 
         # Status Metrics
@@ -5775,64 +6175,53 @@ def render_profile():
             st.info("⚙️ Configure your email settings in the form above to enable reminders.")
         else:
             st.info("✅ No hearings within the next 7 days. You are clear.")
-    # ── Security ──
+    # ── Security / Account ──
     with tab_security:
-        st.markdown("#### 🔐 Password Protection")
-        st.caption("Set a password to require login when `AUTH_ENABLED = \"true\"` is in your Streamlit secrets.")
+        st.markdown("#### 🔐 Account Security")
+        st.caption(f"Logged in as: **@{esc(st.session_state.get('current_username',''))}** · "
+                   f"Role: **{esc(st.session_state.get('current_user_role','').title())}**")
 
-        has_password = bool(profile.get("password_hash"))
-
-        if has_password:
-            st.success("✅ Password is set.")
-            st.markdown("##### Change or Remove Password")
-
-            with st.form("change_pw_form"):
-                current_pw = st.text_input("Current Password", type="password", key="cur_pw_inp")
-                new_pw = st.text_input("New Password (leave blank to remove)", type="password", key="new_pw_inp")
-                confirm_pw = st.text_input("Confirm New Password", type="password", key="confirm_pw_inp")
-
-                if st.form_submit_button("🔐 Update Password", type="primary"):
-                    if hash_password(current_pw) != profile["password_hash"]:
-                        st.error("❌ Current password is incorrect.")
-                    elif new_pw and new_pw != confirm_pw:
-                        st.error("❌ New passwords do not match.")
-                    elif not new_pw:
-                        st.session_state.profile["password_hash"] = ""
-                        persist_profile()
-                        st.success("✅ Password removed. Login will no longer be required.")
-                        st.rerun()
-                    else:
-                        st.session_state.profile["password_hash"] = hash_password(new_pw)
-                        persist_profile()
-                        st.success("✅ Password updated!")
-                        st.rerun()
-        else:
-            st.info("No password set. Anyone with access to the app URL can use it.")
-            st.markdown("##### Set a Password")
-
-            with st.form("set_pw_form"):
-                new_pw = st.text_input("New Password", type="password", key="set_pw_inp")
-                confirm_pw = st.text_input("Confirm Password", type="password", key="set_confirm_pw_inp")
-
-                if st.form_submit_button("🔐 Set Password", type="primary"):
-                    if not new_pw:
-                        st.error("❌ Password cannot be empty.")
-                    elif new_pw != confirm_pw:
-                        st.error("❌ Passwords do not match.")
-                    else:
-                        st.session_state.profile["password_hash"] = hash_password(new_pw)
-                        persist_profile()
-                        st.success("✅ Password set! Enable `AUTH_ENABLED = \"true\"` in secrets to require login.")
-                        st.rerun()
+        st.markdown("##### 🔑 Change Password")
+        with st.form("change_pw_form"):
+            current_pw = st.text_input("Current Password", type="password", key="cur_pw_inp")
+            new_pw = st.text_input("New Password", type="password", key="new_pw_inp")
+            confirm_pw = st.text_input("Confirm New Password", type="password", key="confirm_pw_inp")
+            if st.form_submit_button("🔐 Update Password", type="primary"):
+                if hash_password(current_pw) != profile.get("password_hash", ""):
+                    st.error("❌ Current password is incorrect.")
+                elif not new_pw:
+                    st.error("❌ New password cannot be empty.")
+                elif len(new_pw) < 6:
+                    st.error("❌ Password must be at least 6 characters.")
+                elif new_pw != confirm_pw:
+                    st.error("❌ New passwords do not match.")
+                else:
+                    st.session_state.profile["password_hash"] = hash_password(new_pw)
+                    persist_profile()
+                    st.success("✅ Password updated successfully!")
+                    st.rerun()
 
         st.markdown("---")
-        st.markdown("##### 🔧 Auth Configuration")
-        auth_enabled = is_auth_required()
-        if auth_enabled:
-            st.success("🔒 AUTH_ENABLED = true — Login is required on startup")
-        else:
-            st.info("🔓 AUTH_ENABLED is not set — Login is not required")
-        st.caption("Set `AUTH_ENABLED = \"true\"` in `.streamlit/secrets.toml` to enforce login.")
+        st.markdown("##### 📋 Account Information")
+        uid = st.session_state.get("current_user_id", "")
+        if uid:
+            db = get_db()
+            user_rec = db.get_user_by_id(uid)
+            if user_rec:
+                ai1, ai2 = st.columns(2)
+                with ai1:
+                    st.metric("Username", f"@{user_rec.get('username','')}")
+                    st.metric("Role", user_rec.get("role", "").title())
+                with ai2:
+                    st.metric("Joined", fmt_date(user_rec.get("created_at", "")))
+                    st.metric("Last Login", fmt_date(user_rec.get("last_login", "")))
+
+        st.markdown("---")
+        st.markdown("##### 🚪 Sign Out")
+        st.caption("Signs you out and returns to the login screen. Your data is saved.")
+        if st.button("🚪 Sign Out Now", key="profile_logout_btn",
+                     use_container_width=True, type="primary"):
+            do_logout()
 
     # ── Data Management ──
     with tab_data:
@@ -5947,33 +6336,162 @@ def render_profile():
 
 
 # ═══════════════════════════════════════════════════════
+# PAGE: ADMIN — USER MANAGEMENT
+# ═══════════════════════════════════════════════════════
+def render_user_management():
+    if st.session_state.get("current_user_role") != "admin":
+        st.error("🚫 Admin access required.")
+        return
+
+    st.markdown("""<div class="page-header">
+        <h2>🛡️ User Management</h2>
+        <p>Create accounts, manage roles, reset passwords, and remove users</p>
+    </div>""", unsafe_allow_html=True)
+
+    db = get_db()
+    um_list, um_create, um_stats = st.tabs(["👥 All Users", "➕ Create User", "📊 Usage Stats"])
+
+    # ── All Users ──
+    with um_list:
+        users = db.list_users()
+        current_uid = st.session_state.get("current_user_id", "")
+        st.markdown(f"##### 👥 {len(users)} Registered User(s)")
+
+        for user in users:
+            uid = user["user_id"]
+            is_self = (uid == current_uid)
+            role_color = "#059669" if user["role"] == "admin" else "#3b82f6"
+            role_label = "🛡️ Admin" if user["role"] == "admin" else "👤 User"
+
+            with st.expander(
+                f"{role_label} · @{user['username']} — {user.get('lawyer_name','') or user.get('firm_name','') or ''}",
+                expanded=False,
+            ):
+                u1, u2, u3 = st.columns(3)
+                with u1:
+                    st.markdown(f"**Username:** @{esc(user['username'])}")
+                    st.markdown(f"**Role:** {role_label}")
+                    st.markdown(f"**Email:** {esc(user.get('email','') or '—')}")
+                with u2:
+                    st.markdown(f"**Full Name:** {esc(user.get('lawyer_name','') or '—')}")
+                    st.markdown(f"**Firm:** {esc(user.get('firm_name','') or '—')}")
+                with u3:
+                    st.markdown(f"**Joined:** {esc(fmt_date(user.get('created_at','')))}")
+                    st.markdown(f"**Last Login:** {esc(fmt_date(user.get('last_login','')))}")
+
+                st.markdown("---")
+                act1, act2, act3 = st.columns(3)
+
+                # Change role
+                with act1:
+                    if not is_self:
+                        new_role = "user" if user["role"] == "admin" else "admin"
+                        role_btn_label = f"⬇️ Demote to User" if user["role"] == "admin" else "⬆️ Promote to Admin"
+                        if st.button(role_btn_label, key=f"um_role_{uid}", use_container_width=True):
+                            db.update_user(uid, {"role": new_role})
+                            st.success(f"✅ @{user['username']} is now {new_role}.")
+                            st.rerun()
+                    else:
+                        st.caption("(Your own account)")
+
+                # Reset password
+                with act2:
+                    with st.popover(f"🔑 Reset Password", use_container_width=True):
+                        with st.form(f"reset_pw_{uid}"):
+                            new_temp_pw = st.text_input("New Password", type="password", key=f"tmp_pw_{uid}")
+                            if st.form_submit_button("✅ Set Password"):
+                                if len(new_temp_pw) < 6:
+                                    st.error("Min 6 characters.")
+                                else:
+                                    db.update_user(uid, {"password_hash": hash_password(new_temp_pw)})
+                                    st.success(f"✅ Password reset for @{user['username']}.")
+
+                # Delete user
+                with act3:
+                    if not is_self:
+                        with st.popover(f"🗑️ Delete User", use_container_width=True):
+                            st.warning(f"Delete @{user['username']}? ALL their data will be permanently erased.")
+                            if st.button(f"⚠️ Confirm Delete @{user['username']}",
+                                         key=f"um_del_confirm_{uid}", type="primary"):
+                                db.delete_user(uid)
+                                st.success(f"✅ @{user['username']} deleted.")
+                                st.rerun()
+                    else:
+                        st.caption("Cannot delete yourself.")
+
+    # ── Create User ──
+    with um_create:
+        st.markdown("##### ➕ Create a New User Account")
+        st.caption("Create accounts for colleagues at your firm. They can log in immediately.")
+        render_register_form("admin_new_user", admin_mode=True)
+
+    # ── Usage Stats ──
+    with um_stats:
+        st.markdown("##### 📊 Platform Usage by User")
+        users = db.list_users()
+        if not users:
+            st.info("No users yet.")
+        else:
+            for user in users:
+                uid = user["user_id"]
+                cur = db._execute(
+                    "SELECT COUNT(*), COALESCE(SUM(estimated_cost),0) FROM cost_logs WHERE user_id = %s",
+                    (uid,)
+                )
+                row = cur.fetchone()
+                calls, cost = (row[0], row[1]) if row else (0, 0)
+                cur2 = db._execute(
+                    "SELECT COUNT(*) FROM kv_store WHERE key LIKE %s", (f"u:{uid}:cases",)
+                )
+                # Get case count from namespaced kv
+                st.markdown(f"""
+<div class="custom-card">
+  <div style="display:flex;justify-content:space-between;">
+    <strong>@{esc(user['username'])}</strong>
+    <span class="badge {'badge-ok' if user['role'] == 'admin' else 'badge-info'}">
+      {'Admin' if user['role'] == 'admin' else 'User'}
+    </span>
+  </div>
+  <small>🤖 {calls} AI calls · 💰 ${cost:.4f} estimated cost · 
+  🕐 Last login: {esc(fmt_date(user.get('last_login','')))}
+  </small>
+</div>""", unsafe_allow_html=True)
+
+
+# ═══════════════════════════════════════════════════════
 # MAIN ENTRY POINT
 # ═══════════════════════════════════════════════════════
 def main():
-    # Initialise session state from SQLite
     init_session_state()
-
-    # Auto-connect API from secrets/env
     auto_connect()
-
-    # Apply selected theme CSS
     st.markdown(get_theme_css(st.session_state.theme), unsafe_allow_html=True)
 
-    # If no API key available, show secure setup screen
+    # ── API setup gate ──
     if not st.session_state.api_configured:
         render_setup_screen()
         return
 
-    # Auth check
-    if not check_auth():
-        render_login_screen()
+    db = get_db()
+
+    # ── Auth gate ──
+    if not st.session_state.authenticated:
+        if not db.has_any_users():
+            render_create_admin_screen()
+        else:
+            render_login_screen()
         return
 
-    # Render sidebar
+    # ── Load user data exactly once per session ──
+    if not st.session_state.user_data_loaded:
+        load_user_data()
+        st.session_state.user_data_loaded = True
+
     render_sidebar()
 
+    is_admin = (st.session_state.current_user_role == "admin")
+
     # ── TOP NAVIGATION TABS ──
-    tabs = st.tabs([
+    tab_labels = [
         "🏠 Home",
         "🧠 AI Assistant",
         "📚 Research",
@@ -5990,47 +6508,41 @@ def main():
         "🎯 Witness Prep",
         "📰 Legal News",
         "👤 Profile",
-    ])
-    
+    ]
+    if is_admin:
+        tab_labels.append("🛡️ Admin")
 
-    with tabs[0]:
-        render_home()
-    with tabs[1]:
-        render_ai()
-    with tabs[2]:
-        render_research()
-    with tabs[3]:
-        render_cases()
-    with tabs[4]:
-        render_lifecycle()
-    with tabs[5]:
-        render_pleadings()
-    with tabs[6]:
-        render_conflict_checker()
-    with tabs[7]:
-        render_calendar()
-    with tabs[8]:
-        render_templates()
-    with tabs[9]:
-        render_clients()
-    with tabs[10]:
-        render_billing()
-    with tabs[11]:
-        render_tools()
-    with tabs[12]:
-        render_notes_converter()
-    with tabs[13]:
-        render_witness_prep()
-    with tabs[14]:
-        render_legal_news()
-    with tabs[15]:
-        render_profile()
+    tabs = st.tabs(tab_labels)
+
+    with tabs[0]:  render_home()
+    with tabs[1]:  render_ai()
+    with tabs[2]:  render_research()
+    with tabs[3]:  render_cases()
+    with tabs[4]:  render_lifecycle()
+    with tabs[5]:  render_pleadings()
+    with tabs[6]:  render_conflict_checker()
+    with tabs[7]:  render_calendar()
+    with tabs[8]:  render_templates()
+    with tabs[9]:  render_clients()
+    with tabs[10]: render_billing()
+    with tabs[11]: render_tools()
+    with tabs[12]: render_notes_converter()
+    with tabs[13]: render_witness_prep()
+    with tabs[14]: render_legal_news()
+    with tabs[15]: render_profile()
+    if is_admin:
+        with tabs[16]: render_user_management()
 
     # Footer
     st.markdown("---")
     firm = get_firm_name()
     firm_text = f"{esc(firm)} · " if firm and firm != "LexiAssist" else ""
-    st.caption(f"⚖️ {firm_text}LexiAssist v8.0 © 2026 · Elite AI Legal Engine for Nigerian Lawyers · ⚠️ AI-generated information — not legal advice — verify all citations independently")
+    uname = st.session_state.get("current_username", "")
+    user_text = f" · Signed in as @{esc(uname)}" if uname else ""
+    st.caption(
+        f"⚖️ {firm_text}LexiAssist v8.0 © 2026 · Elite AI Legal Engine for Nigerian Lawyers"
+        f"{user_text} · ⚠️ AI-generated information — not legal advice — verify all citations independently"
+    )
 
 
 if __name__ == "__main__":
