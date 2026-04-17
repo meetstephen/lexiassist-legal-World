@@ -681,19 +681,48 @@ class Database:
         return conn
 
     def _execute(self, sql: str, params=None):
-        """Execute with auto-reconnect on stale connection."""
+        """Execute with auto-reconnect and transaction-error recovery."""
         try:
             cur = self.conn.cursor()
             cur.execute(sql, params or ())
             return cur
         except (psycopg2.OperationalError, psycopg2.InterfaceError):
+            # Stale connection — reconnect and retry
+            try:
+                self.conn.rollback()
+            except Exception:
+                pass
             self.conn = self._connect()
             cur = self.conn.cursor()
             cur.execute(sql, params or ())
             return cur
+        except psycopg2.Error:
+            # Transaction aborted — roll back so the connection is usable again
+            try:
+                self.conn.rollback()
+            except Exception:
+                pass
+            raise
+
+    def _exec_ddl(self, sql: str):
+        """Run a single DDL statement in its own isolated transaction.
+        If it fails (e.g. object already exists in a different form), roll back
+        cleanly so the connection stays usable for the next statement."""
+        try:
+            cur = self.conn.cursor()
+            cur.execute(sql)
+            self.conn.commit()
+        except psycopg2.Error as e:
+            try:
+                self.conn.rollback()
+            except Exception:
+                pass
+            logger.warning(f"DDL skipped (non-fatal): {e!s:.120}")
 
     def _init_tables(self):
-        statements = [
+        # Each statement runs in its own transaction so one failure never
+        # poisons subsequent DDL (PostgreSQL aborts the whole txn on error).
+        ddl_statements = [
             """CREATE TABLE IF NOT EXISTS kv_store (
                 key TEXT PRIMARY KEY,
                 value TEXT NOT NULL DEFAULT '[]'
@@ -743,44 +772,19 @@ class Database:
                 user_id TEXT DEFAULT 'legacy'
             )""",
         ]
-        
-        # 1. Create tables
-        for stmt in statements:
-            try:
-                self._execute(stmt)
-            except Exception:
-                self.conn.rollback()
+        for stmt in ddl_statements:
+            self._exec_ddl(stmt)
 
-        # 2. Migrate existing 'users' table safely
-        user_migrations = [
-            "ALTER TABLE users ADD COLUMN IF NOT EXISTS phone TEXT DEFAULT '';",
-            "ALTER TABLE users ADD COLUMN IF NOT EXISTS address TEXT DEFAULT '';",
-            "ALTER TABLE users ADD COLUMN IF NOT EXISTS role TEXT DEFAULT 'user';",
-            "ALTER TABLE users ADD COLUMN IF NOT EXISTS created_at TEXT DEFAULT '';",
-            "ALTER TABLE users ADD COLUMN IF NOT EXISTS last_login TEXT DEFAULT '';"
-        ]
-        for mig in user_migrations:
-            try:
-                self._execute(mig)
-            except Exception:
-                self.conn.rollback()
-
-        # 3. Migrate cost_logs and case_analyses safely
+        # Safely add columns to existing tables — each in its own transaction
         for tbl in ("cost_logs", "case_analyses"):
-            try:
-                self._execute(
-                    f"ALTER TABLE {tbl} ADD COLUMN IF NOT EXISTS user_id TEXT DEFAULT 'legacy'"
-                )
-            except Exception:
-                self.conn.rollback()
+            self._exec_ddl(
+                f"ALTER TABLE {tbl} ADD COLUMN IF NOT EXISTS user_id TEXT DEFAULT 'legacy'"
+            )
 
-        # 4. Insert default profile
-        try:
-            self._execute("INSERT INTO user_profile (id) VALUES (1) ON CONFLICT DO NOTHING")
-        except Exception:
-            self.conn.rollback()
-            
-        self.conn.commit()
+        # Ensure legacy profile row exists
+        self._exec_ddl(
+            "INSERT INTO user_profile (id) VALUES (1) ON CONFLICT DO NOTHING"
+        )
 
     def _uid(self) -> str:
         """Return current user_id from Streamlit session, fallback to 'legacy'."""
@@ -1163,6 +1167,21 @@ class Database:
 
     def close(self):
         self.conn.close()
+
+    def ensure_connected(self):
+        """Ping the connection; reconnect + re-init tables if dead."""
+        try:
+            self.conn.cursor().execute("SELECT 1")
+        except Exception:
+            try:
+                self.conn.rollback()
+            except Exception:
+                pass
+            try:
+                self.conn = self._connect()
+                self._init_tables()
+            except Exception as e:
+                logger.error(f"DB reconnect failed: {e}")
 
 
 @st.cache_resource
@@ -6499,6 +6518,7 @@ def main():
         return
 
     db = get_db()
+    db.ensure_connected()  # heal stale/aborted connections before any DB work
 
     # ── Auth gate ──
     if not st.session_state.authenticated:
