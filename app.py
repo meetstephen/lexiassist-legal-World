@@ -720,92 +720,109 @@ class Database:
             logger.warning(f"DDL skipped (non-fatal): {e!s:.120}")
 
     def _init_tables(self):
-        # Each statement runs in its own transaction so one failure never
-        # poisons subsequent DDL (PostgreSQL aborts the whole txn on error).
+        # ── Step 1: Create tables that do NOT yet exist ──────────────────────
+        # CREATE TABLE IF NOT EXISTS is a no-op when the table already exists,
+        # so it is safe to run every startup.  The users table is created here
+        # WITHOUT a PRIMARY KEY constraint so it works even if the table already
+        # exists with a different schema; constraints are added via indexes below.
         ddl_statements = [
             """CREATE TABLE IF NOT EXISTS kv_store (
-                key TEXT PRIMARY KEY,
+                key   TEXT PRIMARY KEY,
                 value TEXT NOT NULL DEFAULT '[]'
             )""",
+            # Note: no PRIMARY KEY / UNIQUE here — those are handled as indexes
+            # below so they never conflict with pre-existing table definitions.
             """CREATE TABLE IF NOT EXISTS users (
-                user_id TEXT PRIMARY KEY,
-                username TEXT UNIQUE NOT NULL,
-                email TEXT DEFAULT '',
-                password_hash TEXT NOT NULL,
-                firm_name TEXT DEFAULT '',
-                lawyer_name TEXT DEFAULT '',
-                phone TEXT DEFAULT '',
-                address TEXT DEFAULT '',
-                role TEXT DEFAULT 'user',
-                created_at TEXT DEFAULT '',
-                last_login TEXT DEFAULT ''
+                created_at TEXT DEFAULT ''
             )""",
             """CREATE TABLE IF NOT EXISTS user_profile (
-                id INTEGER PRIMARY KEY CHECK (id = 1),
-                firm_name TEXT DEFAULT '',
-                lawyer_name TEXT DEFAULT '',
-                email TEXT DEFAULT '',
-                phone TEXT DEFAULT '',
-                address TEXT DEFAULT '',
+                id            INTEGER PRIMARY KEY CHECK (id = 1),
+                firm_name     TEXT DEFAULT '',
+                lawyer_name   TEXT DEFAULT '',
+                email         TEXT DEFAULT '',
+                phone         TEXT DEFAULT '',
+                address       TEXT DEFAULT '',
                 password_hash TEXT DEFAULT ''
             )""",
             """CREATE TABLE IF NOT EXISTS cost_logs (
-                id TEXT PRIMARY KEY,
-                timestamp TEXT,
-                model TEXT,
-                task TEXT,
-                mode TEXT,
-                input_chars INTEGER DEFAULT 0,
-                output_chars INTEGER DEFAULT 0,
-                estimated_cost REAL DEFAULT 0,
-                query_preview TEXT DEFAULT '',
-                user_id TEXT DEFAULT 'legacy'
+                id             TEXT PRIMARY KEY,
+                timestamp      TEXT,
+                model          TEXT,
+                task           TEXT,
+                mode           TEXT,
+                input_chars    INTEGER DEFAULT 0,
+                output_chars   INTEGER DEFAULT 0,
+                estimated_cost REAL    DEFAULT 0,
+                query_preview  TEXT    DEFAULT '',
+                user_id        TEXT    DEFAULT 'legacy'
             )""",
             """CREATE TABLE IF NOT EXISTS case_analyses (
-                id TEXT PRIMARY KEY,
-                case_id TEXT NOT NULL,
-                query TEXT,
-                response TEXT,
-                task TEXT,
-                mode TEXT,
+                id        TEXT PRIMARY KEY,
+                case_id   TEXT NOT NULL,
+                query     TEXT,
+                response  TEXT,
+                task      TEXT,
+                mode      TEXT,
                 timestamp TEXT,
-                user_id TEXT DEFAULT 'legacy'
+                user_id   TEXT DEFAULT 'legacy'
             )""",
         ]
         for stmt in ddl_statements:
             self._exec_ddl(stmt)
 
-        # Safely add columns to existing tables — each in its own transaction
-        for tbl in ("cost_logs", "case_analyses"):
+        # ── Step 2: Add every column to 'users' that may be missing ──────────
+        # This is the CRITICAL block.  The original table may have been created
+        # by an older version with completely different columns (e.g. no user_id).
+        # ALTER TABLE … ADD COLUMN IF NOT EXISTS is idempotent and safe.
+        # Each ALTER runs in its own transaction via _exec_ddl so a failure on
+        # one column never poisons the next.
+        users_columns = [
+            ("user_id",       "TEXT",    "''"),
+            ("username",      "TEXT",    "''"),
+            ("email",         "TEXT",    "''"),
+            ("password_hash", "TEXT",    "''"),
+            ("firm_name",     "TEXT",    "''"),
+            ("lawyer_name",   "TEXT",    "''"),
+            ("phone",         "TEXT",    "''"),
+            ("address",       "TEXT",    "''"),
+            ("role",          "TEXT",    "'user'"),
+            ("created_at",    "TEXT",    "''"),
+            ("last_login",    "TEXT",    "''"),
+        ]
+        for col, col_type, default in users_columns:
             self._exec_ddl(
-                f"ALTER TABLE {tbl} ADD COLUMN IF NOT EXISTS user_id TEXT DEFAULT 'legacy'"
+                f"ALTER TABLE users ADD COLUMN IF NOT EXISTS "
+                f"{col} {col_type} DEFAULT {default}"
             )
 
-        # Ensure legacy profile row exists
+        # ── Step 3: Back-fill user_id for any rows that pre-date this column ─
+        self._exec_ddl(
+            "UPDATE users SET user_id = md5(random()::text) "
+            "WHERE user_id IS NULL OR user_id = ''"
+        )
+
+        # ── Step 4: Create unique indexes (safer than adding PK constraints) ─
+        # Using CREATE UNIQUE INDEX IF NOT EXISTS means this is always idempotent.
+        self._exec_ddl(
+            "CREATE UNIQUE INDEX IF NOT EXISTS users_user_id_uidx "
+            "ON users (user_id) WHERE user_id <> ''"
+        )
+        self._exec_ddl(
+            "CREATE UNIQUE INDEX IF NOT EXISTS users_username_lower_uidx "
+            "ON users (lower(username)) WHERE username <> ''"
+        )
+
+        # ── Step 5: Add user_id to cost_logs / case_analyses if missing ──────
+        for tbl in ("cost_logs", "case_analyses"):
+            self._exec_ddl(
+                f"ALTER TABLE {tbl} ADD COLUMN IF NOT EXISTS "
+                f"user_id TEXT DEFAULT 'legacy'"
+            )
+
+        # ── Step 6: Ensure the legacy singleton profile row exists ────────────
         self._exec_ddl(
             "INSERT INTO user_profile (id) VALUES (1) ON CONFLICT DO NOTHING"
         )
-
-        # 2. Migrate existing 'users' table safely
-        user_migrations = [
-            "ALTER TABLE users ADD COLUMN IF NOT EXISTS user_id TEXT;",
-            "ALTER TABLE users ADD COLUMN IF NOT EXISTS username TEXT;",
-            "ALTER TABLE users ADD COLUMN IF NOT EXISTS email TEXT DEFAULT '';",
-            "ALTER TABLE users ADD COLUMN IF NOT EXISTS password_hash TEXT DEFAULT '';",
-            "ALTER TABLE users ADD COLUMN IF NOT EXISTS firm_name TEXT DEFAULT '';",
-            "ALTER TABLE users ADD COLUMN IF NOT EXISTS lawyer_name TEXT DEFAULT '';",
-            "ALTER TABLE users ADD COLUMN IF NOT EXISTS phone TEXT DEFAULT '';",
-            "ALTER TABLE users ADD COLUMN IF NOT EXISTS address TEXT DEFAULT '';",
-            "ALTER TABLE users ADD COLUMN IF NOT EXISTS role TEXT DEFAULT 'user';",
-            "ALTER TABLE users ADD COLUMN IF NOT EXISTS created_at TEXT DEFAULT '';",
-            "ALTER TABLE users ADD COLUMN IF NOT EXISTS last_login TEXT DEFAULT '';"
-        ]
-        for mig in user_migrations:
-            try:
-                self._execute(mig)
-            except Exception:
-                self.conn.rollback()
-
 
     def _uid(self) -> str:
         """Return current user_id from Streamlit session, fallback to 'legacy'."""
@@ -919,7 +936,7 @@ class Database:
     def get_user_by_username(self, username: str) -> Optional[dict]:
         cur = self._execute(
             "SELECT user_id, username, email, password_hash, firm_name, lawyer_name, "
-            "phone, address, role, created_at, last_login FROM users WHERE username = %s",
+            "phone, address, role, created_at, last_login FROM users WHERE lower(username) = %s",
             (username.lower().strip(),),
         )
         row = cur.fetchone()
