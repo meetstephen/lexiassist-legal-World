@@ -720,18 +720,15 @@ class Database:
             logger.warning(f"DDL skipped (non-fatal): {e!s:.120}")
 
     def _init_tables(self):
-        # ── Step 1: Create tables that do NOT yet exist ──────────────────────
-        # CREATE TABLE IF NOT EXISTS is a no-op when the table already exists,
-        # so it is safe to run every startup.  The users table is created here
-        # WITHOUT a PRIMARY KEY constraint so it works even if the table already
-        # exists with a different schema; constraints are added via indexes below.
+        # ── STEP 1: Create tables that don't exist yet ────────────────────────
+        # The `users` CREATE statement uses only ONE safe column (created_at)
+        # so it never conflicts if the table already exists with a different schema.
+        # All required columns are added via ALTER TABLE in Step 2.
         ddl_statements = [
             """CREATE TABLE IF NOT EXISTS kv_store (
                 key   TEXT PRIMARY KEY,
                 value TEXT NOT NULL DEFAULT '[]'
             )""",
-            # Note: no PRIMARY KEY / UNIQUE here — those are handled as indexes
-            # below so they never conflict with pre-existing table definitions.
             """CREATE TABLE IF NOT EXISTS users (
                 created_at TEXT DEFAULT ''
             )""",
@@ -770,39 +767,38 @@ class Database:
         for stmt in ddl_statements:
             self._exec_ddl(stmt)
 
-        # ── Step 2: Add every column to 'users' that may be missing ──────────
-        # This is the CRITICAL block.  The original table may have been created
-        # by an older version with completely different columns (e.g. no user_id).
-        # ALTER TABLE … ADD COLUMN IF NOT EXISTS is idempotent and safe.
-        # Each ALTER runs in its own transaction via _exec_ddl so a failure on
-        # one column never poisons the next.
-        users_columns = [
-            ("user_id",       "TEXT",    "''"),
-            ("username",      "TEXT",    "''"),
-            ("email",         "TEXT",    "''"),
-            ("password_hash", "TEXT",    "''"),
-            ("firm_name",     "TEXT",    "''"),
-            ("lawyer_name",   "TEXT",    "''"),
-            ("phone",         "TEXT",    "''"),
-            ("address",       "TEXT",    "''"),
-            ("role",          "TEXT",    "'user'"),
-            ("created_at",    "TEXT",    "''"),
-            ("last_login",    "TEXT",    "''"),
-        ]
-        for col, col_type, default in users_columns:
+        # ── STEP 2: Add every required column to `users` ──────────────────────
+        # This is the CRITICAL fix.  If the table was created by an older version
+        # of the app it may be missing some or ALL of these columns (including
+        # user_id).  ALTER TABLE … ADD COLUMN IF NOT EXISTS is fully idempotent —
+        # it is a no-op when the column already exists — so this is safe to run
+        # on every startup.  Each ALTER runs in its own committed transaction via
+        # _exec_ddl, so one failure never blocks the next column.
+        for col, col_type, default in [
+            ("user_id",       "TEXT", "''"),
+            ("username",      "TEXT", "''"),
+            ("email",         "TEXT", "''"),
+            ("password_hash", "TEXT", "''"),
+            ("firm_name",     "TEXT", "''"),
+            ("lawyer_name",   "TEXT", "''"),
+            ("phone",         "TEXT", "''"),
+            ("address",       "TEXT", "''"),
+            ("role",          "TEXT", "'user'"),
+            ("created_at",    "TEXT", "''"),
+            ("last_login",    "TEXT", "''"),
+        ]:
             self._exec_ddl(
                 f"ALTER TABLE users ADD COLUMN IF NOT EXISTS "
                 f"{col} {col_type} DEFAULT {default}"
             )
 
-        # ── Step 3: Back-fill user_id for any rows that pre-date this column ─
+        # ── STEP 3: Back-fill user_id for any rows that pre-date the column ───
         self._exec_ddl(
             "UPDATE users SET user_id = md5(random()::text) "
             "WHERE user_id IS NULL OR user_id = ''"
         )
 
-        # ── Step 4: Create unique indexes (safer than adding PK constraints) ─
-        # Using CREATE UNIQUE INDEX IF NOT EXISTS means this is always idempotent.
+        # ── STEP 4: Unique indexes (idempotent; safer than PK on old tables) ──
         self._exec_ddl(
             "CREATE UNIQUE INDEX IF NOT EXISTS users_user_id_uidx "
             "ON users (user_id) WHERE user_id <> ''"
@@ -812,14 +808,14 @@ class Database:
             "ON users (lower(username)) WHERE username <> ''"
         )
 
-        # ── Step 5: Add user_id to cost_logs / case_analyses if missing ──────
+        # ── STEP 5: Add user_id to cost_logs / case_analyses if missing ───────
         for tbl in ("cost_logs", "case_analyses"):
             self._exec_ddl(
                 f"ALTER TABLE {tbl} ADD COLUMN IF NOT EXISTS "
                 f"user_id TEXT DEFAULT 'legacy'"
             )
 
-        # ── Step 6: Ensure the legacy singleton profile row exists ────────────
+        # ── STEP 6: Ensure the legacy singleton profile row exists ─────────────
         self._exec_ddl(
             "INSERT INTO user_profile (id) VALUES (1) ON CONFLICT DO NOTHING"
         )
@@ -1313,9 +1309,15 @@ def render_login_screen():
     col1, col2, col3 = st.columns([1, 2, 1])
     with col2:
         st.markdown("### 🔐 Sign In to Your Account")
-        tab_login, tab_reg = st.tabs(
-            ["🔐 Login", "📝 Register"] if is_allow_registration() else ["🔐 Login"]
-        )
+
+        # Build tab list based on whether self-registration is allowed.
+        # IMPORTANT: never unpack a 1-element list into 2 variables — that
+        # raises ValueError.  Use index access instead.
+        allow_reg = is_allow_registration()
+        tab_labels = ["🔐 Login", "📝 Register"] if allow_reg else ["🔐 Login"]
+        all_tabs = st.tabs(tab_labels)
+        tab_login = all_tabs[0]
+        tab_reg   = all_tabs[1] if allow_reg else None
 
         with tab_login:
             with st.form("login_form", clear_on_submit=False):
@@ -1335,7 +1337,7 @@ def render_login_screen():
                     else:
                         st.error("❌ Invalid username or password.")
 
-        if is_allow_registration() and len(st.tabs(["x"])) > 0:
+        if tab_reg is not None:
             with tab_reg:
                 render_register_form("reg_self")
 
