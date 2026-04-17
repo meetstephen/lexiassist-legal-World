@@ -786,6 +786,27 @@ class Database:
             "INSERT INTO user_profile (id) VALUES (1) ON CONFLICT DO NOTHING"
         )
 
+        # 2. Migrate existing 'users' table safely
+        user_migrations = [
+            "ALTER TABLE users ADD COLUMN IF NOT EXISTS user_id TEXT;",
+            "ALTER TABLE users ADD COLUMN IF NOT EXISTS username TEXT;",
+            "ALTER TABLE users ADD COLUMN IF NOT EXISTS email TEXT DEFAULT '';",
+            "ALTER TABLE users ADD COLUMN IF NOT EXISTS password_hash TEXT DEFAULT '';",
+            "ALTER TABLE users ADD COLUMN IF NOT EXISTS firm_name TEXT DEFAULT '';",
+            "ALTER TABLE users ADD COLUMN IF NOT EXISTS lawyer_name TEXT DEFAULT '';",
+            "ALTER TABLE users ADD COLUMN IF NOT EXISTS phone TEXT DEFAULT '';",
+            "ALTER TABLE users ADD COLUMN IF NOT EXISTS address TEXT DEFAULT '';",
+            "ALTER TABLE users ADD COLUMN IF NOT EXISTS role TEXT DEFAULT 'user';",
+            "ALTER TABLE users ADD COLUMN IF NOT EXISTS created_at TEXT DEFAULT '';",
+            "ALTER TABLE users ADD COLUMN IF NOT EXISTS last_login TEXT DEFAULT '';"
+        ]
+        for mig in user_migrations:
+            try:
+                self._execute(mig)
+            except Exception:
+                self.conn.rollback()
+
+
     def _uid(self) -> str:
         """Return current user_id from Streamlit session, fallback to 'legacy'."""
         try:
