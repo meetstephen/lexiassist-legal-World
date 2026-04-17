@@ -743,16 +743,43 @@ class Database:
                 user_id TEXT DEFAULT 'legacy'
             )""",
         ]
+        
+        # 1. Create tables
         for stmt in statements:
-            self._execute(stmt)
+            try:
+                self._execute(stmt)
+            except Exception:
+                self.conn.rollback()
+
+        # 2. Migrate existing 'users' table safely
+        user_migrations = [
+            "ALTER TABLE users ADD COLUMN IF NOT EXISTS phone TEXT DEFAULT '';",
+            "ALTER TABLE users ADD COLUMN IF NOT EXISTS address TEXT DEFAULT '';",
+            "ALTER TABLE users ADD COLUMN IF NOT EXISTS role TEXT DEFAULT 'user';",
+            "ALTER TABLE users ADD COLUMN IF NOT EXISTS created_at TEXT DEFAULT '';",
+            "ALTER TABLE users ADD COLUMN IF NOT EXISTS last_login TEXT DEFAULT '';"
+        ]
+        for mig in user_migrations:
+            try:
+                self._execute(mig)
+            except Exception:
+                self.conn.rollback()
+
+        # 3. Migrate cost_logs and case_analyses safely
         for tbl in ("cost_logs", "case_analyses"):
             try:
                 self._execute(
                     f"ALTER TABLE {tbl} ADD COLUMN IF NOT EXISTS user_id TEXT DEFAULT 'legacy'"
                 )
             except Exception:
-                pass
-        self._execute("INSERT INTO user_profile (id) VALUES (1) ON CONFLICT DO NOTHING")
+                self.conn.rollback()
+
+        # 4. Insert default profile
+        try:
+            self._execute("INSERT INTO user_profile (id) VALUES (1) ON CONFLICT DO NOTHING")
+        except Exception:
+            self.conn.rollback()
+            
         self.conn.commit()
 
     def _uid(self) -> str:
