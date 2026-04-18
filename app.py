@@ -503,8 +503,285 @@ even those with score 0. Sort by relevance_score descending.
 """
 
 # ═══════════════════════════════════════════════════════
-# REFERENCE DATA (BUILT-IN DEFAULTS)
+# LEGAL FEE & STAMP DUTY CALCULATOR — DATA
 # ═══════════════════════════════════════════════════════
+# Nigerian Legal Practitioners (Remuneration for Legal Documentation
+# and Other Land Matters) Order — sliding scale
+LAND_MATTERS_SCALE = [
+    {"band_label": "First ₦5,000",           "up_to": 5_000,         "rate": 0.10},
+    {"band_label": "Next ₦10,000",           "up_to": 15_000,        "rate": 0.075},
+    {"band_label": "Next ₦15,000",           "up_to": 30_000,        "rate": 0.05},
+    {"band_label": "Next ₦70,000",           "up_to": 100_000,       "rate": 0.035},
+    {"band_label": "Next ₦400,000",          "up_to": 500_000,       "rate": 0.025},
+    {"band_label": "Remainder above ₦500k",  "up_to": float("inf"),  "rate": 0.015},
+]
+LAND_MATTERS_MIN_FEE = 10_000  # ₦10,000 minimum for any land transaction
+
+# Stamp Duty rates — Stamp Duties Act Cap S8 LFN 2004 (as amended)
+STAMP_DUTY_INSTRUMENTS = {
+    "deed_of_assignment":       {"label": "Deed of Assignment / Conveyance",    "rate": 0.015,  "basis": "property_value", "note": "1.5% of property value"},
+    "tenancy_lt7":              {"label": "Tenancy / Lease (< 7 years)",         "rate": 0.0078, "basis": "annual_rent_x_years", "note": "0.78% × annual rent × years"},
+    "tenancy_7to21":            {"label": "Tenancy / Lease (7–21 years)",        "rate": 0.03,   "basis": "annual_rent",    "note": "3% of annual rent"},
+    "tenancy_over21":           {"label": "Tenancy / Lease (> 21 years)",        "rate": 0.06,   "basis": "annual_rent",    "note": "6% of annual rent"},
+    "mortgage":                 {"label": "Legal Mortgage / Debenture",          "rate": 0.00375,"basis": "loan_amount",    "note": "0.375% of secured amount"},
+    "power_of_attorney_gen":    {"label": "General Power of Attorney",           "rate": None,   "basis": "flat",           "flat": 1_000, "note": "₦1,000 flat"},
+    "power_of_attorney_spec":   {"label": "Special Power of Attorney",           "rate": None,   "basis": "flat",           "flat": 500,   "note": "₦500 flat"},
+    "affidavit":                {"label": "Affidavit",                           "rate": None,   "basis": "flat",           "flat": 200,   "note": "₦200 flat"},
+    "memorandum_of_understanding": {"label": "Memorandum of Understanding (MOU)","rate": 0.0075,"basis": "contract_value",  "note": "0.75% of stated value"},
+    "share_transfer":           {"label": "Share Transfer / Stock Transfer Form","rate": 0.015,  "basis": "consideration",  "note": "1.5% of consideration"},
+    "loan_agreement":           {"label": "Loan / Credit Agreement",             "rate": 0.00375,"basis": "loan_amount",    "note": "0.375% of loan amount"},
+    "guarantee":                {"label": "Guarantee / Indemnity",               "rate": 0.0075, "basis": "guaranteed_sum", "note": "0.75% of guaranteed sum"},
+    "joint_venture":            {"label": "Joint Venture Agreement",             "rate": 0.0075, "basis": "contract_value",  "note": "0.75% of stated value"},
+    "settlement_agreement":     {"label": "Deed of Settlement / Release",        "rate": 0.015,  "basis": "property_value",  "note": "1.5% of settlement amount"},
+}
+
+# Court Filing Fees (indicative — varies by state and court rules; verify before filing)
+COURT_FILING_FEES = {
+    "magistrate_lagos": {
+        "label": "Magistrate Court (Lagos State)",
+        "bands": [
+            {"claim_max": 100_000,     "fee": 2_000,  "label": "Claim up to ₦100,000"},
+            {"claim_max": 300_000,     "fee": 5_000,  "label": "Claim ₦100k–₦300k"},
+            {"claim_max": 500_000,     "fee": 8_000,  "label": "Claim ₦300k–₦500k"},
+            {"claim_max": float("inf"),"fee": 10_000, "label": "Maximum jurisdiction"},
+        ],
+        "appeal_fee": 15_000,
+        "note": "Lagos Magistrate Courts Law 2009 (as amended). Max civil jurisdiction ₦500,000.",
+    },
+    "high_court_state": {
+        "label": "State High Court (e.g. Lagos)",
+        "bands": [
+            {"claim_max": 500_000,       "fee": 8_000,  "label": "Claim up to ₦500,000"},
+            {"claim_max": 1_000_000,     "fee": 15_000, "label": "Claim ₦500k–₦1m"},
+            {"claim_max": 5_000_000,     "fee": 25_000, "label": "Claim ₦1m–₦5m"},
+            {"claim_max": 20_000_000,    "fee": 40_000, "label": "Claim ₦5m–₦20m"},
+            {"claim_max": 100_000_000,   "fee": 75_000, "label": "Claim ₦20m–₦100m"},
+            {"claim_max": float("inf"),  "fee": 120_000,"label": "Claim above ₦100m"},
+        ],
+        "appeal_fee": 50_000,
+        "note": "Fees vary by state. Verify with specific court registry before filing.",
+    },
+    "federal_high_court": {
+        "label": "Federal High Court",
+        "bands": [
+            {"claim_max": 1_000_000,     "fee": 10_000,  "label": "Claim up to ₦1m"},
+            {"claim_max": 5_000_000,     "fee": 30_000,  "label": "Claim ₦1m–₦5m"},
+            {"claim_max": 20_000_000,    "fee": 60_000,  "label": "Claim ₦5m–₦20m"},
+            {"claim_max": 100_000_000,   "fee": 100_000, "label": "Claim ₦20m–₦100m"},
+            {"claim_max": float("inf"),  "fee": 150_000, "label": "Claim above ₦100m"},
+        ],
+        "appeal_fee": 75_000,
+        "note": "FHC (Civil Procedure) Rules 2019. Verify current rates with court registry.",
+    },
+    "national_industrial_court": {
+        "label": "National Industrial Court",
+        "bands": [
+            {"claim_max": 1_000_000,    "fee": 10_000,  "label": "Claim up to ₦1m"},
+            {"claim_max": 10_000_000,   "fee": 25_000,  "label": "Claim ₦1m–₦10m"},
+            {"claim_max": float("inf"), "fee": 50_000,  "label": "Claim above ₦10m"},
+        ],
+        "appeal_fee": 50_000,
+        "note": "NIC (Civil Procedure) Rules 2017.",
+    },
+    "court_of_appeal": {
+        "label": "Court of Appeal",
+        "bands": [
+            {"claim_max": float("inf"), "fee": 100_000, "label": "All civil appeals"},
+        ],
+        "appeal_fee": 0,
+        "note": "Court of Appeal Rules 2021. Filing fee covers Notice of Appeal and related documents.",
+    },
+    "supreme_court": {
+        "label": "Supreme Court of Nigeria",
+        "bands": [
+            {"claim_max": float("inf"), "fee": 200_000, "label": "All matters"},
+        ],
+        "appeal_fee": 0,
+        "note": "Supreme Court Rules (as amended). Verify with Supreme Court Registry, Abuja.",
+    },
+}
+
+
+def compute_land_fee(value: float) -> tuple[float, list]:
+    """Compute solicitor's fee on a land transaction using the sliding scale.
+    Returns (total_fee, breakdown_rows)."""
+    fee = 0.0
+    breakdown = []
+    remaining = value
+    prev_band = 0.0
+    for band in LAND_MATTERS_SCALE:
+        if remaining <= 0:
+            break
+        cap = band["up_to"]
+        taxable = min(remaining, cap - prev_band)
+        if taxable <= 0:
+            prev_band = cap
+            continue
+        band_fee = taxable * band["rate"]
+        fee += band_fee
+        breakdown.append({
+            "band": band["band_label"],
+            "taxable": taxable,
+            "rate": f"{band['rate']*100:.2f}%",
+            "fee": band_fee,
+        })
+        remaining -= taxable
+        prev_band = cap
+    fee = max(fee, LAND_MATTERS_MIN_FEE)
+    return fee, breakdown
+
+
+def compute_stamp_duty(instrument_key: str, value: float = 0,
+                       years: float = 1, annual_rent: float = 0) -> float:
+    """Compute stamp duty for an instrument type."""
+    inst = STAMP_DUTY_INSTRUMENTS.get(instrument_key)
+    if not inst:
+        return 0.0
+    basis = inst["basis"]
+    if basis == "flat":
+        return float(inst.get("flat", 0))
+    if basis == "property_value":
+        return value * inst["rate"]
+    if basis == "annual_rent_x_years":
+        return (annual_rent or value) * years * inst["rate"]
+    if basis == "annual_rent":
+        return (annual_rent or value) * inst["rate"]
+    if basis in ("loan_amount", "consideration", "guaranteed_sum",
+                 "contract_value", "secured_amount"):
+        return value * inst["rate"]
+    return 0.0
+
+
+def get_court_filing_fee(court_key: str, claim_value: float) -> tuple[int, str]:
+    """Return (fee, note) for filing in a given court with a given claim value."""
+    court = COURT_FILING_FEES.get(court_key)
+    if not court:
+        return 0, ""
+    for band in court["bands"]:
+        if claim_value <= band["claim_max"]:
+            return band["fee"], court["note"]
+    return court["bands"][-1]["fee"], court["note"]
+
+
+# ═══════════════════════════════════════════════════════
+# SETTLEMENT & ADR ADVISOR — PROMPTS
+# ═══════════════════════════════════════════════════════
+SETTLEMENT_SYSTEM = IDENTITY_CORE + STRATEGY_BLOCK + """
+TASK: Settlement & ADR Advisory for Nigerian Legal Practice.
+You are advising a Nigerian lawyer on settlement strategy and alternative dispute resolution.
+Apply your knowledge of: Arbitration and Conciliation Act 2023, Lagos Multi-Door Courthouse (LMDC),
+Abuja Multi-Door Courthouse, Rules of Professional Conduct on settlement duties (Rule 17, 22),
+Evidence Act 2011 (without prejudice communications), and standard Nigerian litigation practice.
+
+Your output must be structured, firm, and immediately actionable.
+Give concrete numbers (settlement ranges, percentages, timelines) — do NOT hedge.
+Identify the weaker party, their pressure points, and the optimal strategy for the instructing party.
+"""
+
+SETTLEMENT_PROMPT = """
+INSTRUCTING PARTY: {instructing_party}
+OPPOSING PARTY: {opposing_party}
+CASE TYPE: {case_type}
+CLAIM AMOUNT / SUBJECT MATTER VALUE: ₦{claim_amount}
+COURT / STAGE: {court_stage}
+STRENGTH OF CASE (self-assessed): {strength}
+URGENCY / TIME PRESSURE: {urgency}
+
+CASE FACTS:
+{case_facts}
+
+Generate a full Settlement & ADR Advisory structured as follows:
+
+═══════════════════════════════════════════
+SECTION 1 — SETTLEMENT VALUE ANALYSIS
+═══════════════════════════════════════════
+(Compute: realistic settlement band, ideal settlement amount, walk-away floor/ceiling.
+Give actual ₦ figures, not just percentages. Show your reasoning.)
+
+═══════════════════════════════════════════
+SECTION 2 — NEGOTIATION STRATEGY
+═══════════════════════════════════════════
+(Opening position, key concessions to offer, key concessions to demand, sequence of moves.
+Identify the opposing party's pressure points and how to exploit them.)
+
+═══════════════════════════════════════════
+SECTION 3 — ADR ROUTE RECOMMENDATION
+═══════════════════════════════════════════
+(Should this go to mediation, arbitration, or direct negotiation? Which ADR centre?
+Timeline and cost estimate for ADR vs. continued litigation.)
+
+═══════════════════════════════════════════
+SECTION 4 — WITHOUT PREJUDICE OFFER DRAFT
+═══════════════════════════════════════════
+(Draft a concise "Without Prejudice Save as to Costs" opening offer letter.
+Include: offer amount, conditions, deadline, and reservation of rights.)
+
+═══════════════════════════════════════════
+SECTION 5 — RISK IF NO SETTLEMENT
+═══════════════════════════════════════════
+(Litigation risk, cost exposure, likely trial outcome, enforcement risk.
+Be brutally honest about the weakest party's position.)
+"""
+
+# ═══════════════════════════════════════════════════════
+# DUE DILIGENCE ENGINE — PROMPTS & DATA
+# ═══════════════════════════════════════════════════════
+DD_TRANSACTION_TYPES = {
+    "property_purchase":    "🏠 Property / Land Acquisition",
+    "company_acquisition":  "🏢 Company / Business Acquisition",
+    "loan_security":        "💳 Loan & Security / Debenture",
+    "joint_venture":        "🤝 Joint Venture / Partnership",
+    "franchise":            "🏪 Franchise Agreement",
+    "employment_senior":    "👔 Senior Employment / Directorship",
+    "oil_gas_block":        "⛽ Oil & Gas Block / Farm-in",
+    "real_estate_dev":      "🏗️ Real Estate Development",
+    "ipo_capital_market":   "📈 IPO / Capital Market Transaction",
+    "fintech_regulatory":   "📱 Fintech / Payment Service",
+}
+
+DD_SYSTEM = IDENTITY_CORE + """
+TASK: Generate a comprehensive Nigerian Due Diligence Checklist.
+You are preparing a due diligence report framework for a Nigerian transaction.
+Apply your knowledge of: Companies and Allied Matters Act (CAMA) 2020, Land Use Act 1978,
+Corporate Affairs Commission (CAC) practice, Nigerian Investment Promotion Commission Act,
+Securities and Exchange Commission Rules, NDIC regulations, CBN regulations (as applicable),
+Federal Inland Revenue Service requirements, and standard Nigerian conveyancing practice.
+
+Structure your output as a complete, actionable checklist that a Nigerian lawyer can take
+immediately into the field/office. For each item:
+- State what to search/obtain/verify
+- State which registry, authority, or source
+- Flag the risk if the item is not clear
+- Mark priority: 🔴 Critical / 🟡 Important / 🟢 Standard
+
+CRITICAL: Tailor EVERYTHING to the specific transaction type and jurisdiction described.
+Do NOT produce a generic checklist. Every item must be specific to Nigerian law and practice.
+"""
+
+DD_PROMPT = """
+TRANSACTION TYPE: {transaction_type}
+TRANSACTION VALUE: ₦{transaction_value}
+JURISDICTION: {jurisdiction}
+PARTIES: {parties}
+BRIEF TRANSACTION DESCRIPTION: {description}
+SPECIAL CONCERNS: {special_concerns}
+
+Generate a comprehensive due diligence checklist structured as:
+
+1. CORPORATE / ENTITY SEARCHES
+2. TITLE / PROPERTY SEARCHES (if applicable)
+3. REGULATORY / LICENSING SEARCHES  
+4. FINANCIAL & TAX SEARCHES
+5. LITIGATION / ENCUMBRANCE SEARCHES
+6. CONTRACTS & COMMERCIAL DOCUMENTS
+7. EMPLOYMENT & LABOUR (if applicable)
+8. ENVIRONMENTAL / SECTOR-SPECIFIC (if applicable)
+9. TRANSACTION STRUCTURE RISK FLAGS
+10. RECOMMENDED CONDITIONS PRECEDENT
+
+For each section, provide numbered checklist items with priority flags.
+End with a CRITICAL PATH — the 5 searches that must be completed first and why.
+"""
 DEFAULT_LIMITATION_PERIODS = [
     {"cause": "Simple Contract", "period": "6 years", "authority": "Limitation Act, s. 8(1)(a)"},
     {"cause": "Tort / Negligence", "period": "6 years", "authority": "Limitation Act, s. 8(1)(a)"},
@@ -6602,6 +6879,763 @@ display:flex;justify-content:space-between;align-items:center;">
                 st.rerun()
 
 
+
+
+
+# ═══════════════════════════════════════════════════════
+# PAGE: LEGAL FEE & STAMP DUTY CALCULATOR
+# ═══════════════════════════════════════════════════════
+def render_fee_calculator():
+    st.markdown("""<div class="page-header">
+        <h2>⚖️ Legal Fee & Stamp Duty Calculator</h2>
+        <p>Nigerian scale fees · Stamp duty on instruments · Court filing fees · Professional fee note</p>
+    </div>""", unsafe_allow_html=True)
+
+    tab_land, tab_stamp, tab_court, tab_feenote = st.tabs([
+        "🏠 Solicitor's Scale Fees",
+        "📄 Stamp Duty",
+        "🏛️ Court Filing Fees",
+        "🧾 Generate Fee Note",
+    ])
+
+    # ═══════════════════════════════════════
+    # TAB 1 — SOLICITOR'S SCALE FEES (LAND)
+    # ═══════════════════════════════════════
+    with tab_land:
+        st.markdown("#### 🏠 Land Matters Remuneration Scale")
+        st.caption(
+            "Based on the Legal Practitioners (Remuneration for Legal Documentation "
+            "and Other Land Matters) Order. Applies to: Deeds of Assignment, Conveyances, "
+            "Governor's Consent, Mortgages, and related documentation."
+        )
+        lf1, lf2 = st.columns([2, 1])
+        with lf1:
+            land_value = st.number_input(
+                "Transaction / Property Value (₦)",
+                min_value=0.0, value=5_000_000.0, step=100_000.0,
+                format="%.2f", key="land_val_inp",
+            )
+            st.caption(f"Entered: **{fmt_currency(land_value)}**")
+        with lf2:
+            include_vat = st.checkbox("Add 7.5% VAT on fees", value=True, key="land_vat_chk")
+            show_breakdown = st.checkbox("Show band-by-band breakdown", value=True, key="land_bband")
+
+        if st.button("🔢 Calculate Fees", type="primary", key="land_calc_btn", use_container_width=True):
+            st.session_state["lf_value"] = land_value
+            st.session_state["lf_vat"] = include_vat
+
+        lf_value = st.session_state.get("lf_value", 0.0)
+        if lf_value > 0:
+            base_fee, breakdown = compute_land_fee(lf_value)
+            vat = base_fee * 0.075 if include_vat else 0.0
+            total = base_fee + vat
+
+            st.markdown("---")
+            # Result cards
+            r1, r2, r3 = st.columns(3)
+            with r1:
+                st.markdown(f"""<div class="stat-card">
+                    <div class="stat-value">{fmt_currency(base_fee)}</div>
+                    <div class="stat-label">Base Solicitor's Fee</div>
+                </div>""", unsafe_allow_html=True)
+            with r2:
+                st.markdown(f"""<div class="stat-card">
+                    <div class="stat-value">{fmt_currency(vat)}</div>
+                    <div class="stat-label">VAT (7.5%)</div>
+                </div>""", unsafe_allow_html=True)
+            with r3:
+                st.markdown(f"""<div class="stat-card">
+                    <div class="stat-value">{fmt_currency(total)}</div>
+                    <div class="stat-label">Total Chargeable</div>
+                </div>""", unsafe_allow_html=True)
+
+            effective_rate = (base_fee / lf_value * 100) if lf_value > 0 else 0
+            st.info(f"💡 Effective rate: **{effective_rate:.3f}%** on {fmt_currency(lf_value)}")
+
+            if show_breakdown:
+                st.markdown("##### 📊 Band-by-Band Breakdown")
+                import pandas as pd
+                df = pd.DataFrame([
+                    {
+                        "Band": row["band"],
+                        "Taxable Amount": fmt_currency(row["taxable"]),
+                        "Rate": row["rate"],
+                        "Fee": fmt_currency(row["fee"]),
+                    }
+                    for row in breakdown
+                ])
+                if include_vat:
+                    df.loc[len(df)] = {"Band": "VAT (7.5%)", "Taxable Amount": "", "Rate": "7.5%", "Fee": fmt_currency(vat)}
+                df.loc[len(df)] = {"Band": "TOTAL", "Taxable Amount": "", "Rate": "", "Fee": fmt_currency(total)}
+                st.dataframe(df, use_container_width=True, hide_index=True)
+
+            # Store for fee note tab
+            st.session_state["fn_land_fee"] = base_fee
+            st.session_state["fn_land_vat"] = vat
+            st.session_state["fn_land_total"] = total
+            st.session_state["fn_land_value"] = lf_value
+
+        st.markdown("""<div class="disclaimer">
+            <strong>⚖️ Note:</strong> Scale fees under the Land Matters Remuneration Order represent
+            the minimum chargeable by a legal practitioner. Fees may be higher by agreement.
+            Minimum fee: ₦10,000. Always issue a formal Fee Agreement Letter.
+        </div>""", unsafe_allow_html=True)
+
+    # ═══════════════════════════════════════
+    # TAB 2 — STAMP DUTY
+    # ═══════════════════════════════════════
+    with tab_stamp:
+        st.markdown("#### 📄 Stamp Duty Calculator")
+        st.caption(
+            "Stamp Duties Act Cap S8 LFN 2004, as amended by the Finance Acts 2019–2023. "
+            "Stamp duty is payable before or within 30 days of execution of the instrument."
+        )
+
+        sd1, sd2 = st.columns([2, 1])
+        with sd1:
+            instrument_key = st.selectbox(
+                "Instrument Type",
+                list(STAMP_DUTY_INSTRUMENTS.keys()),
+                format_func=lambda k: STAMP_DUTY_INSTRUMENTS[k]["label"],
+                key="sd_instrument_sel",
+            )
+        with sd2:
+            st.markdown("<br>", unsafe_allow_html=True)
+            inst = STAMP_DUTY_INSTRUMENTS[instrument_key]
+            st.info(f"💡 **Rate:** {inst['note']}")
+
+        basis = inst["basis"]
+        sd_value = 0.0
+        sd_years = 1.0
+        sd_annual = 0.0
+
+        if basis == "flat":
+            st.metric("Stamp Duty Payable", fmt_currency(inst.get("flat", 0)))
+            st.session_state["fn_stamp_duty"] = float(inst.get("flat", 0))
+        else:
+            v1, v2 = st.columns(2)
+            with v1:
+                if basis in ("property_value", "consideration", "contract_value", "secured_amount"):
+                    sd_value = st.number_input("Transaction / Property Value (₦)",
+                        min_value=0.0, value=10_000_000.0, step=500_000.0,
+                        format="%.2f", key="sd_value_inp")
+                elif basis == "loan_amount":
+                    sd_value = st.number_input("Loan / Secured Amount (₦)",
+                        min_value=0.0, value=5_000_000.0, step=250_000.0,
+                        format="%.2f", key="sd_loan_inp")
+                elif basis == "guaranteed_sum":
+                    sd_value = st.number_input("Guaranteed / Indemnified Sum (₦)",
+                        min_value=0.0, value=5_000_000.0, step=250_000.0,
+                        format="%.2f", key="sd_guar_inp")
+                elif "annual_rent" in basis:
+                    sd_annual = st.number_input("Annual Rent (₦)",
+                        min_value=0.0, value=1_200_000.0, step=100_000.0,
+                        format="%.2f", key="sd_rent_inp")
+            with v2:
+                if basis == "annual_rent_x_years":
+                    sd_years = st.number_input("Number of Years",
+                        min_value=0.5, max_value=6.9, value=2.0, step=0.5, key="sd_years_inp")
+                    st.caption(f"Annual rent: {fmt_currency(sd_annual)} × {sd_years} years")
+
+            duty = compute_stamp_duty(
+                instrument_key,
+                value=sd_value if sd_value > 0 else sd_annual,
+                years=sd_years,
+                annual_rent=sd_annual,
+            )
+
+            if st.button("🔢 Calculate Stamp Duty", type="primary",
+                         key="sd_calc_btn", use_container_width=True):
+                st.session_state["sd_result"] = duty
+
+            sd_result = st.session_state.get("sd_result", None)
+            if sd_result is not None:
+                st.markdown("---")
+                sc1, sc2, sc3 = st.columns(3)
+                with sc1:
+                    st.metric("Stamp Duty", fmt_currency(sd_result))
+                with sc2:
+                    effective = (sd_result / (sd_value or sd_annual * sd_years or 1)) * 100
+                    st.metric("Effective Rate", f"{effective:.3f}%")
+                with sc3:
+                    st.metric("Penalty (if late > 30 days)", fmt_currency(sd_result * 0.1 + 50))
+                st.markdown(f"""
+<div style="background:#fffbeb;border-left:3px solid #f59e0b;padding:0.8rem 1rem;
+border-radius:0.4rem;margin-top:0.5rem;font-size:0.9rem;">
+  ⚠️ <strong>Reminder:</strong> Stamp duty must be paid within 30 days of execution.
+  Late stamping attracts a 10% penalty plus ₦50 administrative charge.
+  Unstamped instruments are inadmissible in evidence (Stamp Duties Act, s.22).
+</div>""", unsafe_allow_html=True)
+                st.session_state["fn_stamp_duty"] = sd_result
+
+        st.markdown("""<div class="disclaimer">
+            <strong>⚖️ Note:</strong> Rates reflect the Stamp Duties Act and Finance Act amendments.
+            Stamp duty on electronic transactions and receipts (₦50 on transactions above ₦10,000)
+            may apply separately. Confirm with FIRS or relevant State tax authority.
+        </div>""", unsafe_allow_html=True)
+
+    # ═══════════════════════════════════════
+    # TAB 3 — COURT FILING FEES
+    # ═══════════════════════════════════════
+    with tab_court:
+        st.markdown("#### 🏛️ Court Filing Fee Estimator")
+        st.caption(
+            "Indicative fees based on the relevant Rules of Court. "
+            "Actual fees vary by state, court division, and current court orders. "
+            "Always verify with the specific court registry before filing."
+        )
+
+        cf1, cf2 = st.columns(2)
+        with cf1:
+            court_key = st.selectbox(
+                "Select Court",
+                list(COURT_FILING_FEES.keys()),
+                format_func=lambda k: COURT_FILING_FEES[k]["label"],
+                key="cf_court_sel",
+            )
+        with cf2:
+            claim_val = st.number_input(
+                "Claim Value (₦)",
+                min_value=0.0, value=10_000_000.0, step=500_000.0,
+                format="%.2f", key="cf_claim_inp",
+            )
+            st.caption(f"Claim: **{fmt_currency(claim_val)}**")
+
+        if st.button("🔢 Get Filing Fees", type="primary", key="cf_calc_btn", use_container_width=True):
+            st.session_state["cf_result"] = (court_key, claim_val)
+
+        cf_result = st.session_state.get("cf_result", None)
+        if cf_result:
+            ck, cv = cf_result
+            court = COURT_FILING_FEES[ck]
+            filing_fee, court_note = get_court_filing_fee(ck, cv)
+            appeal_fee = court.get("appeal_fee", 0)
+
+            st.markdown("---")
+            ff1, ff2, ff3 = st.columns(3)
+            with ff1:
+                st.metric("Originating Process Fee", fmt_currency(filing_fee))
+            with ff2:
+                st.metric("Estimated Appeal Fee", fmt_currency(appeal_fee))
+            with ff3:
+                st.metric("Filing + Service (est.)",
+                          fmt_currency(filing_fee + filing_fee * 0.3))
+
+            st.info(f"ℹ️ **{court['label']}:** {court_note}")
+
+            # All bands table
+            st.markdown("##### 📊 Full Fee Schedule — " + court["label"])
+            band_rows = []
+            for band in court["bands"]:
+                cap = band["claim_max"]
+                band_rows.append({
+                    "Claim Range": band["label"],
+                    "Filing Fee": fmt_currency(band["fee"]),
+                })
+            import pandas as pd
+            st.dataframe(pd.DataFrame(band_rows), use_container_width=True, hide_index=True)
+
+            # Other cost estimates
+            st.markdown("##### 💰 Estimated Total Costs to File")
+            items = [
+                ("Court filing fee", filing_fee),
+                ("Sheriff / Process server fee (est.)", filing_fee * 0.2),
+                ("Certified true copies (est.)", 2_000),
+                ("Solicitor's filing charges (est.)", 5_000),
+            ]
+            total_costs = sum(v for _, v in items)
+            for label, val in items:
+                st.markdown(f"- {label}: **{fmt_currency(val)}**")
+            st.markdown(f"**Estimated total to file: {fmt_currency(total_costs)}**")
+            st.session_state["fn_court_fee"] = filing_fee
+
+        st.markdown("""<div class="disclaimer">
+            <strong>⚖️ Disclaimer:</strong> Filing fees are indicative only. Court registries
+            periodically revise fees. Always obtain an official fee schedule from the registry
+            before filing or advising clients on litigation costs.
+        </div>""", unsafe_allow_html=True)
+
+    # ═══════════════════════════════════════
+    # TAB 4 — GENERATE PROFESSIONAL FEE NOTE
+    # ═══════════════════════════════════════
+    with tab_feenote:
+        st.markdown("#### 🧾 Professional Fee Note Generator")
+        st.caption(
+            "Generate a formal, professionally formatted Fee Note / Bill of Costs "
+            "ready to issue to your client. Uses values computed in the other tabs."
+        )
+        fn1, fn2 = st.columns(2)
+        with fn1:
+            fn_client = st.text_input("Client Name *", key="fn_client_inp",
+                                      placeholder="Chief Emeka Obi / ABC Ltd")
+            fn_matter = st.text_input("Matter Description *", key="fn_matter_inp",
+                                      placeholder="Purchase of property at No. 5 Bourdillon, Ikoyi")
+            fn_ref = st.text_input("Our Reference", key="fn_ref_inp",
+                                   placeholder="EO/2025/001")
+            fn_date = st.text_input("Date", value=datetime.now().strftime("%d %B %Y"),
+                                    key="fn_date_inp")
+        with fn2:
+            fn_land = st.number_input("Professional Fees (₦)", min_value=0.0,
+                value=float(st.session_state.get("fn_land_fee", 0) or 0),
+                step=1_000.0, format="%.2f", key="fn_land_inp")
+            fn_stamp = st.number_input("Stamp Duty Paid (₦)", min_value=0.0,
+                value=float(st.session_state.get("fn_stamp_duty", 0) or 0),
+                step=500.0, format="%.2f", key="fn_stamp_inp")
+            fn_court_fee_val = st.number_input("Court / Registry Fees (₦)", min_value=0.0,
+                value=float(st.session_state.get("fn_court_fee", 0) or 0),
+                step=500.0, format="%.2f", key="fn_court_inp")
+            fn_disbursements = st.number_input("Other Disbursements (₦)", min_value=0.0,
+                value=0.0, step=500.0, format="%.2f", key="fn_disb_inp")
+            fn_vat = st.checkbox("Add 7.5% VAT on professional fees", value=True, key="fn_vat_chk")
+
+        fn_notes = st.text_area("Additional Notes / Description of Services",
+                                height=80, key="fn_notes_inp",
+                                placeholder="E.g. Includes perfection of title, CAC searches, preparation of Deed of Assignment, and obtaining Governor's Consent.")
+
+        gen_btn = st.button("🧾 Generate Fee Note", type="primary",
+                            key="fn_gen_btn", use_container_width=True,
+                            disabled=not (fn_client.strip() and fn_matter.strip()))
+
+        if gen_btn:
+            vat_amount = fn_land * 0.075 if fn_vat else 0.0
+            subtotal = fn_land + fn_stamp + fn_court_fee_val + fn_disbursements
+            total_due = subtotal + vat_amount
+            firm = get_firm_name()
+            lawyer = st.session_state.profile.get("lawyer_name", "")
+            firm_address = st.session_state.profile.get("address", "")
+            firm_email = st.session_state.profile.get("email", "")
+            firm_phone = st.session_state.profile.get("phone", "")
+
+            fee_note_text = f"""
+{'='*65}
+{firm.upper() if firm and firm != 'LexiAssist' else 'LAW FIRM'}
+{'SOLICITORS & ADVOCATES' if firm and firm != 'LexiAssist' else ''}
+{firm_address}
+Tel: {firm_phone}  |  Email: {firm_email}
+{'='*65}
+
+PROFESSIONAL FEE NOTE / BILL OF COSTS
+
+Date:         {fn_date}
+Our Ref:      {fn_ref or '[REF]'}
+To:           {fn_client}
+
+RE: {fn_matter}
+
+{'─'*65}
+
+DESCRIPTION OF SERVICES:
+{fn_notes or 'Professional legal services rendered in connection with the above matter.'}
+
+{'─'*65}
+
+FEES AND DISBURSEMENTS:
+{'─'*65}"""
+
+            items = []
+            if fn_land > 0:
+                items.append(("Professional / Solicitor's Fees", fn_land))
+            if fn_stamp > 0:
+                items.append(("Stamp Duty on Instrument", fn_stamp))
+            if fn_court_fee_val > 0:
+                items.append(("Court / Registry Filing Fees", fn_court_fee_val))
+            if fn_disbursements > 0:
+                items.append(("Other Disbursements", fn_disbursements))
+
+            for desc, val in items:
+                fee_note_text += f"\n  {desc:<45} {fmt_currency(val):>15}"
+
+            fee_note_text += f"""
+{'─'*65}
+  Sub-Total                                          {fmt_currency(subtotal):>15}"""
+            if vat_amount > 0:
+                fee_note_text += f"""
+  VAT @ 7.5% (on professional fees)                 {fmt_currency(vat_amount):>15}"""
+            fee_note_text += f"""
+{'─'*65}
+  TOTAL AMOUNT DUE                                   {fmt_currency(total_due):>15}
+{'='*65}
+
+PAYMENT:
+Kindly remit the sum of {fmt_currency(total_due)} to:
+  Bank:           [BANK NAME]
+  Account Name:   {firm or '[FIRM NAME]'}
+  Account No:     [ACCOUNT NUMBER]
+
+Payment is due within 14 days of this fee note.
+Kindly quote our reference {fn_ref or '[REF]'} on all payments.
+
+{'─'*65}
+{lawyer or '[AUTHORISED SIGNATORY]'}
+For: {firm or '[FIRM NAME]'}
+
+⚠️ All fees are subject to the Rules of Professional Conduct for
+Legal Practitioners 2007 and are subject to review if the matter
+becomes more complex than currently anticipated.
+{'='*65}
+"""
+            st.session_state["fn_generated"] = fee_note_text
+            st.session_state["fn_total_due"] = total_due
+
+        fn_generated = st.session_state.get("fn_generated", "")
+        if fn_generated:
+            st.markdown("---")
+            st.markdown(f'<div class="response-box" style="font-family:monospace;font-size:0.88rem;">'
+                        f'{esc(fn_generated)}</div>', unsafe_allow_html=True)
+
+            total_due = st.session_state.get("fn_total_due", 0)
+            st.success(f"✅ Total Due: **{fmt_currency(total_due)}**")
+
+            fn_fname = f"FeeNote_{fn_client.replace(' ','_')}_{datetime.now():%Y%m%d}"
+            fne1, fne2, fne3, fne4 = st.columns(4)
+            with fne1:
+                st.download_button("📥 TXT", export_txt(fn_generated, "Professional Fee Note"),
+                    f"{fn_fname}.txt", "text/plain", key="fn_dl_txt", use_container_width=True)
+            with fne2:
+                st.download_button("📥 HTML", export_html(fn_generated, "Professional Fee Note"),
+                    f"{fn_fname}.html", "text/html", key="fn_dl_html", use_container_width=True)
+            with fne3:
+                safe_pdf_download(fn_generated, "Professional Fee Note", fn_fname, "fn_dl_pdf")
+            with fne4:
+                safe_docx_download(fn_generated, "Professional Fee Note", fn_fname, "fn_dl_docx")
+
+
+# ═══════════════════════════════════════════════════════
+# PAGE: SETTLEMENT & ADR ADVISOR
+# ═══════════════════════════════════════════════════════
+def render_settlement_advisor():
+    st.markdown("""<div class="page-header">
+        <h2>🤝 Settlement & ADR Advisor</h2>
+        <p>AI-powered negotiation strategy · Settlement value analysis ·
+        Without-prejudice offer drafting · ADR route recommendation</p>
+    </div>""", unsafe_allow_html=True)
+
+    if not st.session_state.api_configured:
+        st.warning("⚠️ Connect your API key first.")
+        return
+
+    st.markdown("""
+<div style="background:#eff6ff;border-left:3px solid #3b82f6;padding:0.8rem 1.1rem;
+border-radius:0.5rem;margin-bottom:1rem;font-size:0.9rem;">
+  💡 <strong>How to use:</strong> Fill in the matter details below. The more specific
+  your inputs (especially claim amount and case facts), the more actionable the output.
+  The AI will take a firm position on the optimal settlement figure and strategy.
+</div>""", unsafe_allow_html=True)
+
+    sa1, sa2 = st.columns([3, 2])
+    with sa1:
+        sa_facts = st.text_area(
+            "Case Facts *",
+            height=200,
+            key="sa_facts_ta",
+            placeholder="""E.g. Client (ABC Ltd) entered into a construction contract with XYZ Builders Ltd
+in January 2023 for ₦85M. XYZ abandoned the site in August 2023 after collecting
+₦60M (70%). Completion was 35%. ABC incurred ₦25M additional costs to complete
+with another contractor. ABC also suffered 6 months' revenue loss estimated at ₦15M.
+XYZ claims ABC refused to pay the last instalment of ₦10M. ABC disputes this.""",
+        )
+        sa_case_type = st.selectbox(
+            "Case Type",
+            [
+                "Breach of Contract", "Debt Recovery", "Property Dispute",
+                "Employment / Wrongful Termination", "Company Dispute",
+                "Personal Injury / Negligence", "Defamation", "Matrimonial",
+                "Construction / Engineering", "Banking & Finance",
+                "Intellectual Property", "Other",
+            ],
+            key="sa_case_type_sel",
+        )
+
+    with sa2:
+        sa_instructing = st.text_input("Instructing Party", placeholder="ABC Ltd (Claimant)",
+                                       key="sa_instruct_inp")
+        sa_opposing = st.text_input("Opposing Party", placeholder="XYZ Builders Ltd (Defendant)",
+                                    key="sa_oppose_inp")
+        sa_amount = st.number_input("Total Claim / Dispute Value (₦)",
+            min_value=0.0, value=100_000_000.0, step=1_000_000.0,
+            format="%.2f", key="sa_amount_inp")
+        st.caption(f"Claim: **{fmt_currency(sa_amount)}**")
+        sa_court = st.selectbox("Current Stage",
+            ["Pre-litigation", "Letter of Demand sent", "Writ filed / Suit pending",
+             "Pleadings stage", "Pre-trial / Mediation ordered", "Trial ongoing",
+             "Judgment obtained", "Appeal pending", "Arbitration commenced"],
+            key="sa_court_sel")
+        sa_strength = st.select_slider(
+            "Your Case Strength",
+            options=["Very Weak", "Weak", "Moderate", "Strong", "Very Strong"],
+            value="Moderate", key="sa_strength_sl",
+        )
+        sa_urgency = st.selectbox("Time Pressure",
+            ["None", "Client needs cash urgently", "Court deadline approaching",
+             "Business disruption ongoing", "Preservation risk (assets at risk)",
+             "Limitation period approaching"],
+            key="sa_urgency_sel")
+
+    mode = st.session_state.response_mode
+    st.info(f"Mode: {RESPONSE_MODES[mode]['label']}")
+    sa_btn = st.button(
+        "🤝 Generate Settlement Strategy",
+        type="primary", use_container_width=True, key="sa_gen_btn",
+        disabled=not (sa_facts.strip() and sa_instructing.strip()),
+    )
+
+    if sa_btn and sa_facts.strip() and sa_instructing.strip():
+        prompt = SETTLEMENT_PROMPT.format(
+            instructing_party=sa_instructing.strip(),
+            opposing_party=sa_opposing.strip() or "Opposing party",
+            case_type=sa_case_type,
+            claim_amount=f"{sa_amount:,.2f}",
+            court_stage=sa_court,
+            strength=sa_strength,
+            urgency=sa_urgency,
+            case_facts=sa_facts.strip(),
+        )
+        with st.spinner("🤝 Analysing settlement position and generating strategy…"):
+            raw = generate(prompt, SETTLEMENT_SYSTEM, mode, "advisory")
+        st.session_state["sa_result"] = raw
+        st.session_state["sa_matter_label"] = sa_instructing.strip()
+        add_to_history(f"[Settlement] {sa_instructing.strip()} vs {sa_opposing.strip()}", raw, "advisory", mode)
+        st.rerun()
+
+    result = st.session_state.get("sa_result", "")
+    matter_label = st.session_state.get("sa_matter_label", "Settlement")
+
+    if result:
+        st.markdown("---")
+
+        # Parse sections
+        def _get_section(text, header):
+            lines = text.split("\n")
+            capture, collected = False, []
+            for line in lines:
+                if header.upper() in line.upper() and "═" in line:
+                    capture = True; continue
+                if capture and "═══" in line and collected:
+                    break
+                if capture:
+                    collected.append(line)
+            return "\n".join(collected).strip()
+
+        sec1 = _get_section(result, "SETTLEMENT VALUE")
+        sec2 = _get_section(result, "NEGOTIATION STRATEGY")
+        sec3 = _get_section(result, "ADR ROUTE")
+        sec4 = _get_section(result, "WITHOUT PREJUDICE")
+        sec5 = _get_section(result, "RISK IF NO SETTLEMENT")
+
+        if sec1 and sec2:
+            t1, t2, t3, t4, t5 = st.tabs([
+                "💰 Settlement Value",
+                "♟️ Negotiation Strategy",
+                "🏛️ ADR Route",
+                "✉️ Without Prejudice Offer",
+                "⚠️ Litigation Risk",
+            ])
+            tab_configs = [
+                (t1, sec1, "#f0fdf4", "#059669"),
+                (t2, sec2, "#eff6ff", "#3b82f6"),
+                (t3, sec3, "#f5f3ff", "#7c3aed"),
+                (t4, sec4, "#fffbeb", "#f59e0b"),
+                (t5, sec5, "#fef2f2", "#dc2626"),
+            ]
+            for tab, content, bg, border in tab_configs:
+                with tab:
+                    st.markdown(f"""
+<div style="background:{bg};border-left:4px solid {border};border-radius:0.75rem;
+padding:1.5rem;line-height:1.8;white-space:pre-wrap;font-size:0.95rem;">
+{esc(content)}</div>""", unsafe_allow_html=True)
+        else:
+            st.markdown(f'<div class="response-box">{esc(result)}</div>', unsafe_allow_html=True)
+
+        # Save to case
+        cases = st.session_state.cases
+        if cases:
+            st.markdown("---")
+            sv1, sv2 = st.columns([3, 1])
+            with sv1:
+                sc_id = st.selectbox("Save to Case", [c["id"] for c in cases],
+                    format_func=lambda x: next((c["title"] for c in cases if c["id"] == x), x),
+                    key="sa_save_case_sel")
+            with sv2:
+                st.markdown("<br>", unsafe_allow_html=True)
+                if st.button("💾 Save", key="sa_save_btn", type="primary", use_container_width=True):
+                    save_analysis_to_case(sc_id, f"[Settlement] {matter_label}", result, "advisory", mode)
+                    st.success("✅ Saved to case.")
+
+        # Export
+        fname = f"Settlement_{matter_label.replace(' ','_')}_{datetime.now():%Y%m%d_%H%M}"
+        e1, e2, e3, e4 = st.columns(4)
+        with e1:
+            st.download_button("📥 TXT", export_txt(result, f"Settlement Strategy — {matter_label}"),
+                f"{fname}.txt", "text/plain", key="sa_dl_txt", use_container_width=True)
+        with e2:
+            st.download_button("📥 HTML", export_html(result, f"Settlement Strategy — {matter_label}"),
+                f"{fname}.html", "text/html", key="sa_dl_html", use_container_width=True)
+        with e3:
+            safe_pdf_download(result, f"Settlement Strategy — {matter_label}", fname, "sa_dl_pdf")
+        with e4:
+            safe_docx_download(result, f"Settlement Strategy — {matter_label}", fname, "sa_dl_docx")
+
+        if st.button("🗑️ Clear", key="sa_clear_btn", use_container_width=True):
+            st.session_state["sa_result"] = ""
+            st.rerun()
+
+        st.markdown("""<div class="disclaimer">
+            <strong>⚖️ Disclaimer:</strong> Settlement strategy is AI-assisted advisory.
+            All without-prejudice communications must be reviewed by counsel before transmission.
+            Counsel remains professionally responsible for all advice and negotiations.
+        </div>""", unsafe_allow_html=True)
+
+
+# ═══════════════════════════════════════════════════════
+# PAGE: DUE DILIGENCE ENGINE
+# ═══════════════════════════════════════════════════════
+def render_due_diligence():
+    st.markdown("""<div class="page-header">
+        <h2>🔎 Due Diligence Engine</h2>
+        <p>AI-generated Nigerian-law due diligence checklists · CAC searches ·
+        Title verification · Regulatory approvals · Transaction risk flags</p>
+    </div>""", unsafe_allow_html=True)
+
+    if not st.session_state.api_configured:
+        st.warning("⚠️ Connect your API key first.")
+        return
+
+    st.markdown("""
+<div style="background:#f0fdf4;border-left:3px solid #059669;padding:0.8rem 1.1rem;
+border-radius:0.5rem;margin-bottom:1rem;font-size:0.9rem;">
+  💡 <strong>How it works:</strong> Select your transaction type, describe the deal,
+  and the AI generates a comprehensive Nigerian-law due diligence checklist tailored
+  to your specific matter — with search requirements, risk flags, and a critical path.
+</div>""", unsafe_allow_html=True)
+
+    dd1, dd2 = st.columns([3, 2])
+    with dd1:
+        dd_description = st.text_area(
+            "Transaction Description *",
+            height=180,
+            key="dd_desc_ta",
+            placeholder="""Describe the transaction briefly. E.g.:
+
+Client (Sunrise Properties Ltd) intends to acquire a 3-plot commercial property
+in Victoria Island, Lagos from Apex Holdings Ltd for ₦450M. The vendor claims
+a C of O has been registered in their name. The property currently has a tenant.
+Client wants to develop a 12-storey mixed-use building on the site. The vendor
+is a company with 3 directors. No prior relationship with vendor.""",
+        )
+        dd_concerns = st.text_area(
+            "Special Concerns / Red Flags (optional)",
+            height=80, key="dd_concerns_ta",
+            placeholder="E.g. Vendor is a company with recent change of directors. Prior occupant dispute. Area prone to government acquisition.",
+        )
+    with dd2:
+        dd_type = st.selectbox(
+            "Transaction Type *",
+            list(DD_TRANSACTION_TYPES.keys()),
+            format_func=lambda k: DD_TRANSACTION_TYPES[k],
+            key="dd_type_sel",
+        )
+        dd_value = st.number_input(
+            "Transaction Value (₦)",
+            min_value=0.0, value=100_000_000.0, step=5_000_000.0,
+            format="%.2f", key="dd_value_inp",
+        )
+        st.caption(f"Value: **{fmt_currency(dd_value)}**")
+        dd_jurisdiction = st.selectbox(
+            "Jurisdiction",
+            ["Lagos State", "Abuja (FCT)", "Rivers State", "Kano State",
+             "Ogun State", "Oyo State", "Delta State", "Anambra State",
+             "Cross River State", "Edo State", "Other — specify in description"],
+            key="dd_jur_sel",
+        )
+        dd_parties = st.text_input(
+            "Parties",
+            placeholder="Buyer: Sunrise Properties Ltd | Seller: Apex Holdings Ltd",
+            key="dd_parties_inp",
+        )
+        mode = st.session_state.response_mode
+        st.info(f"Mode: {RESPONSE_MODES[mode]['label']}")
+
+    dd_btn = st.button(
+        f"🔎 Generate Due Diligence Checklist",
+        type="primary", use_container_width=True, key="dd_gen_btn",
+        disabled=not dd_description.strip(),
+    )
+
+    if dd_btn and dd_description.strip():
+        prompt = DD_PROMPT.format(
+            transaction_type=DD_TRANSACTION_TYPES[dd_type],
+            transaction_value=f"{dd_value:,.2f}",
+            jurisdiction=dd_jurisdiction,
+            parties=dd_parties.strip() or "As described",
+            description=dd_description.strip(),
+            special_concerns=dd_concerns.strip() or "None stated",
+        )
+        with st.spinner(f"🔎 Generating {DD_TRANSACTION_TYPES[dd_type]} due diligence checklist…"):
+            raw = generate(prompt, DD_SYSTEM, mode, "advisory")
+        st.session_state["dd_result"] = raw
+        st.session_state["dd_label"] = f"{DD_TRANSACTION_TYPES[dd_type]} — {dd_jurisdiction}"
+        add_to_history(
+            f"[Due Diligence] {DD_TRANSACTION_TYPES[dd_type]} — {dd_value:,.0f}",
+            raw, "advisory", mode,
+        )
+        st.rerun()
+
+    result = st.session_state.get("dd_result", "")
+    dd_label = st.session_state.get("dd_label", "Due Diligence")
+
+    if result:
+        st.markdown("---")
+        st.markdown(f"### 🔎 {esc(dd_label)}")
+
+        # Render with colored block
+        st.markdown(f"""
+<div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:0.85rem;
+padding:1.8rem;line-height:1.85;white-space:pre-wrap;font-size:0.93rem;">
+{esc(result)}</div>""", unsafe_allow_html=True)
+
+        # Save to case
+        cases = st.session_state.cases
+        if cases:
+            st.markdown("---")
+            dv1, dv2 = st.columns([3, 1])
+            with dv1:
+                dd_case_id = st.selectbox("Save to Case File", [c["id"] for c in cases],
+                    format_func=lambda x: next((c["title"] for c in cases if c["id"] == x), x),
+                    key="dd_save_case_sel")
+            with dv2:
+                st.markdown("<br>", unsafe_allow_html=True)
+                if st.button("💾 Save to Case", key="dd_save_btn",
+                             type="primary", use_container_width=True):
+                    save_analysis_to_case(dd_case_id, f"[DD Checklist] {dd_label}",
+                                          result, "advisory", mode)
+                    st.success("✅ Saved to case file.")
+
+        # Export
+        fname = f"DueDiligence_{dd_type}_{datetime.now():%Y%m%d_%H%M}"
+        de1, de2, de3, de4 = st.columns(4)
+        with de1:
+            st.download_button("📥 TXT", export_txt(result, f"Due Diligence — {dd_label}"),
+                f"{fname}.txt", "text/plain", key="dd_dl_txt", use_container_width=True)
+        with de2:
+            st.download_button("📥 HTML", export_html(result, f"Due Diligence — {dd_label}"),
+                f"{fname}.html", "text/html", key="dd_dl_html", use_container_width=True)
+        with de3:
+            safe_pdf_download(result, f"Due Diligence — {dd_label}", fname, "dd_dl_pdf")
+        with de4:
+            safe_docx_download(result, f"Due Diligence — {dd_label}", fname, "dd_dl_docx")
+
+        if st.button("🗑️ Clear", key="dd_clear_btn", use_container_width=True):
+            st.session_state["dd_result"] = ""
+            st.rerun()
+
+        st.markdown("""<div class="disclaimer">
+            <strong>⚖️ Disclaimer:</strong> This checklist is AI-generated and must be reviewed
+            by counsel with knowledge of the specific transaction. It does not replace physical
+            inspection, official searches, or independent legal advice. All searches must be
+            conducted at the relevant registries before advising clients to proceed.
+        </div>""", unsafe_allow_html=True)
+
+
 # ═══════════════════════════════════════════════════════
 # PAGE: ADMIN — USER MANAGEMENT
 # ═══════════════════════════════════════════════════════
@@ -6784,6 +7818,9 @@ def main():
         "📝 Notes → Brief",
         "🎯 Witness Prep",
         "📰 Legal News",
+        "⚖️ Fee Calculator",
+        "🤝 Settlement",
+        "🔎 Due Diligence",
         "👤 Profile",
     ]
     if is_admin:
@@ -6806,9 +7843,12 @@ def main():
     with tabs[12]: render_notes_converter()
     with tabs[13]: render_witness_prep()
     with tabs[14]: render_legal_news()
-    with tabs[15]: render_profile()
+    with tabs[15]: render_fee_calculator()
+    with tabs[16]: render_settlement_advisor()
+    with tabs[17]: render_due_diligence()
+    with tabs[18]: render_profile()
     if is_admin:
-        with tabs[16]: render_user_management()
+        with tabs[19]: render_user_management()
 
     # Footer
     st.markdown("---")
