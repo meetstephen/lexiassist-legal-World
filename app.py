@@ -41,7 +41,10 @@ except ImportError:
 
 try:
     from docx import Document as DocxDocument
-    from docx.shared import Pt
+    from docx.shared import Pt, RGBColor, Inches
+    from docx.enum.text import WD_ALIGN_PARAGRAPH
+    from docx.oxml.ns import qn as _docx_qn
+    from docx.oxml import OxmlElement as _OxmlElement
     HAS_DOCX = True
 except ImportError:
     HAS_DOCX = False
@@ -2146,25 +2149,416 @@ def export_pdf(text: str, title: str = "LexiAssist Analysis") -> bytes:
         return bytes(raw)
     return raw
 
+# ───────────────────────────────────────────────────────────────────────────────
+# DOCX HELPER FUNCTIONS
+# ───────────────────────────────────────────────────────────────────────────────
+
+def _docx_shade_paragraph(para, fill_hex: str) -> None:
+    """Apply solid background shading to a paragraph via OOXML."""
+    pPr = para._p.get_or_add_pPr()
+    for existing in pPr.findall(_docx_qn("w:shd")):
+        pPr.remove(existing)
+    shd = _OxmlElement("w:shd")
+    shd.set(_docx_qn("w:val"),   "clear")
+    shd.set(_docx_qn("w:color"), "auto")
+    shd.set(_docx_qn("w:fill"),  fill_hex.lstrip("#"))
+    pPr.append(shd)
+
+
+def _docx_set_cell_bg(cell, fill_hex: str) -> None:
+    """Set table cell background colour via OOXML."""
+    tc   = cell._tc
+    tcPr = tc.get_or_add_tcPr()
+    for existing in tcPr.findall(_docx_qn("w:shd")):
+        tcPr.remove(existing)
+    shd = _OxmlElement("w:shd")
+    shd.set(_docx_qn("w:val"),   "clear")
+    shd.set(_docx_qn("w:color"), "auto")
+    shd.set(_docx_qn("w:fill"),  fill_hex.lstrip("#"))
+    tcPr.append(shd)
+
+
+def _docx_add_footer(doc, firm: str) -> None:
+    """
+    Add a professional footer with:
+      left  — firm name · LexiAssist v8.0 · disclaimer
+      right — Page X of Y
+    """
+    section = doc.sections[0]
+    section.different_first_page_header_footer = False
+    footer = section.footer
+    para   = footer.paragraphs[0] if footer.paragraphs else footer.add_paragraph()
+    para.clear()
+    para.alignment = WD_ALIGN_PARAGRAPH.LEFT
+
+    # ── top border ──
+    pPr  = para._p.get_or_add_pPr()
+    pBdr = _OxmlElement("w:pBdr")
+    top  = _OxmlElement("w:top")
+    top.set(_docx_qn("w:val"),   "single")
+    top.set(_docx_qn("w:sz"),    "4")
+    top.set(_docx_qn("w:space"), "1")
+    top.set(_docx_qn("w:color"), "1a2e4a")
+    pBdr.append(top)
+    pPr.append(pBdr)
+
+    # ── right-align tab stop at content right edge (A4 @ 1" margins = 6.27") ──
+    tabs_el = _OxmlElement("w:tabs")
+    tab     = _OxmlElement("w:tab")
+    tab.set(_docx_qn("w:val"), "right")
+    tab.set(_docx_qn("w:pos"), "9026")   # 6.27 inches in twips
+    tabs_el.append(tab)
+    pPr.append(tabs_el)
+
+    grey        = RGBColor(0x6b, 0x72, 0x80)
+    firm_text   = firm if firm and firm != "LexiAssist" else "LexiAssist v8.0"
+    disclaimer  = f"{firm_text}  ·  LexiAssist v8.0  ·  Verify all citations independently"
+
+    def _styled_run(text: str, bold: bool = False) -> None:
+        r = para.add_run(text)
+        r.font.name  = "Calibri"
+        r.font.size  = Pt(8)
+        r.font.bold  = bold
+        r.font.color.rgb = grey
+
+    def _field_run(instruction: str) -> None:
+        r  = para.add_run()
+        r.font.name  = "Calibri"
+        r.font.size  = Pt(8)
+        r.font.color.rgb = grey
+        fc_begin = _OxmlElement("w:fldChar"); fc_begin.set(_docx_qn("w:fldCharType"), "begin")
+        instr    = _OxmlElement("w:instrText")
+        instr.set("{http://www.w3.org/XML/1998/namespace}space", "preserve")
+        instr.text = f" {instruction} "
+        fc_end   = _OxmlElement("w:fldChar"); fc_end.set(_docx_qn("w:fldCharType"), "end")
+        r._r.extend([fc_begin, instr, fc_end])
+
+    _styled_run(disclaimer)
+    _styled_run("\t")        # jump to right-aligned tab stop
+    _styled_run("Page ")
+    _field_run("PAGE")
+    _styled_run(" of ")
+    _field_run("NUMPAGES")
+
+
+def _docx_parse_output(text: str) -> list:
+    """
+    Parse LexiAssist AI output into typed content blocks.
+
+    Block types returned:
+      heading2   — section title (from ═══ TITLE ═══ markers)
+      subheading — ▸ sub-headers
+      risk_row   — 🔴/🟡/🟢 risk ranking lines  → rendered as a coloured table
+      bullet     — • list items
+      body       — normal paragraph text
+    """
+    blocks = []
+    for line in text.split("\n"):
+        s = line.strip()
+        if not s:
+            continue
+
+        # ── ═══ SECTION HEADER ═══
+        if "═══" in s:
+            inner = s.replace("═", "").strip()
+            if inner:
+                blocks.append({"type": "heading2", "content": inner})
+            continue
+
+        # ── pure divider lines
+        if len(s) > 3 and all(c in "═─━—=─*" for c in s):
+            continue
+
+        # ── ▸ sub-headers
+        if s.startswith("▸"):
+            blocks.append({"type": "subheading", "content": s[1:].strip()})
+            continue
+
+        # ── 🔴 🟡 🟢 risk rows
+        if s[:1] in ("🔴", "🟡", "🟢") or s.startswith(("🔴", "🟡", "🟢")):
+            level = "HIGH" if "🔴" in s[:4] else ("MEDIUM" if "🟡" in s[:4] else "LOW")
+            body  = s
+            for pfx in ("🔴 HIGH RISK →", "🟡 MEDIUM RISK →", "🟢 LOW RISK →",
+                        "🔴 HIGH →",      "🟡 MEDIUM →",      "🟢 LOW →",
+                        "🔴", "🟡", "🟢"):
+                if body.startswith(pfx):
+                    body = body[len(pfx):].strip()
+                    break
+            sep = " — " if " — " in body else (" - " if " - " in body else None)
+            if sep:
+                party, reason = body.split(sep, 1)
+            else:
+                party, reason = body, ""
+            blocks.append({"type": "risk_row", "level": level,
+                           "party": party.strip(), "reason": reason.strip()})
+            continue
+
+        # ── bullet items  (•  ▪  or indented -)
+        if s.startswith(("• ", "▪ ", "· ")):
+            blocks.append({"type": "bullet", "content": s[2:].strip()})
+            continue
+        if s.startswith(("  •", "  -", "\t•", "\t-")):
+            blocks.append({"type": "bullet", "content": s.strip().lstrip("•-").strip()})
+            continue
+
+        # ── short lines ending in colon  →  treat as sub-headers
+        if s.endswith(":") and 5 < len(s) < 60 and not any(c in s for c in ".?!"):
+            blocks.append({"type": "subheading", "content": s})
+            continue
+
+        # ── default: body paragraph
+        blocks.append({"type": "body", "content": s})
+
+    return blocks
+
+
+# ───────────────────────────────────────────────────────────────────────────────
+# MAIN EXPORT FUNCTION
+# ───────────────────────────────────────────────────────────────────────────────
+
 def export_docx(text: str, title: str = "LexiAssist Analysis") -> bytes:
+    """
+    Generate a professionally formatted DOCX document from LexiAssist AI output.
+
+    Features
+    --------
+    • Firm letterhead header (navy bar with firm name in gold)
+    • Styled H1 / H2 / H3 heading hierarchy
+    • Smart section parser — turns ═══ blocks, ▸ markers, and risk rows into real structure
+    • Coloured risk ranking table (red / amber / green rows)
+    • Proper Word bullet lists (no unicode hacks)
+    • Page numbers in footer  (Page X of Y)
+    • Navy rule under title block and above footer
+    • Disclaimer paragraph at end
+    """
     if not HAS_DOCX:
-        return b"DOCX generation unavailable."
-    firm = get_firm_name()
-    bio = BytesIO()
-    doc = DocxDocument()
-    doc.add_heading(title, level=0)
-    if firm and firm != "LexiAssist":
-        p = doc.add_paragraph(firm)
-        p.runs[0].font.size = Pt(12)
-        p.runs[0].bold = True
-    doc.add_paragraph(f"Generated: {datetime.now():%d %B %Y at %H:%M}")
-    doc.add_paragraph("")
-    for para in text.split("\n\n"):
-        if para.strip():
-            doc.add_paragraph(para.strip())
-    doc.add_paragraph("")
-    footer = doc.add_paragraph(f"Generated by {firm} via LexiAssist v8.0 — Verify all citations independently")
-    footer.runs[0].font.size = Pt(8)
+        return b"DOCX generation unavailable - install python-docx."
+
+    # ── Colour palette ────────────────────────────────────────────────────
+    NAVY      = RGBColor(0x1a, 0x2e, 0x4a)
+    GOLD      = RGBColor(0xc9, 0xa8, 0x4c)
+    DARK_GREY = RGBColor(0x37, 0x41, 0x51)
+    MID_GREY  = RGBColor(0x6b, 0x72, 0x80)
+    LIGHT_BLU = RGBColor(0xa0, 0xbc, 0xd8)
+
+    firm     = get_firm_name() or "LexiAssist"
+    date_str = datetime.now().strftime("%d %B %Y")
+    bio      = BytesIO()
+    doc      = DocxDocument()
+
+    # ── Page setup: A4, 1-inch margins ───────────────────────────────────
+    sec              = doc.sections[0]
+    sec.page_width   = int(8.27  * 914400)
+    sec.page_height  = int(11.69 * 914400)
+    sec.left_margin  = Inches(1.0)
+    sec.right_margin = Inches(1.0)
+    sec.top_margin   = Inches(0.8)
+    sec.bottom_margin= Inches(0.9)
+
+    # ── Base styles ───────────────────────────────────────────────────────
+    def _set_base(style, size_pt, bold=False, color=None, space_before=0, space_after=6):
+        style.font.name       = "Calibri"
+        style.font.size       = Pt(size_pt)
+        style.font.bold       = bold
+        if color:
+            style.font.color.rgb = color
+        style.paragraph_format.space_before    = Pt(space_before)
+        style.paragraph_format.space_after     = Pt(space_after)
+        style.paragraph_format.line_spacing    = Pt(size_pt * 1.3)
+
+    _set_base(doc.styles["Normal"],    11, color=DARK_GREY, space_after=6)
+    _set_base(doc.styles["Heading 1"], 18, bold=True, color=NAVY,
+              space_before=8, space_after=4)
+    _set_base(doc.styles["Heading 2"], 13, bold=True, color=NAVY,
+              space_before=14, space_after=4)
+    _set_base(doc.styles["Heading 3"], 11, bold=True, color=DARK_GREY,
+              space_before=10, space_after=2)
+
+    doc.styles["Heading 1"].paragraph_format.keep_with_next = True
+    doc.styles["Heading 2"].paragraph_format.keep_with_next = True
+
+    try:
+        _set_base(doc.styles["List Bullet"], 11, color=DARK_GREY, space_after=3)
+    except Exception:
+        pass
+
+    # ── Letterhead header ─────────────────────────────────────────────────
+    hdr_sec  = doc.sections[0]
+    header   = hdr_sec.header
+    hdr_para = header.paragraphs[0] if header.paragraphs else header.add_paragraph()
+    hdr_para.clear()
+    hdr_para.alignment = WD_ALIGN_PARAGRAPH.LEFT
+    _docx_shade_paragraph(hdr_para, "1a2e4a")
+    hdr_para.paragraph_format.space_before = Pt(5)
+    hdr_para.paragraph_format.space_after  = Pt(5)
+
+    r_firm = hdr_para.add_run(firm.upper() if firm != "LexiAssist" else "LEXIASSIST")
+    r_firm.font.name  = "Calibri"
+    r_firm.font.size  = Pt(12)
+    r_firm.font.bold  = True
+    r_firm.font.color.rgb = GOLD
+
+    r_tag = hdr_para.add_run(f"   ·   Legal Analysis   ·   Confidential   ·   {date_str}")
+    r_tag.font.name  = "Calibri"
+    r_tag.font.size  = Pt(9)
+    r_tag.font.color.rgb = LIGHT_BLU
+
+    # ── Footer with page numbers ──────────────────────────────────────────
+    _docx_add_footer(doc, firm)
+
+    # ── Document title block ──────────────────────────────────────────────
+    doc.add_paragraph(title, style="Heading 1")
+
+    meta = doc.add_paragraph()
+    meta.paragraph_format.space_after = Pt(14)
+    r_meta = meta.add_run(f"{firm}   ·   {date_str}   ·   Generated by LexiAssist v8.0")
+    r_meta.font.name  = "Calibri"
+    r_meta.font.size  = Pt(9)
+    r_meta.font.color.rgb = MID_GREY
+
+    # thin navy rule under title area
+    meta_pPr  = meta._p.get_or_add_pPr()
+    meta_pBdr = _OxmlElement("w:pBdr")
+    btm       = _OxmlElement("w:bottom")
+    btm.set(_docx_qn("w:val"),   "single")
+    btm.set(_docx_qn("w:sz"),    "6")
+    btm.set(_docx_qn("w:space"), "1")
+    btm.set(_docx_qn("w:color"), "1a2e4a")
+    meta_pBdr.append(btm)
+    meta_pPr.append(meta_pBdr)
+
+    # ── Parse AI output into structured blocks ────────────────────────────
+    blocks      = _docx_parse_output(text)
+    risk_buffer = []
+
+    # Risk table colours
+    RISK_CFG = {
+        "HIGH":   {"fill": "fef2f2", "text": RGBColor(0x7f, 0x1d, 0x1d)},
+        "MEDIUM": {"fill": "fefce8", "text": RGBColor(0x71, 0x3f, 0x12)},
+        "LOW":    {"fill": "f0fdf4", "text": RGBColor(0x14, 0x53, 0x2d)},
+    }
+
+    def _flush_risk_table() -> None:
+        """Render accumulated risk_row blocks as a single coloured 3-column table."""
+        nonlocal risk_buffer
+        if not risk_buffer:
+            return
+
+        # Column widths in EMU: Party 1.7", Risk 1.1", Reason 3.47" → total ≈ 6.27"
+        col_w = [int(1.7 * 914400), int(1.1 * 914400), int(3.47 * 914400)]
+
+        tbl = doc.add_table(rows=1, cols=3)
+        tbl.style    = "Table Grid"
+        tbl.autofit  = False
+        for i, cell in enumerate(tbl.rows[0].cells):
+            cell.width = col_w[i]
+
+        # Header row (navy background, gold text)
+        hrow = tbl.rows[0]
+        for cell, label in zip(hrow.cells, ["PARTY", "RISK", "EXPOSURE / REASON"]):
+            _docx_set_cell_bg(cell, "1a2e4a")
+            p  = cell.paragraphs[0]
+            p.clear()
+            r  = p.add_run(label)
+            r.font.name  = "Calibri"
+            r.font.size  = Pt(9)
+            r.font.bold  = True
+            r.font.color.rgb = GOLD
+            p.paragraph_format.space_before = Pt(3)
+            p.paragraph_format.space_after  = Pt(3)
+
+        # Data rows
+        for rb in risk_buffer:
+            lvl = rb.get("level", "LOW")
+            cfg = RISK_CFG.get(lvl, RISK_CFG["LOW"])
+            row = tbl.add_row()
+            for i, cell in enumerate(row.cells):
+                cell.width = col_w[i]
+                _docx_set_cell_bg(cell, cfg["fill"])
+                p = cell.paragraphs[0]
+                p.clear()
+                p.paragraph_format.space_before = Pt(3)
+                p.paragraph_format.space_after  = Pt(3)
+                r = p.add_run(
+                    rb.get("party", "")  if i == 0 else
+                    lvl                  if i == 1 else
+                    rb.get("reason", "")
+                )
+                r.font.name      = "Calibri"
+                r.font.size      = Pt(10 if i != 1 else 9)
+                r.font.bold      = (i == 0 or i == 1)
+                r.font.color.rgb = cfg["text"]
+
+        # Breathing space after table
+        sp = doc.add_paragraph()
+        sp.paragraph_format.space_after = Pt(4)
+        risk_buffer = []
+
+    # ── Render blocks ─────────────────────────────────────────────────────
+    for block in blocks:
+        btype = block["type"]
+
+        if btype == "risk_row":
+            risk_buffer.append(block)
+            continue
+        else:
+            _flush_risk_table()
+
+        if btype == "heading2":
+            doc.add_paragraph(block["content"], style="Heading 2")
+
+        elif btype == "subheading":
+            p = doc.add_paragraph()
+            p.paragraph_format.space_before = Pt(8)
+            p.paragraph_format.space_after  = Pt(2)
+            r = p.add_run(block["content"])
+            r.font.name  = "Calibri"
+            r.font.size  = Pt(11)
+            r.font.bold  = True
+            r.font.color.rgb = NAVY
+
+        elif btype == "bullet":
+            try:
+                p = doc.add_paragraph(block["content"], style="List Bullet")
+                p.paragraph_format.space_after = Pt(3)
+                for run in p.runs:
+                    run.font.name  = "Calibri"
+                    run.font.size  = Pt(11)
+                    run.font.color.rgb = DARK_GREY
+            except Exception:
+                p = doc.add_paragraph()
+                r = p.add_run(f"\u2022  {block['content']}")
+                r.font.name  = "Calibri"
+                r.font.size  = Pt(11)
+                r.font.color.rgb = DARK_GREY
+
+        elif btype == "body":
+            p = doc.add_paragraph(block["content"])
+            p.style = doc.styles["Normal"]
+
+    _flush_risk_table()   # flush any trailing risk rows
+
+    # ── Disclaimer ────────────────────────────────────────────────────────
+    doc.add_paragraph()
+    disc = doc.add_paragraph()
+    disc_pPr  = disc._p.get_or_add_pPr()
+    disc_pBdr = _OxmlElement("w:pBdr")
+    disc_top  = _OxmlElement("w:top")
+    disc_top.set(_docx_qn("w:val"),   "single")
+    disc_top.set(_docx_qn("w:sz"),    "4")
+    disc_top.set(_docx_qn("w:space"), "1")
+    disc_top.set(_docx_qn("w:color"), "cccccc")
+    disc_pBdr.append(disc_top)
+    disc_pPr.append(disc_pBdr)
+    r_d = disc.add_run(
+        "\u26a0  This document was generated by LexiAssist v8.0 using AI assistance. "
+        "It does not constitute legal advice. All citations and legal positions must be "
+        f"independently verified before reliance.  \u00a9 {datetime.now().year} {firm}."
+    )
+    r_d.font.name  = "Calibri"
+    r_d.font.size  = Pt(8)
+    r_d.font.color.rgb = MID_GREY
+
     doc.save(bio)
     return bio.getvalue()
 
@@ -7862,23 +8256,16 @@ def main():
     )
 
     # ── Keep-Alive Ping ─────────────────────────────────────────────────────────
-    # Silently pings the app every 10 minutes from the active browser tab to
-    # prevent Streamlit Cloud from putting the app to sleep during inactivity.
-    # - height=0  → completely invisible, zero visual footprint
-    # - No state changes, no reruns, no widget interference
-    # - Works alongside the GitHub Actions workflow for full coverage
     import streamlit.components.v1 as _components
     _components.html(
         """
         <script>
             (function () {
-                var INTERVAL = 10 * 60 * 1000; // 10 minutes in milliseconds
+                var INTERVAL = 10 * 60 * 1000;
                 function ping() {
                     fetch(window.location.href, {
-                        method: 'GET',
-                        cache: 'no-store',
-                        credentials: 'same-origin'
-                    }).catch(function () {}); // silently ignore any network errors
+                        method: 'GET', cache: 'no-store', credentials: 'same-origin'
+                    }).catch(function () {});
                 }
                 setInterval(ping, INTERVAL);
             })();
