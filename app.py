@@ -720,102 +720,76 @@ class Database:
             logger.warning(f"DDL skipped (non-fatal): {e!s:.120}")
 
     def _init_tables(self):
-        # ── STEP 1: Create tables that don't exist yet ────────────────────────
-        # The `users` CREATE statement uses only ONE safe column (created_at)
-        # so it never conflicts if the table already exists with a different schema.
-        # All required columns are added via ALTER TABLE in Step 2.
+        # Each statement runs in its own transaction so one failure never
+        # poisons subsequent DDL (PostgreSQL aborts the whole txn on error).
         ddl_statements = [
             """CREATE TABLE IF NOT EXISTS kv_store (
-                key   TEXT PRIMARY KEY,
+                key TEXT PRIMARY KEY,
                 value TEXT NOT NULL DEFAULT '[]'
             )""",
             """CREATE TABLE IF NOT EXISTS users (
-                created_at TEXT DEFAULT ''
+                user_id TEXT PRIMARY KEY,
+                username TEXT UNIQUE NOT NULL,
+                email TEXT DEFAULT '',
+                password_hash TEXT NOT NULL,
+                firm_name TEXT DEFAULT '',
+                lawyer_name TEXT DEFAULT '',
+                phone TEXT DEFAULT '',
+                address TEXT DEFAULT '',
+                role TEXT DEFAULT 'user',
+                created_at TEXT DEFAULT '',
+                last_login TEXT DEFAULT ''
             )""",
             """CREATE TABLE IF NOT EXISTS user_profile (
-                id            INTEGER PRIMARY KEY CHECK (id = 1),
-                firm_name     TEXT DEFAULT '',
-                lawyer_name   TEXT DEFAULT '',
-                email         TEXT DEFAULT '',
-                phone         TEXT DEFAULT '',
-                address       TEXT DEFAULT '',
+                id INTEGER PRIMARY KEY CHECK (id = 1),
+                firm_name TEXT DEFAULT '',
+                lawyer_name TEXT DEFAULT '',
+                email TEXT DEFAULT '',
+                phone TEXT DEFAULT '',
+                address TEXT DEFAULT '',
                 password_hash TEXT DEFAULT ''
             )""",
             """CREATE TABLE IF NOT EXISTS cost_logs (
-                id             TEXT PRIMARY KEY,
-                timestamp      TEXT,
-                model          TEXT,
-                task           TEXT,
-                mode           TEXT,
-                input_chars    INTEGER DEFAULT 0,
-                output_chars   INTEGER DEFAULT 0,
-                estimated_cost REAL    DEFAULT 0,
-                query_preview  TEXT    DEFAULT '',
-                user_id        TEXT    DEFAULT 'legacy'
+                id TEXT PRIMARY KEY,
+                timestamp TEXT,
+                model TEXT,
+                task TEXT,
+                mode TEXT,
+                input_chars INTEGER DEFAULT 0,
+                output_chars INTEGER DEFAULT 0,
+                estimated_cost REAL DEFAULT 0,
+                query_preview TEXT DEFAULT '',
+                user_id TEXT DEFAULT 'legacy'
             )""",
             """CREATE TABLE IF NOT EXISTS case_analyses (
-                id        TEXT PRIMARY KEY,
-                case_id   TEXT NOT NULL,
-                query     TEXT,
-                response  TEXT,
-                task      TEXT,
-                mode      TEXT,
+                id TEXT PRIMARY KEY,
+                case_id TEXT NOT NULL,
+                query TEXT,
+                response TEXT,
+                task TEXT,
+                mode TEXT,
                 timestamp TEXT,
-                user_id   TEXT DEFAULT 'legacy'
+                user_id TEXT DEFAULT 'legacy'
+            )""",
+            """CREATE TABLE IF NOT EXISTS user_sessions (
+                token TEXT PRIMARY KEY,
+                user_id TEXT NOT NULL,
+                created_at TEXT NOT NULL,
+                expires_at TEXT NOT NULL,
+                last_used TEXT DEFAULT '',
+                device_hint TEXT DEFAULT ''
             )""",
         ]
         for stmt in ddl_statements:
             self._exec_ddl(stmt)
 
-        # ── STEP 2: Add every required column to `users` ──────────────────────
-        # This is the CRITICAL fix.  If the table was created by an older version
-        # of the app it may be missing some or ALL of these columns (including
-        # user_id).  ALTER TABLE … ADD COLUMN IF NOT EXISTS is fully idempotent —
-        # it is a no-op when the column already exists — so this is safe to run
-        # on every startup.  Each ALTER runs in its own committed transaction via
-        # _exec_ddl, so one failure never blocks the next column.
-        for col, col_type, default in [
-            ("user_id",       "TEXT", "''"),
-            ("username",      "TEXT", "''"),
-            ("email",         "TEXT", "''"),
-            ("password_hash", "TEXT", "''"),
-            ("firm_name",     "TEXT", "''"),
-            ("lawyer_name",   "TEXT", "''"),
-            ("phone",         "TEXT", "''"),
-            ("address",       "TEXT", "''"),
-            ("role",          "TEXT", "'user'"),
-            ("created_at",    "TEXT", "''"),
-            ("last_login",    "TEXT", "''"),
-        ]:
-            self._exec_ddl(
-                f"ALTER TABLE users ADD COLUMN IF NOT EXISTS "
-                f"{col} {col_type} DEFAULT {default}"
-            )
-
-        # ── STEP 3: Back-fill user_id for any rows that pre-date the column ───
-        self._exec_ddl(
-            "UPDATE users SET user_id = md5(random()::text) "
-            "WHERE user_id IS NULL OR user_id = ''"
-        )
-
-        # ── STEP 4: Unique indexes (idempotent; safer than PK on old tables) ──
-        self._exec_ddl(
-            "CREATE UNIQUE INDEX IF NOT EXISTS users_user_id_uidx "
-            "ON users (user_id) WHERE user_id <> ''"
-        )
-        self._exec_ddl(
-            "CREATE UNIQUE INDEX IF NOT EXISTS users_username_lower_uidx "
-            "ON users (lower(username)) WHERE username <> ''"
-        )
-
-        # ── STEP 5: Add user_id to cost_logs / case_analyses if missing ───────
+        # Safely add columns to existing tables — each in its own transaction
         for tbl in ("cost_logs", "case_analyses"):
             self._exec_ddl(
-                f"ALTER TABLE {tbl} ADD COLUMN IF NOT EXISTS "
-                f"user_id TEXT DEFAULT 'legacy'"
+                f"ALTER TABLE {tbl} ADD COLUMN IF NOT EXISTS user_id TEXT DEFAULT 'legacy'"
             )
 
-        # ── STEP 6: Ensure the legacy singleton profile row exists ─────────────
+        # Ensure legacy profile row exists
         self._exec_ddl(
             "INSERT INTO user_profile (id) VALUES (1) ON CONFLICT DO NOTHING"
         )
@@ -932,7 +906,7 @@ class Database:
     def get_user_by_username(self, username: str) -> Optional[dict]:
         cur = self._execute(
             "SELECT user_id, username, email, password_hash, firm_name, lawyer_name, "
-            "phone, address, role, created_at, last_login FROM users WHERE lower(username) = %s",
+            "phone, address, role, created_at, last_login FROM users WHERE username = %s",
             (username.lower().strip(),),
         )
         row = cur.fetchone()
@@ -1199,6 +1173,123 @@ class Database:
         self.conn.commit()
         return migrated
 
+    # ── Session Tokens ──
+    def create_session_token(self, user_id: str, days: int = 30, device_hint: str = "") -> str:
+        """Create a persistent session token valid for `days` days. Returns the token."""
+        import datetime as _dt
+        token = uuid.uuid4().hex + uuid.uuid4().hex  # 64-char random, unguessable
+        now = datetime.now()
+        expires = now + _dt.timedelta(days=days)
+        try:
+            self._execute(
+                "INSERT INTO user_sessions "
+                "(token, user_id, created_at, expires_at, last_used, device_hint) "
+                "VALUES (%s, %s, %s, %s, %s, %s)",
+                (token, user_id, now.isoformat(), expires.isoformat(),
+                 now.isoformat(), device_hint),
+            )
+            self.conn.commit()
+        except Exception as e:
+            try:
+                self.conn.rollback()
+            except Exception:
+                pass
+            logger.error(f"create_session_token failed: {e}")
+        return token
+
+    def validate_session_token(self, token: str) -> Optional[dict]:
+        """Validate a session token. Returns the user dict if valid, else None."""
+        if not token or len(token) < 32:
+            return None
+        try:
+            cur = self._execute(
+                "SELECT user_id, expires_at FROM user_sessions WHERE token = %s", (token,)
+            )
+            row = cur.fetchone()
+            if not row:
+                return None
+            user_id, expires_at = row
+            # Check expiry
+            try:
+                exp = datetime.fromisoformat(expires_at)
+                if datetime.now() > exp:
+                    self.revoke_session_token(token)
+                    return None
+            except Exception:
+                pass
+            # Touch last_used
+            try:
+                self._execute(
+                    "UPDATE user_sessions SET last_used = %s WHERE token = %s",
+                    (datetime.now().isoformat(), token),
+                )
+                self.conn.commit()
+            except Exception:
+                try:
+                    self.conn.rollback()
+                except Exception:
+                    pass
+            return self.get_user_by_id(user_id)
+        except Exception:
+            return None
+
+    def revoke_session_token(self, token: str):
+        """Delete a single session token."""
+        try:
+            self._execute("DELETE FROM user_sessions WHERE token = %s", (token,))
+            self.conn.commit()
+        except Exception:
+            try:
+                self.conn.rollback()
+            except Exception:
+                pass
+
+    def revoke_all_user_sessions(self, user_id: str):
+        """Delete all session tokens for a user (sign out all devices)."""
+        try:
+            self._execute("DELETE FROM user_sessions WHERE user_id = %s", (user_id,))
+            self.conn.commit()
+        except Exception:
+            try:
+                self.conn.rollback()
+            except Exception:
+                pass
+
+    def get_user_sessions(self, user_id: str) -> list:
+        """List all active (non-expired) sessions for a user."""
+        try:
+            now = datetime.now().isoformat()
+            cur = self._execute(
+                "SELECT token, created_at, expires_at, last_used, device_hint "
+                "FROM user_sessions WHERE user_id = %s AND expires_at > %s "
+                "ORDER BY last_used DESC",
+                (user_id, now),
+            )
+            rows = cur.fetchall()
+            return [
+                {
+                    "token": r[0], "created_at": r[1], "expires_at": r[2],
+                    "last_used": r[3], "device_hint": r[4],
+                }
+                for r in rows
+            ]
+        except Exception:
+            return []
+
+    def cleanup_expired_sessions(self):
+        """Remove expired tokens (call periodically)."""
+        try:
+            self._execute(
+                "DELETE FROM user_sessions WHERE expires_at < %s",
+                (datetime.now().isoformat(),),
+            )
+            self.conn.commit()
+        except Exception:
+            try:
+                self.conn.rollback()
+            except Exception:
+                pass
+
     def close(self):
         self.conn.close()
 
@@ -1263,7 +1354,7 @@ def is_allow_registration() -> bool:
         return os.getenv("ALLOW_REGISTRATION", "false").lower() == "true"
 
 
-def do_login(username: str, password: str) -> bool:
+def do_login(username: str, password: str, remember_me: bool = True) -> bool:
     """Authenticate user, load their data into session. Returns True on success."""
     db = get_db()
     user = db.get_user_by_username(username.strip())
@@ -1271,21 +1362,64 @@ def do_login(username: str, password: str) -> bool:
         return False
     if hash_password(password) != user["password_hash"]:
         return False
+    uid = user["user_id"]
     st.session_state.authenticated = True
-    st.session_state.current_user_id = user["user_id"]
+    st.session_state.current_user_id = uid
     st.session_state.current_username = user["username"]
     st.session_state.current_user_role = user["role"]
-    db.update_user_last_login(user["user_id"])
+    db.update_user_last_login(uid)
+    load_user_data()
+    st.session_state.user_data_loaded = True
+    # ── Persistent session token ──
+    if remember_me:
+        token = db.create_session_token(uid, days=30)
+        st.session_state["_session_token"] = token
+        try:
+            st.query_params["t"] = token
+        except Exception:
+            pass
+    return True
+
+
+def do_auto_login_from_token(token: str) -> bool:
+    """Silently restore a session from a persistent token. Returns True if valid."""
+    if not token:
+        return False
+    db = get_db()
+    db.cleanup_expired_sessions()
+    user = db.validate_session_token(token)
+    if not user:
+        # Token invalid/expired — clear it from URL
+        try:
+            st.query_params.clear()
+        except Exception:
+            pass
+        return False
+    uid = user["user_id"]
+    st.session_state.authenticated = True
+    st.session_state.current_user_id = uid
+    st.session_state.current_username = user["username"]
+    st.session_state.current_user_role = user["role"]
+    st.session_state["_session_token"] = token
     load_user_data()
     st.session_state.user_data_loaded = True
     return True
 
 
 def do_logout():
-    """Clear all user-specific session state and force re-login."""
+    """Revoke session token, clear query params, and wipe session state."""
+    db = get_db()
+    token = st.session_state.get("_session_token", "")
+    if token:
+        db.revoke_session_token(token)
+    try:
+        st.query_params.clear()
+    except Exception:
+        pass
     clear_keys = [
         "authenticated", "current_user_id", "current_username", "current_user_role",
-        "user_data_loaded", "cases", "clients", "time_entries", "invoices",
+        "user_data_loaded", "_session_token",
+        "cases", "clients", "time_entries", "invoices",
         "chat_history", "custom_templates", "custom_limitation_periods", "custom_maxims",
         "profile", "last_response", "original_query", "research_results",
         "loaded_template", "imported_doc",
@@ -1310,14 +1444,12 @@ def render_login_screen():
     with col2:
         st.markdown("### 🔐 Sign In to Your Account")
 
-        # Build tab list based on whether self-registration is allowed.
-        # IMPORTANT: never unpack a 1-element list into 2 variables — that
-        # raises ValueError.  Use index access instead.
-        allow_reg = is_allow_registration()
-        tab_labels = ["🔐 Login", "📝 Register"] if allow_reg else ["🔐 Login"]
-        all_tabs = st.tabs(tab_labels)
-        tab_login = all_tabs[0]
-        tab_reg   = all_tabs[1] if allow_reg else None
+        login_tabs = ["🔐 Login", "📝 Register"] if is_allow_registration() else ["🔐 Login"]
+        if len(login_tabs) > 1:
+            tab_login, tab_reg = st.tabs(login_tabs)
+        else:
+            tab_login = st.container()
+            tab_reg = None
 
         with tab_login:
             with st.form("login_form", clear_on_submit=False):
@@ -1327,12 +1459,16 @@ def render_login_screen():
                 password_inp = st.text_input(
                     "Password", type="password", key="login_password_inp"
                 )
+                remember_me = st.checkbox(
+                    "Stay signed in (remember me for 30 days)",
+                    value=True, key="login_remember_me"
+                )
                 if st.form_submit_button("🔐 Sign In", type="primary", use_container_width=True):
                     if not username_inp.strip() or not password_inp:
                         st.error("❌ Enter both username and password.")
-                    elif do_login(username_inp.strip(), password_inp):
-                        st.success(f"✅ Welcome, {st.session_state.current_username}!")
-                        time.sleep(0.5)
+                    elif do_login(username_inp.strip(), password_inp, remember_me=remember_me):
+                        st.success(f"✅ Welcome back, @{st.session_state.current_username}!")
+                        time.sleep(0.3)
                         st.rerun()
                     else:
                         st.error("❌ Invalid username or password.")
@@ -6291,8 +6427,7 @@ def render_profile():
         st.markdown("##### 📋 Account Information")
         uid = st.session_state.get("current_user_id", "")
         if uid:
-            db = get_db()
-            user_rec = db.get_user_by_id(uid)
+            user_rec = get_db().get_user_by_id(uid)
             if user_rec:
                 ai1, ai2 = st.columns(2)
                 with ai1:
@@ -6303,8 +6438,54 @@ def render_profile():
                     st.metric("Last Login", fmt_date(user_rec.get("last_login", "")))
 
         st.markdown("---")
+        st.markdown("##### 📱 Active Sessions")
+        st.caption("These are all devices and browsers where you are currently signed in.")
+        current_token = st.session_state.get("_session_token", "")
+        if uid:
+            sessions = get_db().get_user_sessions(uid)
+            if not sessions:
+                st.info("No active sessions found.")
+            else:
+                for i, sess in enumerate(sessions):
+                    is_current = (sess["token"] == current_token)
+                    badge = '<span style="background:#059669;color:white;font-size:0.72rem;' \
+                            'padding:0.15rem 0.5rem;border-radius:1rem;font-weight:600;">This device</span>' \
+                            if is_current else ""
+                    st.markdown(f"""
+<div style="background:{'#f0fdf4' if is_current else '#f8fafc'};
+border:1px solid {'#059669' if is_current else '#e2e8f0'};
+border-radius:0.6rem;padding:0.8rem 1rem;margin-bottom:0.5rem;
+display:flex;justify-content:space-between;align-items:center;">
+  <div>
+    🖥️ <strong>Session {i+1}</strong> {badge}<br>
+    <small style="color:#64748b;">
+      Created: {esc(fmt_date(sess.get('created_at','')))} ·
+      Last used: {esc(fmt_date(sess.get('last_used','')))} ·
+      Expires: {esc(fmt_date(sess.get('expires_at','')))}
+    </small>
+  </div>
+</div>""", unsafe_allow_html=True)
+                    if not is_current:
+                        if st.button(f"🚫 Revoke Session {i+1}", key=f"revoke_sess_{i}",
+                                     use_container_width=True):
+                            get_db().revoke_session_token(sess["token"])
+                            st.success("✅ Session revoked.")
+                            st.rerun()
+
+            st.markdown("")
+            if st.button("🚫 Sign Out All Other Devices", key="revoke_all_others",
+                         use_container_width=True):
+                db2 = get_db()
+                all_sess = db2.get_user_sessions(uid)
+                for sess in all_sess:
+                    if sess["token"] != current_token:
+                        db2.revoke_session_token(sess["token"])
+                st.success("✅ All other sessions revoked.")
+                st.rerun()
+
+        st.markdown("---")
         st.markdown("##### 🚪 Sign Out")
-        st.caption("Signs you out and returns to the login screen. Your data is saved.")
+        st.caption("Signs you out of this device. Your data is saved.")
         if st.button("🚪 Sign Out Now", key="profile_logout_btn",
                      use_container_width=True, type="primary"):
             do_logout()
@@ -6559,6 +6740,15 @@ def main():
 
     db = get_db()
     db.ensure_connected()  # heal stale/aborted connections before any DB work
+
+    # ── Auto-login from persistent session token (survives page refreshes) ──
+    if not st.session_state.authenticated:
+        try:
+            token = st.query_params.get("t", "")
+        except Exception:
+            token = ""
+        if token and not st.session_state.authenticated:
+            do_auto_login_from_token(token)
 
     # ── Auth gate ──
     if not st.session_state.authenticated:
