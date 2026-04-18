@@ -841,6 +841,12 @@ DEFAULT_TEMPLATES = [
 # THEMES (CSS)
 # ═══════════════════════════════════════════════════════
 THEMES = {
+    "⚖️ Corporate": {
+        "primary": "#1a2e4a", "secondary": "#c9a84c", "accent": "#2d4a6e",
+        "bg": "#f4f6f9", "card_bg": "#ffffff", "text": "#1a2e4a",
+        "header_gradient": "linear-gradient(135deg, #1a2e4a, #2d4a6e)",
+        "sidebar_bg": "#1a2e4a",
+    },
     "🌿 Emerald": {
         "primary": "#059669", "secondary": "#0d9488", "accent": "#10b981",
         "bg": "#f8faf9", "card_bg": "#ffffff", "text": "#1e293b",
@@ -874,78 +880,365 @@ THEMES = {
 }
 
 def get_theme_css(theme_name: str) -> str:
-    t = THEMES.get(theme_name, THEMES["🌿 Emerald"])
+    t    = THEMES.get(theme_name, THEMES["⚖️ Corporate"])
+    corp = (theme_name == "⚖️ Corporate")
+    sb_text  = "#e8edf4" if corp else t["text"]
+    sb_muted = "#a0bcd8" if corp else f"{t['text']}99"
+    sb_line  = "#2d4a6e" if corp else f"{t['primary']}33"
     return f"""
 <style>
-    .stApp {{ background-color: {t['bg']}; color: {t['text']}; }}
-    section[data-testid="stSidebar"] {{ background-color: {t['sidebar_bg']}; }}
-    .hero {{
-        background: {t['header_gradient']};
-        color: white; padding: 2.5rem 2rem; border-radius: 1.2rem;
-        margin-bottom: 1.5rem;
-    }}
-    .hero h1 {{ font-size: 2.4rem; font-weight: 800; margin: 0; }}
-    .hero p {{ font-size: 1.1rem; opacity: 0.92; margin-top: 0.5rem; }}
-    .page-header {{
-        background: {t['header_gradient']};
-        color: white; padding: 1.5rem 1.8rem; border-radius: 1rem;
-        margin-bottom: 1.5rem;
-    }}
-    .page-header h2 {{ margin: 0; font-size: 1.6rem; font-weight: 700; }}
-    .page-header p {{ margin: 0.3rem 0 0 0; opacity: 0.9; }}
-    .stat-card {{
-        background: {t['card_bg']}; border: 1px solid {t['primary']}22;
-        border-radius: 0.9rem; padding: 1.2rem; text-align: center;
-        box-shadow: 0 2px 8px rgba(0,0,0,0.04);
-    }}
-    .stat-card .stat-value {{ font-size: 2rem; font-weight: 800; color: {t['primary']}; }}
-    .stat-card .stat-label {{ font-size: 0.85rem; color: {t['text']}99; margin-top: 0.2rem; }}
-    .custom-card {{
-        background: {t['card_bg']}; border: 1px solid {t['primary']}15;
-        border-radius: 0.85rem; padding: 1.2rem 1.4rem;
-        margin-bottom: 0.9rem; box-shadow: 0 1px 6px rgba(0,0,0,0.03);
-    }}
-    .custom-card h4 {{ margin: 0 0 0.4rem 0; color: {t['primary']}; }}
-    .response-box {{
-        background: {t['card_bg']}; border: 1px solid {t['primary']}20;
-        border-left: 4px solid {t['primary']};
-        border-radius: 0.75rem; padding: 1.8rem;
-        white-space: pre-wrap; line-height: 1.7; font-size: 0.95rem;
-    }}
-    .disclaimer {{
-        background: #fef3c7; border-left: 4px solid #f59e0b;
-        padding: 1rem 1.2rem; border-radius: 0.3rem; margin-top: 1rem;
-        font-size: 0.88rem; color: #92400e;
-    }}
-    .badge {{
-        display: inline-block; padding: 0.2rem 0.7rem; border-radius: 1rem;
-        font-size: 0.75rem; font-weight: 600;
-    }}
-    .badge-ok {{ background: #d1fae5; color: #065f46; }}
-    .badge-warn {{ background: #fef3c7; color: #92400e; }}
-    .badge-err {{ background: #fee2e2; color: #991b1b; }}
-    .badge-info {{ background: {t['primary']}18; color: {t['primary']}; }}
-    .history-item {{
-        background: {t['card_bg']}; border: 1px solid {t['primary']}12;
-        border-radius: 0.6rem; padding: 0.8rem 1rem;
-        margin-bottom: 0.5rem; cursor: pointer;
-    }}
-    .history-item:hover {{ border-color: {t['primary']}; }}
-    .tool-card {{
-        background: {t['card_bg']}; border: 1px solid {t['primary']}10;
-        border-radius: 0.6rem; padding: 1rem; margin-bottom: 0.6rem;
-    }}
-    div[data-testid="stTabs"] button {{
-        font-weight: 600 !important; font-size: 0.92rem !important;
-    }}
-    div[data-testid="stTabs"] button[aria-selected="true"] {{
-        color: {t['primary']} !important;
-        border-bottom-color: {t['primary']} !important;
-    }}
+.stApp{{background-color:{t['bg']};color:{t['text']};font-family:"Inter","Segoe UI",Arial,sans-serif;}}
+section[data-testid="stSidebar"]{{background-color:{t['sidebar_bg']} !important;border-right:1px solid {sb_line};}}
+section[data-testid="stSidebar"] *{{color:{sb_text} !important;}}
+section[data-testid="stSidebar"] .stCaption,
+section[data-testid="stSidebar"] small{{color:{sb_muted} !important;font-size:0.78rem;}}
+section[data-testid="stSidebar"] .stButton>button{{background:transparent !important;border:1px solid {sb_line} !important;color:{sb_text} !important;border-radius:6px !important;}}
+section[data-testid="stSidebar"] hr{{border-color:{sb_line} !important;margin:0.6rem 0;}}
+.hero{{background:{t['header_gradient']};color:white;padding:2.5rem 2.4rem;border-radius:12px;margin-bottom:1.6rem;border-bottom:3px solid {t['secondary']};}}
+.hero h1{{font-size:2.2rem;font-weight:800;margin:0;letter-spacing:-0.02em;}}
+.hero p{{font-size:1.05rem;opacity:0.88;margin-top:0.5rem;}}
+.page-header{{background:{t['header_gradient']};color:white;padding:1.4rem 1.8rem;border-radius:10px;margin-bottom:1.4rem;border-bottom:3px solid {t['secondary']};}}
+.page-header h2{{margin:0;font-size:1.5rem;font-weight:700;}}
+.page-header p{{margin:0.3rem 0 0 0;opacity:0.88;font-size:0.95rem;}}
+.stat-card{{background:{t['card_bg']};border:1px solid {t['primary']}18;border-top:3px solid {t['primary']};border-radius:10px;padding:1.2rem 1rem;text-align:center;}}
+.stat-card .stat-value{{font-size:1.9rem;font-weight:800;color:{t['primary']};line-height:1;}}
+.stat-card .stat-label{{font-size:0.8rem;color:{t['text']}80;margin-top:0.35rem;text-transform:uppercase;letter-spacing:0.05em;}}
+.custom-card{{background:{t['card_bg']};border:1px solid {t['primary']}18;border-left:4px solid {t['primary']};border-radius:8px;padding:1.1rem 1.3rem;margin-bottom:0.8rem;}}
+.custom-card h4{{margin:0 0 0.35rem 0;color:{t['primary']};font-size:0.95rem;font-weight:700;}}
+.response-box{{background:{t['card_bg']};border:1px solid {t['primary']}22;border-left:4px solid {t['primary']};border-radius:8px;padding:1.8rem 2rem;white-space:pre-wrap;line-height:1.75;font-size:0.94rem;}}
+.disclaimer{{background:#fffbeb;border-left:4px solid #f59e0b;border-radius:4px;padding:0.9rem 1.1rem;margin-top:1rem;font-size:0.86rem;color:#78350f;}}
+.badge{{display:inline-block;padding:0.18rem 0.65rem;border-radius:20px;font-size:0.73rem;font-weight:600;letter-spacing:0.02em;}}
+.badge-ok{{background:#d1fae5;color:#065f46;}}
+.badge-warn{{background:#fef3c7;color:#92400e;}}
+.badge-err{{background:#fee2e2;color:#991b1b;}}
+.badge-info{{background:{t['primary']}15;color:{t['primary']};}}
+.history-item{{background:{t['card_bg']};border:1px solid {t['primary']}14;border-radius:7px;padding:0.75rem 1rem;margin-bottom:0.45rem;cursor:pointer;}}
+.history-item:hover{{border-color:{t['primary']};}}
+.tool-card{{background:{t['card_bg']};border:1px solid {t['primary']}12;border-radius:7px;padding:1rem 1.1rem;margin-bottom:0.55rem;}}
+.login-card{{background:{t['card_bg']};border:1px solid {t['primary']}20;border-top:4px solid {t['primary']};border-radius:12px;padding:2rem 2.2rem;}}
+div[data-testid="stTabs"] button{{font-weight:600 !important;font-size:0.88rem !important;border-radius:6px 6px 0 0 !important;}}
+div[data-testid="stTabs"] button[aria-selected="true"]{{color:{t['primary']} !important;border-bottom-color:{t['primary']} !important;background:{t['primary']}0d !important;}}
+.stButton>button[kind="primary"]{{background:{t['primary']} !important;border-color:{t['primary']} !important;color:white !important;border-radius:7px !important;font-weight:600 !important;}}
+.stTextInput input,.stTextArea textarea{{border-color:{t['primary']}30 !important;border-radius:7px !important;}}
+.stTextInput input:focus,.stTextArea textarea:focus{{border-color:{t['primary']} !important;box-shadow:0 0 0 2px {t['primary']}22 !important;}}
+div[data-testid="metric-container"] label{{color:{t['text']}80 !important;font-size:0.78rem !important;text-transform:uppercase;letter-spacing:0.04em;}}
+div[data-testid="metric-container"] div[data-testid="stMetricValue"]{{color:{t['primary']} !important;font-weight:700 !important;}}
+::-webkit-scrollbar{{width:6px;height:6px;}}
+::-webkit-scrollbar-track{{background:transparent;}}
+::-webkit-scrollbar-thumb{{background:{t['primary']}40;border-radius:3px;}}
 </style>"""
 
 # ═══════════════════════════════════════════════════════
-# SQLITE DATABASE LAYER
+# EXPORT FUNCTIONS (WITH FIRM BRANDING)
+# ═══════════════════════════════════════════════════════
+def export_pdf(text: str, title: str = "LexiAssist Analysis") -> bytes:
+    if not HAS_FPDF:
+        return b"%PDF-1.0\nPDF generation unavailable. Install fpdf2."
+    firm = get_firm_name()
+    pdf  = FPDF()
+    pdf.set_auto_page_break(auto=True, margin=20)
+    pdf.add_page()
+    pdf.set_font("Helvetica", "B", 16)
+    pdf.cell(0, 12, txt=title, ln=True, align="C")
+    pdf.ln(2)
+    if firm and firm != "LexiAssist":
+        pdf.set_font("Helvetica","B",11); pdf.cell(0,7,txt=firm,ln=True,align="C")
+    pdf.set_font("Helvetica","I",9)
+    pdf.cell(0,6,txt=f"Generated: {datetime.now():%d %B %Y at %H:%M}",ln=True,align="C")
+    pdf.ln(6); pdf.set_draw_color(100,100,100); pdf.line(15,pdf.get_y(),195,pdf.get_y()); pdf.ln(6)
+    pdf.set_font("Helvetica",size=10)
+    clean = text.encode("latin-1",errors="replace").decode("latin-1")
+    for line in clean.split("\n"):
+        pdf.multi_cell(0,6,txt=line); pdf.ln(1)
+    pdf.ln(8); pdf.set_font("Helvetica","I",8)
+    pdf.cell(0,5,txt=f"Generated by {firm} via LexiAssist v8.0 — Verify all citations independently",ln=True,align="C")
+    raw = pdf.output(dest="S")
+    if isinstance(raw,str):    return raw.encode("latin-1",errors="replace")
+    if isinstance(raw,bytearray): return bytes(raw)
+    return raw
+
+# ── DOCX helper functions ────────────────────────────────────────────────────
+def _docx_shade_paragraph(para, fill_hex: str) -> None:
+    pPr = para._p.get_or_add_pPr()
+    for x in pPr.findall(_docx_qn("w:shd")): pPr.remove(x)
+    shd = _OxmlElement("w:shd")
+    shd.set(_docx_qn("w:val"),  "clear"); shd.set(_docx_qn("w:color"), "auto")
+    shd.set(_docx_qn("w:fill"), fill_hex.lstrip("#")); pPr.append(shd)
+
+def _docx_set_cell_bg(cell, fill_hex: str) -> None:
+    tc = cell._tc; tcPr = tc.get_or_add_tcPr()
+    for x in tcPr.findall(_docx_qn("w:shd")): tcPr.remove(x)
+    shd = _OxmlElement("w:shd")
+    shd.set(_docx_qn("w:val"),  "clear"); shd.set(_docx_qn("w:color"), "auto")
+    shd.set(_docx_qn("w:fill"), fill_hex.lstrip("#")); tcPr.append(shd)
+
+def _docx_add_footer(doc, firm: str) -> None:
+    section = doc.sections[0]
+    section.different_first_page_header_footer = False
+    footer = section.footer
+    para   = footer.paragraphs[0] if footer.paragraphs else footer.add_paragraph()
+    para.clear(); para.alignment = WD_ALIGN_PARAGRAPH.LEFT
+    pPr  = para._p.get_or_add_pPr()
+    pBdr = _OxmlElement("w:pBdr"); top = _OxmlElement("w:top")
+    top.set(_docx_qn("w:val"),  "single"); top.set(_docx_qn("w:sz"),    "4")
+    top.set(_docx_qn("w:space"),"1");      top.set(_docx_qn("w:color"), "1a2e4a")
+    pBdr.append(top); pPr.append(pBdr)
+    tabs_el = _OxmlElement("w:tabs"); tab = _OxmlElement("w:tab")
+    tab.set(_docx_qn("w:val"),"right"); tab.set(_docx_qn("w:pos"),"9026")
+    tabs_el.append(tab); pPr.append(tabs_el)
+    grey = RGBColor(0x6b,0x72,0x80)
+    ft   = firm if firm and firm != "LexiAssist" else "LexiAssist v8.0"
+    disc = f"{ft}  \u00b7  LexiAssist v8.0  \u00b7  Verify all citations independently"
+    def _sr(t, bold=False):
+        r=para.add_run(t); r.font.name="Calibri"; r.font.size=Pt(8); r.font.bold=bold; r.font.color.rgb=grey
+    def _fr(instr):
+        r=para.add_run(); r.font.name="Calibri"; r.font.size=Pt(8); r.font.color.rgb=grey
+        b=_OxmlElement("w:fldChar"); b.set(_docx_qn("w:fldCharType"),"begin")
+        it=_OxmlElement("w:instrText")
+        it.set("{http://www.w3.org/XML/1998/namespace}space","preserve"); it.text=f" {instr} "
+        e=_OxmlElement("w:fldChar"); e.set(_docx_qn("w:fldCharType"),"end")
+        r._r.extend([b,it,e])
+    _sr(disc); _sr("\t"); _sr("Page "); _fr("PAGE"); _sr(" of "); _fr("NUMPAGES")
+
+def _docx_parse_output(text: str) -> list:
+    blocks = []
+    for line in text.split("\n"):
+        s = line.strip()
+        if not s: continue
+        if "\u2550\u2550\u2550" in s:
+            inner = s.replace("\u2550","").strip()
+            if inner: blocks.append({"type":"heading2","content":inner})
+            continue
+        if len(s)>3 and all(c in "\u2550\u2500\u2501\u2014=-*" for c in s): continue
+        if s.startswith("\u25b8"):
+            blocks.append({"type":"subheading","content":s[1:].strip()}); continue
+        if s[:1] in ("\U0001f534","\U0001f7e1","\U0001f7e2"):
+            lvl = "HIGH" if "\U0001f534" in s[:4] else ("MEDIUM" if "\U0001f7e1" in s[:4] else "LOW")
+            body = s
+            for pfx in ("\U0001f534 HIGH RISK \u2192","\U0001f7e1 MEDIUM RISK \u2192","\U0001f7e2 LOW RISK \u2192",
+                        "\U0001f534","\U0001f7e1","\U0001f7e2"):
+                if body.startswith(pfx): body=body[len(pfx):].strip(); break
+            sep = " \u2014 " if " \u2014 " in body else (" - " if " - " in body else None)
+            party,reason = body.split(sep,1) if sep else (body,"")
+            blocks.append({"type":"risk_row","level":lvl,"party":party.strip(),"reason":reason.strip()})
+            continue
+        if s.startswith(("\u2022 ","\u25aa ","\u00b7 ")):
+            blocks.append({"type":"bullet","content":s[2:].strip()}); continue
+        if s.startswith(("  \u2022","  -","\t\u2022","\t-")):
+            blocks.append({"type":"bullet","content":s.strip().lstrip("\u2022-").strip()}); continue
+        if s.endswith(":") and 5<len(s)<60 and not any(c in s for c in ".?!"):
+            blocks.append({"type":"subheading","content":s}); continue
+        blocks.append({"type":"body","content":s})
+    return blocks
+
+def export_docx(text: str, title: str = "LexiAssist Analysis",
+                doc_type: str = "general", meta: dict = None) -> bytes:
+    """Professional DOCX: letterhead, risk tables, per-type preambles."""
+    if not HAS_DOCX:
+        return b"DOCX generation unavailable - install python-docx."
+    meta=meta or {}
+    NAVY=RGBColor(0x1a,0x2e,0x4a); GOLD=RGBColor(0xc9,0xa8,0x4c)
+    DARK_GREY=RGBColor(0x37,0x41,0x51); MID_GREY=RGBColor(0x6b,0x72,0x80)
+    LIGHT_BLU=RGBColor(0xa0,0xbc,0xd8)
+    firm=get_firm_name() or "LexiAssist"; date_str=datetime.now().strftime("%d %B %Y")
+    bio=BytesIO(); doc=DocxDocument()
+    sec=doc.sections[0]
+    sec.page_width=int(8.27*914400); sec.page_height=int(11.69*914400)
+    sec.left_margin=Inches(1.0); sec.right_margin=Inches(1.0)
+    sec.top_margin=Inches(0.8); sec.bottom_margin=Inches(0.9)
+    def _sb(style,sz,bold=False,col=None,sb=0,sa=6):
+        style.font.name="Calibri"; style.font.size=Pt(sz); style.font.bold=bold
+        if col: style.font.color.rgb=col
+        style.paragraph_format.space_before=Pt(sb)
+        style.paragraph_format.space_after=Pt(sa)
+        style.paragraph_format.line_spacing=Pt(sz*1.3)
+    _sb(doc.styles["Normal"],11,col=DARK_GREY,sa=6)
+    _sb(doc.styles["Heading 1"],18,True,NAVY,8,4)
+    _sb(doc.styles["Heading 2"],13,True,NAVY,14,4)
+    _sb(doc.styles["Heading 3"],11,True,DARK_GREY,10,2)
+    doc.styles["Heading 1"].paragraph_format.keep_with_next=True
+    doc.styles["Heading 2"].paragraph_format.keep_with_next=True
+    try: _sb(doc.styles["List Bullet"],11,col=DARK_GREY,sa=3)
+    except: pass
+    hdr=doc.sections[0].header
+    hp=hdr.paragraphs[0] if hdr.paragraphs else hdr.add_paragraph()
+    hp.clear(); hp.alignment=WD_ALIGN_PARAGRAPH.LEFT
+    _docx_shade_paragraph(hp,"1a2e4a")
+    hp.paragraph_format.space_before=Pt(5); hp.paragraph_format.space_after=Pt(5)
+    rf=hp.add_run(firm.upper() if firm!="LexiAssist" else "LEXIASSIST")
+    rf.font.name="Calibri"; rf.font.size=Pt(12); rf.font.bold=True; rf.font.color.rgb=GOLD
+    rt=hp.add_run(f"   \u00b7   Legal Analysis   \u00b7   Confidential   \u00b7   {date_str}")
+    rt.font.name="Calibri"; rt.font.size=Pt(9); rt.font.color.rgb=LIGHT_BLU
+    _docx_add_footer(doc,firm)
+    doc.add_paragraph(title,style="Heading 1")
+    mp=doc.add_paragraph(); mp.paragraph_format.space_after=Pt(14)
+    rm=mp.add_run(f"{firm}   \u00b7   {date_str}   \u00b7   Generated by LexiAssist v8.0")
+    rm.font.name="Calibri"; rm.font.size=Pt(9); rm.font.color.rgb=MID_GREY
+    pPr=mp._p.get_or_add_pPr(); pBdr=_OxmlElement("w:pBdr"); btm=_OxmlElement("w:bottom")
+    btm.set(_docx_qn("w:val"),"single"); btm.set(_docx_qn("w:sz"),"6")
+    btm.set(_docx_qn("w:space"),"1"); btm.set(_docx_qn("w:color"),"1a2e4a")
+    pBdr.append(btm); pPr.append(pBdr)
+    def _pr(label,value):
+        if not value: return
+        p=doc.add_paragraph()
+        p.paragraph_format.space_before=Pt(0); p.paragraph_format.space_after=Pt(2)
+        rl=p.add_run(f"{label}:  ")
+        rl.font.name="Calibri"; rl.font.size=Pt(10); rl.font.bold=True; rl.font.color.rgb=NAVY
+        rv=p.add_run(value)
+        rv.font.name="Calibri"; rv.font.size=Pt(10); rv.font.color.rgb=DARK_GREY
+    def _sp(): s=doc.add_paragraph(); s.paragraph_format.space_after=Pt(6)
+    if doc_type=="pleading":
+        for line,sz,bold in [
+            (meta.get("court","IN THE FEDERAL HIGH COURT OF NIGERIA"),11,True),
+            (meta.get("division",""),10,False),
+            ("HOLDEN AT "+meta.get("location","ABUJA"),10,False),
+            ("",9,False),("SUIT NO: "+meta.get("suit_no","_______________"),10,True),
+            ("",9,False),("BETWEEN",10,True),
+            (meta.get("claimant","_______________"),11,True),
+            ("(CLAIMANT / APPELLANT)",9,False),("AND",10,True),
+            (meta.get("defendant","_______________"),11,True),
+            ("(DEFENDANT / RESPONDENT)",9,False),
+        ]:
+            if not line: _sp(); continue
+            p=doc.add_paragraph(); p.alignment=WD_ALIGN_PARAGRAPH.CENTER
+            p.paragraph_format.space_before=Pt(1); p.paragraph_format.space_after=Pt(1)
+            r=p.add_run(line); r.font.name="Calibri"; r.font.size=Pt(sz)
+            r.font.bold=bold; r.font.color.rgb=NAVY
+        _sp(); _sp()
+    elif doc_type=="research":
+        doc.add_paragraph("LEGAL RESEARCH MEMORANDUM",style="Heading 2")
+        _pr("Prepared by",firm); _pr("Prepared for",meta.get("prepared_for",""))
+        _pr("Date",date_str); _pr("Subject",title)
+        _pr("Area of law",meta.get("area","")); _pr("Jurisdiction",meta.get("jurisdiction","Nigeria")); _sp()
+    elif doc_type in ("invoice","fee_note"):
+        doc.add_paragraph("PROFESSIONAL FEE NOTE / INVOICE",style="Heading 2")
+        _pr("Invoice No.",meta.get("invoice_no","")); _pr("Date",date_str)
+        _pr("Client",meta.get("client","")); _pr("Matter",meta.get("matter",""))
+        _pr("Amount",meta.get("amount","")); _pr("Due Date",meta.get("due_date","")); _sp()
+    elif doc_type=="witness":
+        doc.add_paragraph("WITNESS PREPARATION BRIEF",style="Heading 2")
+        _pr("Witness",meta.get("witness","")); _pr("Role",meta.get("role",""))
+        _pr("Matter",meta.get("matter","")); _pr("Prepared by",firm); _pr("Date",date_str)
+        p=doc.add_paragraph()
+        r=p.add_run("STRICTLY CONFIDENTIAL \u2014 Attorney-Client Privilege. Not for disclosure to opposing counsel.")
+        r.font.name="Calibri"; r.font.size=Pt(9); r.font.bold=True
+        r.font.color.rgb=RGBColor(0x99,0x1b,0x1b); _sp()
+    elif doc_type=="settlement":
+        doc.add_paragraph("SETTLEMENT STRATEGY BRIEF",style="Heading 2")
+        _pr("Matter",meta.get("matter","")); _pr("Prepared by",firm); _pr("Date",date_str)
+        p=doc.add_paragraph(); r=p.add_run("CONFIDENTIAL \u2014 Without Prejudice")
+        r.font.name="Calibri"; r.font.size=Pt(10); r.font.bold=True
+        r.font.color.rgb=RGBColor(0x92,0x40,0x0e); _sp()
+    elif doc_type=="due_diligence":
+        doc.add_paragraph("DUE DILIGENCE REPORT",style="Heading 2")
+        _pr("Subject",meta.get("subject","")); _pr("Prepared by",firm)
+        _pr("Date",date_str); _pr("Classification","STRICTLY CONFIDENTIAL"); _sp()
+    blocks=_docx_parse_output(text); risk_buf=[]
+    RCFG={"HIGH":  {"fill":"fef2f2","text":RGBColor(0x7f,0x1d,0x1d)},
+          "MEDIUM":{"fill":"fefce8","text":RGBColor(0x71,0x3f,0x12)},
+          "LOW":   {"fill":"f0fdf4","text":RGBColor(0x14,0x53,0x2d)}}
+    def _flush():
+        nonlocal risk_buf
+        if not risk_buf: return
+        cw=[int(1.7*914400),int(1.1*914400),int(3.47*914400)]
+        tbl=doc.add_table(rows=1,cols=3); tbl.style="Table Grid"; tbl.autofit=False
+        for i,cell in enumerate(tbl.rows[0].cells): cell.width=cw[i]
+        for cell,lbl in zip(tbl.rows[0].cells,["PARTY","RISK","EXPOSURE / REASON"]):
+            _docx_set_cell_bg(cell,"1a2e4a"); p=cell.paragraphs[0]; p.clear()
+            r=p.add_run(lbl); r.font.name="Calibri"; r.font.size=Pt(9)
+            r.font.bold=True; r.font.color.rgb=GOLD
+            p.paragraph_format.space_before=Pt(3); p.paragraph_format.space_after=Pt(3)
+        for rb in risk_buf:
+            lvl=rb.get("level","LOW"); cfg=RCFG.get(lvl,RCFG["LOW"]); row=tbl.add_row()
+            for i,cell in enumerate(row.cells):
+                cell.width=cw[i]; _docx_set_cell_bg(cell,cfg["fill"])
+                p=cell.paragraphs[0]; p.clear()
+                p.paragraph_format.space_before=Pt(3); p.paragraph_format.space_after=Pt(3)
+                r=p.add_run(rb.get("party","") if i==0 else lvl if i==1 else rb.get("reason",""))
+                r.font.name="Calibri"; r.font.size=Pt(10 if i!=1 else 9)
+                r.font.bold=(i==0 or i==1); r.font.color.rgb=cfg["text"]
+        s=doc.add_paragraph(); s.paragraph_format.space_after=Pt(4); risk_buf=[]
+    for block in blocks:
+        bt=block["type"]
+        if bt=="risk_row": risk_buf.append(block); continue
+        else: _flush()
+        if bt=="heading2":
+            doc.add_paragraph(block["content"],style="Heading 2")
+        elif bt=="subheading":
+            p=doc.add_paragraph()
+            p.paragraph_format.space_before=Pt(8); p.paragraph_format.space_after=Pt(2)
+            r=p.add_run(block["content"])
+            r.font.name="Calibri"; r.font.size=Pt(11); r.font.bold=True; r.font.color.rgb=NAVY
+        elif bt=="bullet":
+            try:
+                p=doc.add_paragraph(block["content"],style="List Bullet")
+                p.paragraph_format.space_after=Pt(3)
+                for run in p.runs: run.font.name="Calibri"; run.font.size=Pt(11); run.font.color.rgb=DARK_GREY
+            except:
+                p=doc.add_paragraph(); r=p.add_run(f"\u2022  {block['content']}")
+                r.font.name="Calibri"; r.font.size=Pt(11); r.font.color.rgb=DARK_GREY
+        elif bt=="body":
+            p=doc.add_paragraph(block["content"]); p.style=doc.styles["Normal"]
+    _flush()
+    doc.add_paragraph()
+    disc=doc.add_paragraph()
+    pPr2=disc._p.get_or_add_pPr(); pBdr2=_OxmlElement("w:pBdr"); dt=_OxmlElement("w:top")
+    dt.set(_docx_qn("w:val"),"single"); dt.set(_docx_qn("w:sz"),"4")
+    dt.set(_docx_qn("w:space"),"1"); dt.set(_docx_qn("w:color"),"cccccc")
+    pBdr2.append(dt); pPr2.append(pBdr2)
+    rd=disc.add_run(f"\u26a0  AI-generated via LexiAssist v8.0. Not legal advice. "
+        f"Verify all citations independently. \u00a9 {datetime.now().year} {firm}.")
+    rd.font.name="Calibri"; rd.font.size=Pt(8); rd.font.color.rgb=MID_GREY
+    doc.save(bio); return bio.getvalue()
+
+def export_txt(text: str, title: str = "LexiAssist Analysis") -> str:
+    firm   = get_firm_name()
+    header = f"{'='*60}\n{title}\n{firm}\nGenerated: {datetime.now():%d %B %Y at %H:%M}\n{'='*60}\n\n"
+    footer = f"\n\n{'='*60}\nGenerated by {firm} via LexiAssist v8.0\n{'='*60}"
+    return header + text + footer
+
+def export_html(text: str, title: str = "LexiAssist Analysis") -> str:
+    firm = get_firm_name()
+    import html as html_mod
+    safe = html_mod.escape(text).replace("\n","<br>")
+    return (f"<!DOCTYPE html><html><head><meta charset='utf-8'>"
+            f"<title>{html_mod.escape(title)}</title>"
+            f"<style>body{{font-family:Calibri,Arial,sans-serif;max-width:900px;margin:2rem auto;"
+            f"padding:0 1.5rem;color:#1a2e4a;}} h1{{color:#1a2e4a;border-bottom:3px solid #c9a84c;"
+            f"padding-bottom:.5rem;}} .meta{{color:#6b7280;font-size:.9rem;margin-bottom:1.5rem;}}"
+            f".body{{line-height:1.75;white-space:pre-wrap;}}"
+            f".footer{{margin-top:2rem;padding-top:1rem;border-top:1px solid #e2e8f0;"
+            f"color:#9ca3af;font-size:.8rem;}}</style></head>"
+            f"<body><h1>{html_mod.escape(title)}</h1>"
+            f"<div class='meta'>{html_mod.escape(firm)} &middot; "
+            f"Generated {datetime.now():%d %B %Y} &middot; LexiAssist v8.0</div>"
+            f"<div class='body'>{safe}</div>"
+            f"<div class='footer'>\u26a0 AI-generated. Not legal advice. "
+            f"Verify all citations independently.</div></body></html>")
+
+def safe_pdf_download(text: str, title: str, fname: str, key: str):
+    try:
+        pdf_data = export_pdf(text, title)
+        st.download_button("📥 PDF", data=pdf_data, file_name=f"{fname}.pdf",
+                           mime="application/pdf", key=key, use_container_width=True)
+    except Exception as e:
+        st.button("📥 PDF (unavailable)", disabled=True, key=key, use_container_width=True)
+        logger.warning(f"PDF export failed: {e}")
+
+def safe_docx_download(text: str, title: str, fname: str, key: str,
+                        doc_type: str = "general", meta: dict = None):
+    try:
+        docx_data = export_docx(text, title, doc_type=doc_type, meta=meta or {})
+        st.download_button("📥 DOCX", data=docx_data, file_name=f"{fname}.docx",
+                           mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                           key=key, use_container_width=True)
+    except Exception as e:
+        st.button("📥 DOCX (unavailable)", disabled=True, key=key, use_container_width=True)
+        logger.warning(f"DOCX export failed: {e}")
+
+
+# ═══════════════════════════════════════════════════════
+# DATABASE LAYER
 # ═══════════════════════════════════════════════════════
 class Database:
     """PostgreSQL persistence for all LexiAssist data."""
@@ -1713,55 +2006,42 @@ def do_logout():
 
 
 def render_login_screen():
-    st.markdown(get_theme_css(st.session_state.get("theme", "🌿 Emerald")), unsafe_allow_html=True)
+    st.markdown(get_theme_css(st.session_state.get("theme", "⚖️ Corporate")), unsafe_allow_html=True)
     st.markdown("""
-    <div class="hero">
-        <h1>⚖️ LexiAssist v8.0</h1>
-        <p>Elite AI Legal Engine for Nigerian Lawyers</p>
-    </div>""", unsafe_allow_html=True)
-
-    col1, col2, col3 = st.columns([1, 2, 1])
-    with col2:
-        st.markdown("### 🔐 Sign In to Your Account")
-
-        login_tabs = ["🔐 Login", "📝 Register"] if is_allow_registration() else ["🔐 Login"]
+<div class="hero">
+  <h1>⚖️ LexiAssist v8.0</h1>
+  <p>Elite AI Legal Engine &nbsp;&middot;&nbsp; Nigerian Law &nbsp;&middot;&nbsp; Built for Practitioners</p>
+</div>""", unsafe_allow_html=True)
+    _, col, _ = st.columns([1, 2, 1])
+    with col:
+        st.markdown('<div class="login-card">', unsafe_allow_html=True)
+        st.markdown("#### 🔒 Sign In to Your Workspace")
+        st.markdown("<hr style='margin:0.6rem 0 1rem 0;border-color:#1a2e4a18'>", unsafe_allow_html=True)
+        login_tabs = ["🔒 Login", "📝 Register"] if is_allow_registration() else ["🔒 Login"]
         if len(login_tabs) > 1:
             tab_login, tab_reg = st.tabs(login_tabs)
         else:
-            tab_login = st.container()
-            tab_reg = None
-
+            tab_login = st.container(); tab_reg = None
         with tab_login:
             with st.form("login_form", clear_on_submit=False):
-                username_inp = st.text_input(
-                    "Username", placeholder="your.username", key="login_username_inp"
-                )
-                password_inp = st.text_input(
-                    "Password", type="password", key="login_password_inp"
-                )
-                remember_me = st.checkbox(
-                    "Stay signed in (remember me for 30 days)",
-                    value=True, key="login_remember_me"
-                )
-                if st.form_submit_button("🔐 Sign In", type="primary", use_container_width=True):
+                username_inp = st.text_input("Username", placeholder="your.username", key="login_username_inp")
+                password_inp = st.text_input("Password", type="password", key="login_password_inp")
+                remember_me  = st.checkbox("Stay signed in for 30 days", value=True, key="login_remember_me")
+                if st.form_submit_button("🔒 Sign In", type="primary", use_container_width=True):
                     if not username_inp.strip() or not password_inp:
                         st.error("❌ Enter both username and password.")
                     elif do_login(username_inp.strip(), password_inp, remember_me=remember_me):
                         st.success(f"✅ Welcome back, @{st.session_state.current_username}!")
-                        time.sleep(0.3)
-                        st.rerun()
+                        time.sleep(0.3); st.rerun()
                     else:
                         st.error("❌ Invalid username or password.")
-
         if tab_reg is not None:
-            with tab_reg:
-                render_register_form("reg_self")
-
-        st.markdown("""
-<div style="text-align:center;margin-top:1.5rem;color:#64748b;font-size:0.85rem;">
-  Contact your firm administrator to create an account, or ask them to enable
-  self-registration via <code>ALLOW_REGISTRATION = "true"</code> in Streamlit secrets.
-</div>""", unsafe_allow_html=True)
+            with tab_reg: render_register_form("reg_self")
+        st.markdown("</div>", unsafe_allow_html=True)
+        st.markdown(
+            "<div style='text-align:center;margin-top:1.2rem;color:#64748b;font-size:0.82rem;'>"
+            "Contact your firm administrator to create an account.</div>",
+            unsafe_allow_html=True)
 
 
 def render_register_form(key_prefix: str, admin_mode: bool = False):
@@ -1835,946 +2115,23 @@ def render_register_form(key_prefix: str, admin_mode: bool = False):
 
 
 def render_create_admin_screen():
-    """First-run screen shown when no users exist in the database."""
-    st.markdown(get_theme_css(st.session_state.get("theme", "🌿 Emerald")), unsafe_allow_html=True)
+    """First-run screen: no users exist yet."""
+    st.markdown(get_theme_css(st.session_state.get("theme", "⚖️ Corporate")), unsafe_allow_html=True)
     st.markdown("""
-    <div class="hero">
-        <h1>⚖️ LexiAssist v8.0</h1>
-        <p>Elite AI Legal Engine for Nigerian Lawyers</p>
-    </div>""", unsafe_allow_html=True)
-
-    col1, col2, col3 = st.columns([1, 2, 1])
-    with col2:
-        st.markdown("""
-<div style="background:#f0fdf4;border:2px solid #059669;border-radius:1rem;
-padding:1.5rem;margin-bottom:1.5rem;text-align:center;">
-  <h3 style="margin:0 0 0.5rem 0;color:#059669;">🛡️ First-Time Setup</h3>
-  <p style="margin:0;color:#374151;">Create your Admin account to get started.
-  You can add other users from the Admin panel after logging in.</p>
+<div class="hero">
+  <h1>⚖️ LexiAssist v8.0</h1>
+  <p>First-time setup &nbsp;&middot;&nbsp; Create your administrator account below</p>
 </div>""", unsafe_allow_html=True)
-        render_register_form("admin_create", admin_mode=False)
+    _, col, _ = st.columns([1, 2, 1])
+    with col:
+        st.markdown('<div class="login-card">', unsafe_allow_html=True)
+        st.markdown("#### 🛡️ Create Administrator Account")
+        st.info("ℹ️ No accounts exist yet. The first account you create becomes the admin.")
+        st.markdown("<hr style='margin:0.6rem 0 1rem 0;border-color:#1a2e4a18'>", unsafe_allow_html=True)
+        render_register_form("first_admin")
+        st.markdown("</div>", unsafe_allow_html=True)
 
 
-# ═══════════════════════════════════════════════════════
-# SESSION STATE INITIALIZATION
-# ═══════════════════════════════════════════════════════
-def init_session_state():
-    """Set non-user-specific session defaults. Called every render cycle."""
-    simple_defaults = {
-        "api_key": "",
-        "api_configured": False,
-        "gemini_model": DEFAULT_MODEL,
-        "theme": "🌿 Emerald",
-        "response_mode": "standard",
-        "authenticated": False,
-        "current_user_id": "",
-        "current_username": "",
-        "current_user_role": "",
-        "user_data_loaded": False,
-        "last_response": "",
-        "original_query": "",
-        "last_task": "general",
-        "last_mode": "standard",
-        "research_results": "",
-        "loaded_template": "",
-        "imported_doc": None,
-        "selected_history_idx": None,
-        "compare_selections": [],
-    }
-    for k, v in simple_defaults.items():
-        if k not in st.session_state:
-            st.session_state[k] = v
-
-
-# ═══════════════════════════════════════════════════════
-# HELPER UTILITIES
-# ═══════════════════════════════════════════════════════
-def esc(text: str) -> str:
-    if not text:
-        return ""
-    return html_mod.escape(str(text))
-
-def new_id() -> str:
-    return uuid.uuid4().hex[:8]
-
-def fmt_date(d) -> str:
-    if not d:
-        return "—"
-    try:
-        if isinstance(d, str):
-            d = datetime.fromisoformat(d)
-        return d.strftime("%d %b %Y")
-    except Exception:
-        return str(d)
-
-def fmt_currency(amount) -> str:
-    try:
-        return f"₦{float(amount):,.2f}"
-    except Exception:
-        return "₦0.00"
-
-def days_until(d) -> int:
-    if not d:
-        return 9999
-    try:
-        if isinstance(d, str):
-            d = datetime.fromisoformat(d).date()
-        if isinstance(d, datetime):
-            d = d.date()
-        return (d - date.today()).days
-    except Exception:
-        return 9999
-
-def relative_date(d) -> str:
-    n = days_until(d)
-    if n == 9999:
-        return "—"
-    if n < 0:
-        return f"{abs(n)}d overdue"
-    if n == 0:
-        return "TODAY"
-    if n == 1:
-        return "Tomorrow"
-    if n <= 7:
-        return f"{n} days"
-    return f"{n} days away"
-
-def safe_secret(key: str, default: str = "") -> str:
-    try:
-        return st.secrets[key]
-    except Exception:
-        return default
-
-def estimate_cost(input_text: str, output_text: str) -> float:
-    """Estimate API cost from text lengths."""
-    input_tokens = len(input_text) / 4
-    output_tokens = len(output_text) / 4
-    cost = (input_tokens / 1_000_000) * COST_PER_1M_INPUT + (output_tokens / 1_000_000) * COST_PER_1M_OUTPUT
-    return round(cost, 6)
-
-def get_firm_name() -> str:
-    """Get firm name for branding on exports."""
-    profile = st.session_state.get("profile", {})
-    return profile.get("firm_name", "") or "LexiAssist"
-
-def get_all_templates() -> list:
-    """Combine built-in and custom templates."""
-    custom = st.session_state.get("custom_templates", [])
-    return DEFAULT_TEMPLATES + custom
-
-def get_all_limitation_periods() -> list:
-    custom = st.session_state.get("custom_limitation_periods", [])
-    return DEFAULT_LIMITATION_PERIODS + custom
-
-def get_all_maxims() -> list:
-    custom = st.session_state.get("custom_maxims", [])
-    return DEFAULT_LEGAL_MAXIMS + custom
-
-# ═══════════════════════════════════════════════════════
-# SECURE API LAYER
-# ═══════════════════════════════════════════════════════
-def _resolve_api_key() -> str:
-    for src in [
-        lambda: safe_secret("GEMINI_API_KEY"),
-        lambda: os.getenv("GEMINI_API_KEY", ""),
-        lambda: st.session_state.get("api_key", ""),
-    ]:
-        k = src()
-        if k and k.strip() and len(k.strip()) >= 10:
-            return k.strip()
-    return ""
-
-def _configure_genai(key: str):
-    genai.configure(api_key=key, transport="rest")
-
-def auto_connect():
-    if st.session_state.api_configured:
-        return
-    k = _resolve_api_key()
-    if k:
-        try:
-            _configure_genai(k)
-            st.session_state.api_key = k
-            st.session_state.api_configured = True
-            m = safe_secret("GEMINI_MODEL") or os.getenv("GEMINI_MODEL", "")
-            if m and m in SUPPORTED_MODELS:
-                st.session_state.gemini_model = m
-        except Exception as e:
-            logger.warning(f"Auto-connect failed: {e}")
-
-def manual_connect(key: str) -> bool:
-    try:
-        _configure_genai(key)
-        model = genai.GenerativeModel(st.session_state.gemini_model)
-        model.generate_content("Test", generation_config={"max_output_tokens": 10})
-        st.session_state.api_key = key
-        st.session_state.api_configured = True
-        return True
-    except Exception as e:
-        err = str(e)
-        if "403" in err:
-            st.error("❌ Invalid API key.")
-        elif "429" in err:
-            st.error("⚠️ Rate limit — try again shortly.")
-        else:
-            st.error(f"❌ Connection failed: {err[:120]}")
-        return False
-
-def generate(prompt: str, system: str, mode: str, task: str = "general") -> str:
-    """Core generation with retry, cost logging, and proper token limits."""
-    k = _resolve_api_key()
-    if not k:
-        return "⚠️ No API key configured. Please set up your key."
-    _configure_genai(k)
-
-    mode_cfg = RESPONSE_MODES.get(mode, RESPONSE_MODES["standard"])
-    gen_config = {
-        "temperature": mode_cfg["temp"],
-        "top_p": 0.92,
-        "top_k": 40,
-        "max_output_tokens": mode_cfg["tokens"],
-    }
-
-    model_obj = genai.GenerativeModel(
-        st.session_state.gemini_model,
-        system_instruction=system,
-    )
-
-    for attempt in range(3):
-        try:
-            resp = model_obj.generate_content(prompt, generation_config=gen_config)
-            if resp and resp.text:
-                # Log cost
-                cost = estimate_cost(prompt + system, resp.text)
-                db = get_db()
-                db.add_cost_log({
-                    "id": new_id(),
-                    "timestamp": datetime.now().isoformat(),
-                    "model": st.session_state.gemini_model,
-                    "task": task,
-                    "mode": mode,
-                    "input_chars": len(prompt) + len(system),
-                    "output_chars": len(resp.text),
-                    "estimated_cost": cost,
-                    "query_preview": prompt[:120],
-                })
-                return resp.text
-            return "⚠️ Empty response from AI. Try rephrasing your query."
-        except Exception as e:
-            if attempt == 2:
-                return f"⚠️ Generation error after 3 attempts: {str(e)[:200]}"
-            time.sleep(2 * (attempt + 1))
-    return "⚠️ Generation failed. Please try again."
-
-def build_system_prompt(task: str, mode: str) -> str:
-    base = PROMPTS_BY_MODE.get(mode, PROMPTS_BY_MODE["standard"])
-    modifier = TASK_MODIFIERS.get(task, TASK_MODIFIERS["general"])
-    return base + modifier
-
-# ═══════════════════════════════════════════════════════
-# FILE EXTRACTION
-# ═══════════════════════════════════════════════════════
-def extract_file_text(uploaded_file) -> str:
-    name = uploaded_file.name.lower()
-    data = uploaded_file.getvalue()
-
-    if name.endswith(".pdf"):
-        if not HAS_PDF_READ:
-            raise ValueError("PDF support not available (install pdfplumber)")
-        with pdfplumber.open(BytesIO(data)) as pdf:
-            pages = []
-            for p in pdf.pages:
-                txt = p.extract_text()
-                if txt:
-                    pages.append(txt)
-            return "\n\n".join(pages)
-    elif name.endswith((".docx", ".doc")):
-        if not HAS_DOCX:
-            raise ValueError("DOCX support not available (install python-docx)")
-        doc = DocxDocument(BytesIO(data))
-        return "\n".join(p.text for p in doc.paragraphs if p.text.strip())
-    elif name.endswith(".txt") or name.endswith(".rtf"):
-        return data.decode("utf-8", errors="ignore")
-    elif name.endswith((".xlsx", ".xls")):
-        if not HAS_XLSX:
-            raise ValueError("Excel support not available (install openpyxl)")
-        df = pd.read_excel(BytesIO(data))
-        return df.to_string(index=False)
-    elif name.endswith(".csv"):
-        df = pd.read_csv(BytesIO(data))
-        return df.to_string(index=False)
-    elif name.endswith(".json"):
-        obj = json.loads(data.decode("utf-8", errors="ignore"))
-        return json.dumps(obj, indent=2)
-    else:
-        try:
-            return data.decode("utf-8", errors="ignore")
-        except Exception:
-            raise ValueError(f"Unsupported file type: {name}")
-
-# ═══════════════════════════════════════════════════════
-# EXPORT FUNCTIONS (WITH FIRM BRANDING)
-# ═══════════════════════════════════════════════════════
-def export_pdf(text: str, title: str = "LexiAssist Analysis") -> bytes:
-    if not HAS_FPDF:
-        return b"%PDF-1.0\nPDF generation unavailable. Install fpdf2."
-    firm = get_firm_name()
-    pdf = FPDF()
-    pdf.set_auto_page_break(auto=True, margin=20)
-    pdf.add_page()
-    pdf.set_font("Helvetica", "B", 16)
-    pdf.cell(0, 12, txt=title, ln=True, align="C")
-    pdf.ln(2)
-    if firm and firm != "LexiAssist":
-        pdf.set_font("Helvetica", "B", 11)
-        pdf.cell(0, 7, txt=firm, ln=True, align="C")
-    pdf.set_font("Helvetica", "I", 9)
-    pdf.cell(0, 6, txt=f"Generated: {datetime.now():%d %B %Y at %H:%M}", ln=True, align="C")
-    pdf.ln(6)
-    pdf.set_draw_color(100, 100, 100)
-    pdf.line(15, pdf.get_y(), 195, pdf.get_y())
-    pdf.ln(6)
-    pdf.set_font("Helvetica", size=10)
-    clean = text.encode("latin-1", errors="replace").decode("latin-1")
-    for line in clean.split("\n"):
-        pdf.multi_cell(0, 6, txt=line)
-        pdf.ln(1)
-    pdf.ln(8)
-    pdf.set_font("Helvetica", "I", 8)
-    pdf.cell(0, 5, txt=f"Generated by {firm} via LexiAssist v8.0 — Verify all citations independently", ln=True, align="C")
-    raw = pdf.output(dest="S")
-    if isinstance(raw, str):
-        return raw.encode("latin-1", errors="replace")
-    if isinstance(raw, bytearray):
-        return bytes(raw)
-    return raw
-
-# ───────────────────────────────────────────────────────────────────────────────
-# DOCX HELPER FUNCTIONS
-# ───────────────────────────────────────────────────────────────────────────────
-
-def _docx_shade_paragraph(para, fill_hex: str) -> None:
-    """Apply solid background shading to a paragraph via OOXML."""
-    pPr = para._p.get_or_add_pPr()
-    for existing in pPr.findall(_docx_qn("w:shd")):
-        pPr.remove(existing)
-    shd = _OxmlElement("w:shd")
-    shd.set(_docx_qn("w:val"),   "clear")
-    shd.set(_docx_qn("w:color"), "auto")
-    shd.set(_docx_qn("w:fill"),  fill_hex.lstrip("#"))
-    pPr.append(shd)
-
-
-def _docx_set_cell_bg(cell, fill_hex: str) -> None:
-    """Set table cell background colour via OOXML."""
-    tc   = cell._tc
-    tcPr = tc.get_or_add_tcPr()
-    for existing in tcPr.findall(_docx_qn("w:shd")):
-        tcPr.remove(existing)
-    shd = _OxmlElement("w:shd")
-    shd.set(_docx_qn("w:val"),   "clear")
-    shd.set(_docx_qn("w:color"), "auto")
-    shd.set(_docx_qn("w:fill"),  fill_hex.lstrip("#"))
-    tcPr.append(shd)
-
-
-def _docx_add_footer(doc, firm: str) -> None:
-    """
-    Add a professional footer with:
-      left  — firm name · LexiAssist v8.0 · disclaimer
-      right — Page X of Y
-    """
-    section = doc.sections[0]
-    section.different_first_page_header_footer = False
-    footer = section.footer
-    para   = footer.paragraphs[0] if footer.paragraphs else footer.add_paragraph()
-    para.clear()
-    para.alignment = WD_ALIGN_PARAGRAPH.LEFT
-
-    # ── top border ──
-    pPr  = para._p.get_or_add_pPr()
-    pBdr = _OxmlElement("w:pBdr")
-    top  = _OxmlElement("w:top")
-    top.set(_docx_qn("w:val"),   "single")
-    top.set(_docx_qn("w:sz"),    "4")
-    top.set(_docx_qn("w:space"), "1")
-    top.set(_docx_qn("w:color"), "1a2e4a")
-    pBdr.append(top)
-    pPr.append(pBdr)
-
-    # ── right-align tab stop at content right edge (A4 @ 1" margins = 6.27") ──
-    tabs_el = _OxmlElement("w:tabs")
-    tab     = _OxmlElement("w:tab")
-    tab.set(_docx_qn("w:val"), "right")
-    tab.set(_docx_qn("w:pos"), "9026")   # 6.27 inches in twips
-    tabs_el.append(tab)
-    pPr.append(tabs_el)
-
-    grey        = RGBColor(0x6b, 0x72, 0x80)
-    firm_text   = firm if firm and firm != "LexiAssist" else "LexiAssist v8.0"
-    disclaimer  = f"{firm_text}  ·  LexiAssist v8.0  ·  Verify all citations independently"
-
-    def _styled_run(text: str, bold: bool = False) -> None:
-        r = para.add_run(text)
-        r.font.name  = "Calibri"
-        r.font.size  = Pt(8)
-        r.font.bold  = bold
-        r.font.color.rgb = grey
-
-    def _field_run(instruction: str) -> None:
-        r  = para.add_run()
-        r.font.name  = "Calibri"
-        r.font.size  = Pt(8)
-        r.font.color.rgb = grey
-        fc_begin = _OxmlElement("w:fldChar"); fc_begin.set(_docx_qn("w:fldCharType"), "begin")
-        instr    = _OxmlElement("w:instrText")
-        instr.set("{http://www.w3.org/XML/1998/namespace}space", "preserve")
-        instr.text = f" {instruction} "
-        fc_end   = _OxmlElement("w:fldChar"); fc_end.set(_docx_qn("w:fldCharType"), "end")
-        r._r.extend([fc_begin, instr, fc_end])
-
-    _styled_run(disclaimer)
-    _styled_run("\t")        # jump to right-aligned tab stop
-    _styled_run("Page ")
-    _field_run("PAGE")
-    _styled_run(" of ")
-    _field_run("NUMPAGES")
-
-
-def _docx_parse_output(text: str) -> list:
-    """
-    Parse LexiAssist AI output into typed content blocks.
-
-    Block types returned:
-      heading2   — section title (from ═══ TITLE ═══ markers)
-      subheading — ▸ sub-headers
-      risk_row   — 🔴/🟡/🟢 risk ranking lines  → rendered as a coloured table
-      bullet     — • list items
-      body       — normal paragraph text
-    """
-    blocks = []
-    for line in text.split("\n"):
-        s = line.strip()
-        if not s:
-            continue
-
-        # ── ═══ SECTION HEADER ═══
-        if "═══" in s:
-            inner = s.replace("═", "").strip()
-            if inner:
-                blocks.append({"type": "heading2", "content": inner})
-            continue
-
-        # ── pure divider lines
-        if len(s) > 3 and all(c in "═─━—=─*" for c in s):
-            continue
-
-        # ── ▸ sub-headers
-        if s.startswith("▸"):
-            blocks.append({"type": "subheading", "content": s[1:].strip()})
-            continue
-
-        # ── 🔴 🟡 🟢 risk rows
-        if s[:1] in ("🔴", "🟡", "🟢") or s.startswith(("🔴", "🟡", "🟢")):
-            level = "HIGH" if "🔴" in s[:4] else ("MEDIUM" if "🟡" in s[:4] else "LOW")
-            body  = s
-            for pfx in ("🔴 HIGH RISK →", "🟡 MEDIUM RISK →", "🟢 LOW RISK →",
-                        "🔴 HIGH →",      "🟡 MEDIUM →",      "🟢 LOW →",
-                        "🔴", "🟡", "🟢"):
-                if body.startswith(pfx):
-                    body = body[len(pfx):].strip()
-                    break
-            sep = " — " if " — " in body else (" - " if " - " in body else None)
-            if sep:
-                party, reason = body.split(sep, 1)
-            else:
-                party, reason = body, ""
-            blocks.append({"type": "risk_row", "level": level,
-                           "party": party.strip(), "reason": reason.strip()})
-            continue
-
-        # ── bullet items  (•  ▪  or indented -)
-        if s.startswith(("• ", "▪ ", "· ")):
-            blocks.append({"type": "bullet", "content": s[2:].strip()})
-            continue
-        if s.startswith(("  •", "  -", "\t•", "\t-")):
-            blocks.append({"type": "bullet", "content": s.strip().lstrip("•-").strip()})
-            continue
-
-        # ── short lines ending in colon  →  treat as sub-headers
-        if s.endswith(":") and 5 < len(s) < 60 and not any(c in s for c in ".?!"):
-            blocks.append({"type": "subheading", "content": s})
-            continue
-
-        # ── default: body paragraph
-        blocks.append({"type": "body", "content": s})
-
-    return blocks
-
-
-# ───────────────────────────────────────────────────────────────────────────────
-# MAIN EXPORT FUNCTION
-# ───────────────────────────────────────────────────────────────────────────────
-
-def export_docx(text: str, title: str = "LexiAssist Analysis") -> bytes:
-    """
-    Generate a professionally formatted DOCX document from LexiAssist AI output.
-
-    Features
-    --------
-    • Firm letterhead header (navy bar with firm name in gold)
-    • Styled H1 / H2 / H3 heading hierarchy
-    • Smart section parser — turns ═══ blocks, ▸ markers, and risk rows into real structure
-    • Coloured risk ranking table (red / amber / green rows)
-    • Proper Word bullet lists (no unicode hacks)
-    • Page numbers in footer  (Page X of Y)
-    • Navy rule under title block and above footer
-    • Disclaimer paragraph at end
-    """
-    if not HAS_DOCX:
-        return b"DOCX generation unavailable - install python-docx."
-
-    # ── Colour palette ────────────────────────────────────────────────────
-    NAVY      = RGBColor(0x1a, 0x2e, 0x4a)
-    GOLD      = RGBColor(0xc9, 0xa8, 0x4c)
-    DARK_GREY = RGBColor(0x37, 0x41, 0x51)
-    MID_GREY  = RGBColor(0x6b, 0x72, 0x80)
-    LIGHT_BLU = RGBColor(0xa0, 0xbc, 0xd8)
-
-    firm     = get_firm_name() or "LexiAssist"
-    date_str = datetime.now().strftime("%d %B %Y")
-    bio      = BytesIO()
-    doc      = DocxDocument()
-
-    # ── Page setup: A4, 1-inch margins ───────────────────────────────────
-    sec              = doc.sections[0]
-    sec.page_width   = int(8.27  * 914400)
-    sec.page_height  = int(11.69 * 914400)
-    sec.left_margin  = Inches(1.0)
-    sec.right_margin = Inches(1.0)
-    sec.top_margin   = Inches(0.8)
-    sec.bottom_margin= Inches(0.9)
-
-    # ── Base styles ───────────────────────────────────────────────────────
-    def _set_base(style, size_pt, bold=False, color=None, space_before=0, space_after=6):
-        style.font.name       = "Calibri"
-        style.font.size       = Pt(size_pt)
-        style.font.bold       = bold
-        if color:
-            style.font.color.rgb = color
-        style.paragraph_format.space_before    = Pt(space_before)
-        style.paragraph_format.space_after     = Pt(space_after)
-        style.paragraph_format.line_spacing    = Pt(size_pt * 1.3)
-
-    _set_base(doc.styles["Normal"],    11, color=DARK_GREY, space_after=6)
-    _set_base(doc.styles["Heading 1"], 18, bold=True, color=NAVY,
-              space_before=8, space_after=4)
-    _set_base(doc.styles["Heading 2"], 13, bold=True, color=NAVY,
-              space_before=14, space_after=4)
-    _set_base(doc.styles["Heading 3"], 11, bold=True, color=DARK_GREY,
-              space_before=10, space_after=2)
-
-    doc.styles["Heading 1"].paragraph_format.keep_with_next = True
-    doc.styles["Heading 2"].paragraph_format.keep_with_next = True
-
-    try:
-        _set_base(doc.styles["List Bullet"], 11, color=DARK_GREY, space_after=3)
-    except Exception:
-        pass
-
-    # ── Letterhead header ─────────────────────────────────────────────────
-    hdr_sec  = doc.sections[0]
-    header   = hdr_sec.header
-    hdr_para = header.paragraphs[0] if header.paragraphs else header.add_paragraph()
-    hdr_para.clear()
-    hdr_para.alignment = WD_ALIGN_PARAGRAPH.LEFT
-    _docx_shade_paragraph(hdr_para, "1a2e4a")
-    hdr_para.paragraph_format.space_before = Pt(5)
-    hdr_para.paragraph_format.space_after  = Pt(5)
-
-    r_firm = hdr_para.add_run(firm.upper() if firm != "LexiAssist" else "LEXIASSIST")
-    r_firm.font.name  = "Calibri"
-    r_firm.font.size  = Pt(12)
-    r_firm.font.bold  = True
-    r_firm.font.color.rgb = GOLD
-
-    r_tag = hdr_para.add_run(f"   ·   Legal Analysis   ·   Confidential   ·   {date_str}")
-    r_tag.font.name  = "Calibri"
-    r_tag.font.size  = Pt(9)
-    r_tag.font.color.rgb = LIGHT_BLU
-
-    # ── Footer with page numbers ──────────────────────────────────────────
-    _docx_add_footer(doc, firm)
-
-    # ── Document title block ──────────────────────────────────────────────
-    doc.add_paragraph(title, style="Heading 1")
-
-    meta = doc.add_paragraph()
-    meta.paragraph_format.space_after = Pt(14)
-    r_meta = meta.add_run(f"{firm}   ·   {date_str}   ·   Generated by LexiAssist v8.0")
-    r_meta.font.name  = "Calibri"
-    r_meta.font.size  = Pt(9)
-    r_meta.font.color.rgb = MID_GREY
-
-    # thin navy rule under title area
-    meta_pPr  = meta._p.get_or_add_pPr()
-    meta_pBdr = _OxmlElement("w:pBdr")
-    btm       = _OxmlElement("w:bottom")
-    btm.set(_docx_qn("w:val"),   "single")
-    btm.set(_docx_qn("w:sz"),    "6")
-    btm.set(_docx_qn("w:space"), "1")
-    btm.set(_docx_qn("w:color"), "1a2e4a")
-    meta_pBdr.append(btm)
-    meta_pPr.append(meta_pBdr)
-
-    # ── Parse AI output into structured blocks ────────────────────────────
-    blocks      = _docx_parse_output(text)
-    risk_buffer = []
-
-    # Risk table colours
-    RISK_CFG = {
-        "HIGH":   {"fill": "fef2f2", "text": RGBColor(0x7f, 0x1d, 0x1d)},
-        "MEDIUM": {"fill": "fefce8", "text": RGBColor(0x71, 0x3f, 0x12)},
-        "LOW":    {"fill": "f0fdf4", "text": RGBColor(0x14, 0x53, 0x2d)},
-    }
-
-    def _flush_risk_table() -> None:
-        """Render accumulated risk_row blocks as a single coloured 3-column table."""
-        nonlocal risk_buffer
-        if not risk_buffer:
-            return
-
-        # Column widths in EMU: Party 1.7", Risk 1.1", Reason 3.47" → total ≈ 6.27"
-        col_w = [int(1.7 * 914400), int(1.1 * 914400), int(3.47 * 914400)]
-
-        tbl = doc.add_table(rows=1, cols=3)
-        tbl.style    = "Table Grid"
-        tbl.autofit  = False
-        for i, cell in enumerate(tbl.rows[0].cells):
-            cell.width = col_w[i]
-
-        # Header row (navy background, gold text)
-        hrow = tbl.rows[0]
-        for cell, label in zip(hrow.cells, ["PARTY", "RISK", "EXPOSURE / REASON"]):
-            _docx_set_cell_bg(cell, "1a2e4a")
-            p  = cell.paragraphs[0]
-            p.clear()
-            r  = p.add_run(label)
-            r.font.name  = "Calibri"
-            r.font.size  = Pt(9)
-            r.font.bold  = True
-            r.font.color.rgb = GOLD
-            p.paragraph_format.space_before = Pt(3)
-            p.paragraph_format.space_after  = Pt(3)
-
-        # Data rows
-        for rb in risk_buffer:
-            lvl = rb.get("level", "LOW")
-            cfg = RISK_CFG.get(lvl, RISK_CFG["LOW"])
-            row = tbl.add_row()
-            for i, cell in enumerate(row.cells):
-                cell.width = col_w[i]
-                _docx_set_cell_bg(cell, cfg["fill"])
-                p = cell.paragraphs[0]
-                p.clear()
-                p.paragraph_format.space_before = Pt(3)
-                p.paragraph_format.space_after  = Pt(3)
-                r = p.add_run(
-                    rb.get("party", "")  if i == 0 else
-                    lvl                  if i == 1 else
-                    rb.get("reason", "")
-                )
-                r.font.name      = "Calibri"
-                r.font.size      = Pt(10 if i != 1 else 9)
-                r.font.bold      = (i == 0 or i == 1)
-                r.font.color.rgb = cfg["text"]
-
-        # Breathing space after table
-        sp = doc.add_paragraph()
-        sp.paragraph_format.space_after = Pt(4)
-        risk_buffer = []
-
-    # ── Render blocks ─────────────────────────────────────────────────────
-    for block in blocks:
-        btype = block["type"]
-
-        if btype == "risk_row":
-            risk_buffer.append(block)
-            continue
-        else:
-            _flush_risk_table()
-
-        if btype == "heading2":
-            doc.add_paragraph(block["content"], style="Heading 2")
-
-        elif btype == "subheading":
-            p = doc.add_paragraph()
-            p.paragraph_format.space_before = Pt(8)
-            p.paragraph_format.space_after  = Pt(2)
-            r = p.add_run(block["content"])
-            r.font.name  = "Calibri"
-            r.font.size  = Pt(11)
-            r.font.bold  = True
-            r.font.color.rgb = NAVY
-
-        elif btype == "bullet":
-            try:
-                p = doc.add_paragraph(block["content"], style="List Bullet")
-                p.paragraph_format.space_after = Pt(3)
-                for run in p.runs:
-                    run.font.name  = "Calibri"
-                    run.font.size  = Pt(11)
-                    run.font.color.rgb = DARK_GREY
-            except Exception:
-                p = doc.add_paragraph()
-                r = p.add_run(f"\u2022  {block['content']}")
-                r.font.name  = "Calibri"
-                r.font.size  = Pt(11)
-                r.font.color.rgb = DARK_GREY
-
-        elif btype == "body":
-            p = doc.add_paragraph(block["content"])
-            p.style = doc.styles["Normal"]
-
-    _flush_risk_table()   # flush any trailing risk rows
-
-    # ── Disclaimer ────────────────────────────────────────────────────────
-    doc.add_paragraph()
-    disc = doc.add_paragraph()
-    disc_pPr  = disc._p.get_or_add_pPr()
-    disc_pBdr = _OxmlElement("w:pBdr")
-    disc_top  = _OxmlElement("w:top")
-    disc_top.set(_docx_qn("w:val"),   "single")
-    disc_top.set(_docx_qn("w:sz"),    "4")
-    disc_top.set(_docx_qn("w:space"), "1")
-    disc_top.set(_docx_qn("w:color"), "cccccc")
-    disc_pBdr.append(disc_top)
-    disc_pPr.append(disc_pBdr)
-    r_d = disc.add_run(
-        "\u26a0  This document was generated by LexiAssist v8.0 using AI assistance. "
-        "It does not constitute legal advice. All citations and legal positions must be "
-        f"independently verified before reliance.  \u00a9 {datetime.now().year} {firm}."
-    )
-    r_d.font.name  = "Calibri"
-    r_d.font.size  = Pt(8)
-    r_d.font.color.rgb = MID_GREY
-
-    doc.save(bio)
-    return bio.getvalue()
-
-def export_txt(text: str, title: str = "LexiAssist Analysis") -> str:
-    firm = get_firm_name()
-    header = f"{'=' * 60}\n{title}\n{firm}\nGenerated: {datetime.now():%d %B %Y at %H:%M}\n{'=' * 60}\n\n"
-    footer = f"\n\n{'=' * 60}\nGenerated by {firm} via LexiAssist v8.0\n{'=' * 60}"
-    return header + text + footer
-
-def export_html(text: str, title: str = "LexiAssist Analysis") -> str:
-    firm = get_firm_name()
-    body = esc(text).replace("\n", "<br>")
-    return f"""<!DOCTYPE html><html><head><meta charset="utf-8">
-<title>{esc(title)}</title>
-<style>body{{font-family:Georgia,serif;max-width:800px;margin:2rem auto;padding:1rem;line-height:1.7;color:#1e293b}}
-h1{{color:#059669;border-bottom:2px solid #059669;padding-bottom:0.5rem}}
-.firm{{font-size:1.1rem;font-weight:bold;color:#374151}}
-.meta{{color:#64748b;font-size:0.9rem;margin-bottom:1.5rem}}
-.disclaimer{{background:#fef3c7;border-left:4px solid #f59e0b;padding:1rem;margin-top:2rem;font-size:0.85rem}}</style>
-</head><body>
-<h1>{esc(title)}</h1>
-{"<div class='firm'>" + esc(firm) + "</div>" if firm and firm != "LexiAssist" else ""}
-<div class="meta">Generated: {datetime.now():%d %B %Y at %H:%M}</div>
-<div>{body}</div>
-<div class="disclaimer"><strong>⚖️ Disclaimer:</strong> AI-generated analysis by {esc(firm)} via LexiAssist v8.0. Verify all citations independently.</div>
-</body></html>"""
-
-def safe_pdf_download(text: str, title: str, fname: str, key: str):
-    try:
-        pdf_data = export_pdf(text, title)
-        if not isinstance(pdf_data, bytes):
-            pdf_data = bytes(pdf_data)
-        st.download_button("📥 PDF", data=pdf_data, file_name=f"{fname}.pdf",
-                           mime="application/pdf", key=key, use_container_width=True)
-    except Exception as e:
-        st.button("📥 PDF (unavailable)", disabled=True, key=key, use_container_width=True)
-        logger.warning(f"PDF export failed: {e}")
-
-def safe_docx_download(text: str, title: str, fname: str, key: str):
-    try:
-        docx_data = export_docx(text, title)
-        st.download_button("📥 DOCX", data=docx_data, file_name=f"{fname}.docx",
-                           mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-                           key=key, use_container_width=True)
-    except Exception as e:
-        st.button("📥 DOCX (unavailable)", disabled=True, key=key, use_container_width=True)
-        logger.warning(f"DOCX export failed: {e}")
-
-# ═══════════════════════════════════════════════════════
-# DATA CRUD (SQLITE-BACKED)
-# ═══════════════════════════════════════════════════════
-def add_case(data: dict):
-    data["id"] = new_id()
-    data["created_at"] = datetime.now().isoformat()
-    st.session_state.cases.append(data)
-    persist("cases")
-
-def update_case(cid: str, updates: dict):
-    for c in st.session_state.cases:
-        if c["id"] == cid:
-            c.update(updates)
-            c["updated_at"] = datetime.now().isoformat()
-    persist("cases")
-
-def delete_case(cid: str):
-    st.session_state.cases = [c for c in st.session_state.cases if c["id"] != cid]
-    persist("cases")
-    get_db().delete_case_analyses_for_case(cid)
-
-def add_client(data: dict):
-    data["id"] = new_id()
-    data["created_at"] = datetime.now().isoformat()
-    st.session_state.clients.append(data)
-    persist("clients")
-
-def delete_client(cid: str):
-    st.session_state.clients = [c for c in st.session_state.clients if c["id"] != cid]
-    persist("clients")
-
-def get_client_name(cid: str) -> str:
-    for c in st.session_state.clients:
-        if c["id"] == cid:
-            return c.get("name", "—")
-    return "—"
-
-def add_time_entry(data: dict):
-    data["id"] = new_id()
-    data["created_at"] = datetime.now().isoformat()
-    data["amount"] = data.get("hours", 0) * data.get("rate", 0)
-    st.session_state.time_entries.append(data)
-    persist("time_entries")
-
-def delete_time_entry(eid: str):
-    st.session_state.time_entries = [e for e in st.session_state.time_entries if e["id"] != eid]
-    persist("time_entries")
-
-def make_invoice(client_id: str):
-    entries = [e for e in st.session_state.time_entries if e.get("client_id") == client_id]
-    if not entries:
-        return None
-    inv = {
-        "id": new_id(),
-        "invoice_no": f"INV-{datetime.now():%Y%m%d}-{new_id()[:4].upper()}",
-        "client_id": client_id,
-        "client_name": get_client_name(client_id),
-        "entries": entries,
-        "total": sum(e.get("amount", 0) for e in entries),
-        "date": datetime.now().isoformat(),
-        "status": "Draft",
-    }
-    st.session_state.invoices.append(inv)
-    persist("invoices")
-    return inv
-
-def total_hours() -> float:
-    return sum(e.get("hours", 0) for e in st.session_state.time_entries)
-
-def total_billable() -> float:
-    return sum(e.get("amount", 0) for e in st.session_state.time_entries)
-
-def client_case_count(cid: str) -> int:
-    return sum(1 for c in st.session_state.cases if c.get("client_id") == cid)
-
-def client_billable(cid: str) -> float:
-    return sum(e.get("amount", 0) for e in st.session_state.time_entries if e.get("client_id") == cid)
-
-def get_active_cases() -> list:
-    return [c for c in st.session_state.cases if c.get("status") == "Active"]
-
-def get_hearings() -> list:
-    h = []
-    for c in st.session_state.cases:
-        if c.get("next_hearing") and c.get("status") in ("Active", "Pending"):
-            h.append({
-                "id": c["id"], "title": c.get("title", ""),
-                "date": c["next_hearing"], "court": c.get("court", ""),
-                "suit": c.get("suit_no", ""), "status": c.get("status", ""),
-            })
-    h.sort(key=lambda x: x.get("date", "z"))
-    return h
-
-# ═══════════════════════════════════════════════════════
-# AI HELPER FUNCTIONS
-# ═══════════════════════════════════════════════════════
-def run_ai_query(query: str, task: str, mode: str, context: str = "") -> str:
-    system = build_system_prompt(task, mode)
-    full_prompt = query
-    if context:
-        full_prompt = f"DOCUMENT CONTEXT:\n{context[:8000]}\n\nQUERY:\n{query}"
-    return generate(full_prompt, system, mode, task)
-
-def run_issue_spot(query: str) -> str:
-    return generate(query, ISSUE_SPOT_PROMPT, "brief", "analysis")
-
-def run_critique(query: str, analysis: str) -> str:
-    prompt = f"ORIGINAL QUERY:\n{query}\n\nANALYSIS TO REVIEW:\n{analysis}"
-    return generate(prompt, CRITIQUE_PROMPT, "brief", "analysis")
-
-def run_followup(original: str, previous: str, followup: str, mode: str) -> str:
-    prompt = f"ORIGINAL QUERY:\n{original}\n\nPREVIOUS ANALYSIS:\n{previous}\n\nFOLLOW-UP QUESTION:\n{followup}"
-    return generate(prompt, FOLLOWUP_PROMPT, mode, "general")
-
-def run_comparison(entry_a: dict, entry_b: dict) -> str:
-    prompt = (
-        f"ANALYSIS A (from {entry_a.get('timestamp', '')}):\n"
-        f"Query: {entry_a.get('query', '')}\n"
-        f"Response:\n{entry_a.get('response', '')}\n\n"
-        f"{'='*40}\n\n"
-        f"ANALYSIS B (from {entry_b.get('timestamp', '')}):\n"
-        f"Query: {entry_b.get('query', '')}\n"
-        f"Response:\n{entry_b.get('response', '')}"
-    )
-    return generate(prompt, COMPARISON_PROMPT, "standard", "analysis")
-
-def run_research(query: str, mode: str) -> str:
-    system = build_system_prompt("research", mode)
-    return generate(query, system, mode, "research")
-
-def add_to_history(query: str, response: str, task: str, mode: str):
-    entry = {
-        "id": new_id(),
-        "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M"),
-        "query": query,
-        "response": response,
-        "task": task,
-        "mode": mode,
-        "word_count": len(response.split()),
-    }
-    st.session_state.chat_history.append(entry)
-    persist("chat_history")
-    return entry
-
-def save_analysis_to_case(case_id: str, query: str, response: str, task: str, mode: str):
-    """Attach an AI analysis to a specific case."""
-    db = get_db()
-    db.add_case_analysis(case_id, {
-        "id": new_id(),
-        "query": query,
-        "response": response,
-        "task": task,
-        "mode": mode,
-        "timestamp": datetime.now().isoformat(),
-    })
-
-
-# ═══════════════════════════════════════════════════════
-# END OF PART 1 — Continue with Part 2 below this line
-# ═══════════════════════════════════════════════════════
-# ═══════════════════════════════════════════════════════
-# PART 2: Setup Screen, Sidebar, Home, AI Assistant,
-#          Research — with Save-to-Case & Comparison
-# ═══════════════════════════════════════════════════════
-
-# ═══════════════════════════════════════════════════════
-# SECURE API SETUP SCREEN
-# ═══════════════════════════════════════════════════════
 def render_setup_screen():
     st.markdown("""
     <div class="hero">
@@ -2824,99 +2181,75 @@ def render_setup_screen():
 def render_sidebar():
     with st.sidebar:
         firm = get_firm_name()
-        if firm and firm != "LexiAssist":
-            st.markdown(f"### ⚖️ {esc(firm)}")
-            st.caption("Powered by LexiAssist v8.0")
-        else:
-            st.markdown("### ⚖️ LexiAssist v8.0")
-            st.caption("Elite AI Legal Engine")
-        st.divider()
-
-        # ── Logged-in user ──
-        uname = st.session_state.get("current_username", "")
-        urole = st.session_state.get("current_user_role", "")
+        corp = (st.session_state.get("theme", "⚖️ Corporate") == "⚖️ Corporate")
+        name_display = firm if (firm and firm != "LexiAssist") else "LexiAssist v8.0"
+        tag_display  = "Powered by LexiAssist v8.0" if (firm and firm != "LexiAssist") else "Elite AI Legal Engine"
+        hdr_col = "#c9a84c" if corp else "#1a2e4a"
+        cap_col = "#a0bcd8" if corp else "#64748b"
+        div_col = "#2d4a6e" if corp else "#e2e8f0"
+        st.markdown(f"""
+<div style="padding:1rem 0.4rem 0.8rem 0.4rem;border-bottom:1px solid {div_col};">
+  <div style="font-size:1.05rem;font-weight:800;color:{hdr_col};letter-spacing:-0.01em;">⚖️ {esc(name_display)}</div>
+  <div style="font-size:0.74rem;margin-top:0.15rem;color:{cap_col};">{esc(tag_display)}</div>
+</div>""", unsafe_allow_html=True)
+        uname = st.session_state.get("current_username","")
+        urole = st.session_state.get("current_user_role","")
         if uname:
-            role_badge = "🛡️ Admin" if urole == "admin" else "👤 User"
+            role_icon = "🛡️ Admin" if urole=="admin" else "👤 User"
+            bg_c = "#ffffff10" if corp else "#22c55e18"
+            bd_c = "#ffffff25" if corp else "#22c55e55"
+            tx_c = "#c9a84c"   if corp else "#059669"
             st.markdown(f"""
-<div style="background:#f0fdf4;border:1px solid #059669;border-radius:0.6rem;
-padding:0.6rem 0.8rem;margin-bottom:0.5rem;">
-  <div style="font-weight:700;color:#059669;">@{esc(uname)}</div>
-  <div style="font-size:0.78rem;color:#64748b;">{role_badge}</div>
+<div style="margin:0.8rem 0 0.4rem 0;padding:0.6rem 0.8rem;background:{bg_c};border:1px solid {bd_c};border-radius:8px;">
+  <div style="font-weight:700;font-size:0.9rem;color:{tx_c};">@{esc(uname)}</div>
+  <div style="font-size:0.75rem;opacity:0.75;margin-top:0.1rem;">{role_icon}</div>
 </div>""", unsafe_allow_html=True)
             if st.button("🚪 Sign Out", key="sidebar_logout_btn", use_container_width=True):
                 do_logout()
         st.divider()
-
-        # Status Metrics
-        c1, c2 = st.columns(2)
-        with c1:
-            st.metric("Cases", len(get_active_cases()))
-        with c2:
-            st.metric("Sessions", len(st.session_state.chat_history))
-
+        c1,c2 = st.columns(2)
+        with c1: st.metric("Cases",    len(get_active_cases()))
+        with c2: st.metric("Sessions", len(st.session_state.chat_history))
         st.divider()
-
-        # Response Mode
-        st.markdown("### 🧠 Response Mode")
+        st.markdown("**🧠 Response Mode**")
         modes = list(RESPONSE_MODES.keys())
-        current_idx = modes.index(st.session_state.response_mode) if st.session_state.response_mode in modes else 1
-        mode = st.radio(
-            "Depth", modes, index=current_idx,
+        cur_m = modes.index(st.session_state.response_mode) if st.session_state.response_mode in modes else 1
+        mode = st.radio("Depth", modes, index=cur_m,
             format_func=lambda x: RESPONSE_MODES[x]["label"],
-            key="sidebar_mode_radio", label_visibility="collapsed",
-        )
+            key="sidebar_mode_radio", label_visibility="collapsed")
         if mode != st.session_state.response_mode:
-            st.session_state.response_mode = mode
-            st.rerun()
-        sel_mode = RESPONSE_MODES[st.session_state.response_mode]
-        st.caption(f"{sel_mode['desc']}")
-        st.caption(f"Token limit: {sel_mode['tokens']:,}")
-
+            st.session_state.response_mode = mode; st.rerun()
+        sel = RESPONSE_MODES[st.session_state.response_mode]
+        st.caption(sel["desc"]); st.caption(f"Token limit: {sel['tokens']:,}")
         st.divider()
-
-        # Theme
-        st.markdown("### 🎨 Theme")
+        st.markdown("**🎨 Theme**")
         theme_names = list(THEMES.keys())
-        current_theme_idx = theme_names.index(st.session_state.theme) if st.session_state.theme in theme_names else 0
-        theme = st.selectbox(
-            "Select Theme", theme_names, index=current_theme_idx,
-            key="sidebar_theme_sel", label_visibility="collapsed",
-        )
+        cur_t = theme_names.index(st.session_state.theme) if st.session_state.theme in theme_names else 0
+        theme = st.selectbox("Theme", theme_names, index=cur_t,
+            key="sidebar_theme_sel", label_visibility="collapsed")
         if theme != st.session_state.theme:
-            st.session_state.theme = theme
-            st.rerun()
-
+            st.session_state.theme = theme; st.rerun()
         st.divider()
-
-        # AI Engine Status
-        st.markdown("### 🤖 AI Engine")
+        st.markdown("**🤖 AI Engine**")
         if st.session_state.api_configured:
             st.success(f"✅ Connected · `{st.session_state.gemini_model}`")
-            model_sel = st.selectbox(
-                "Switch Model", SUPPORTED_MODELS,
-                index=SUPPORTED_MODELS.index(st.session_state.gemini_model) if st.session_state.gemini_model in SUPPORTED_MODELS else 0,
-                key="sidebar_model_sel", label_visibility="collapsed",
-            )
-            if model_sel != st.session_state.gemini_model:
-                st.session_state.gemini_model = model_sel
-                st.rerun()
-
-            # Cost summary
+            ms = st.selectbox("Model", SUPPORTED_MODELS,
+                index=SUPPORTED_MODELS.index(st.session_state.gemini_model)
+                      if st.session_state.gemini_model in SUPPORTED_MODELS else 0,
+                key="sidebar_model_sel", label_visibility="collapsed")
+            if ms != st.session_state.gemini_model:
+                st.session_state.gemini_model = ms; st.rerun()
             summary = get_db().get_cost_summary()
             if summary["total_calls"] > 0:
                 st.caption(f"💰 Today: ${summary['daily_cost']:.4f} ({summary['daily_calls']} calls)")
                 st.caption(f"📅 Month: ${summary['monthly_cost']:.4f} ({summary['monthly_calls']} calls)")
         else:
             st.error("🔴 Not connected")
-
         st.divider()
-
-        # Data Management
-        st.markdown("### 💾 Data Management")
+        st.markdown("**💾 Data**")
         if st.button("📥 Export All Data (JSON)", use_container_width=True, key="sidebar_export_btn"):
             export_data = {
-                "export_date": datetime.now().isoformat(),
-                "version": "8.0",
+                "export_date": datetime.now().isoformat(), "version": "8.0",
                 "cases": st.session_state.cases,
                 "clients": st.session_state.clients,
                 "time_entries": st.session_state.time_entries,
@@ -2928,66 +2261,44 @@ padding:0.6rem 0.8rem;margin-bottom:0.5rem;">
                 "profile": st.session_state.profile,
                 "cost_logs": get_db().get_cost_logs(500),
             }
-            st.download_button(
-                "⬇️ Download JSON",
+            st.download_button("⬇️ Download JSON",
                 json.dumps(export_data, indent=2, default=str),
                 f"lexiassist_backup_{datetime.now():%Y%m%d_%H%M}.json",
-                "application/json", key="sidebar_dl_json", use_container_width=True,
-            )
-
-        # Import
-        st.markdown("##### 📤 Import Files")
-        uploaded = st.file_uploader(
-            "Upload", type=UPLOAD_TYPES, accept_multiple_files=False,
+                "application/json", key="sidebar_dl_json", use_container_width=True)
+        st.markdown("**📤 Import Files**")
+        uploaded = st.file_uploader("Upload", type=UPLOAD_TYPES, accept_multiple_files=False,
             key="sidebar_file_upload", label_visibility="collapsed",
-            help="Supports: PDF, DOCX, TXT, XLSX, CSV, JSON, RTF",
-        )
+            help="Supports: PDF, DOCX, TXT, XLSX, CSV, JSON, RTF")
         if uploaded:
             try:
                 ext = uploaded.name.split(".")[-1].lower()
                 if ext == "json":
                     raw = json.loads(uploaded.getvalue().decode("utf-8", errors="ignore"))
-                    if isinstance(raw, dict) and any(k in raw for k in ["cases", "clients"]):
-                        for k in ["cases", "clients", "time_entries", "invoices", "chat_history",
-                                   "custom_templates", "custom_limitation_periods", "custom_maxims"]:
-                            if k in raw:
-                                st.session_state[k] = raw[k]
-                                persist(k)
-                        if "profile" in raw and isinstance(raw["profile"], dict):
-                            st.session_state.profile.update(raw["profile"])
-                            persist_profile()
-                        st.success("✅ LexiAssist data imported!")
-                        st.rerun()
+                    if isinstance(raw,dict) and any(k in raw for k in ["cases","clients"]):
+                        for k in ["cases","clients","time_entries","invoices","chat_history",
+                                  "custom_templates","custom_limitation_periods","custom_maxims"]:
+                            if k in raw: st.session_state[k]=raw[k]; persist(k)
+                        if "profile" in raw and isinstance(raw["profile"],dict):
+                            st.session_state.profile.update(raw["profile"]); persist_profile()
+                        st.success("✅ Data imported!"); st.rerun()
                     else:
-                        text = json.dumps(raw, indent=2)
-                        st.session_state.imported_doc = {
-                            "name": uploaded.name, "type": ext,
-                            "size": len(uploaded.getvalue()),
-                            "full_text": text, "preview": text[:600],
-                        }
-                        st.success(f"✅ {uploaded.name} loaded → AI Assistant")
-                        st.rerun()
+                        text=json.dumps(raw,indent=2)
+                        st.session_state.imported_doc={"name":uploaded.name,"type":ext,
+                            "size":len(uploaded.getvalue()),"full_text":text,"preview":text[:600]}
+                        st.success(f"✅ {uploaded.name} loaded → AI Assistant"); st.rerun()
                 else:
-                    text = extract_file_text(uploaded)
-                    st.session_state.imported_doc = {
-                        "name": uploaded.name, "type": ext,
-                        "size": len(uploaded.getvalue()),
-                        "full_text": text,
-                        "preview": text[:600] + ("…" if len(text) > 600 else ""),
-                    }
-                    st.success(f"✅ {uploaded.name} loaded → AI Assistant")
-                    st.rerun()
+                    text=extract_file_text(uploaded)
+                    st.session_state.imported_doc={"name":uploaded.name,"type":ext,
+                        "size":len(uploaded.getvalue()),"full_text":text,
+                        "preview":text[:600]+("…" if len(text)>600 else "")}
+                    st.success(f"✅ {uploaded.name} loaded → AI Assistant"); st.rerun()
             except Exception as e:
                 st.error(f"❌ Import error: {e}")
-
         st.divider()
         st.caption("⚖️ LexiAssist v8.0 © 2026")
-        st.caption("🧠 Elite AI · 🇳🇬 Nigerian Law")
+        st.caption("🇳🇬 Nigerian Law · 🤖 AI-Powered")
 
 
-# ═══════════════════════════════════════════════════════
-# PAGE: HOME / DASHBOARD
-# ═══════════════════════════════════════════════════════
 def render_home():
     firm = get_firm_name()
     subtitle = f"{esc(firm)} · " if firm and firm != "LexiAssist" else ""
@@ -3697,7 +3008,7 @@ LEGAL ISSUE: {prec_query}
         with ex3:
             safe_pdf_download(result, "Legal Research", fname, "res_dl_pdf")
         with ex4:
-            safe_docx_download(result, "Legal Research", fname, "res_dl_docx")
+            safe_docx_download(result, "Legal Research", fname, "res_dl_docx", doc_type="research")
 
         st.markdown(f'<div class="response-box">{esc(result)}</div>', unsafe_allow_html=True)
 
@@ -4210,7 +3521,9 @@ def render_billing():
                                       f"Invoice_{inv['invoice_no']}", f"inv_pdf_{inv['id']}")
                 with ic3:
                     safe_docx_download(inv_text, f"Invoice {inv['invoice_no']}",
-                                       f"Invoice_{inv['invoice_no']}", f"inv_docx_{inv['id']}")
+                                       f"Invoice_{inv['invoice_no']}", f"inv_docx_{inv['id']}",
+                                       doc_type="invoice",
+                                       meta={"invoice_no": inv.get("invoice_no",""), "client": inv.get("client_name",""), "matter": inv.get("matter",""), "amount": f"₦{inv.get('amount',0):,.2f}"})
 
     # ── Billing Reports ──
     with tab_report:
@@ -5453,7 +4766,7 @@ This is a counter-claim so defendant becomes counter-claimant.""",
         with ex3:
             safe_pdf_download(result, pleading_title, fname, "pl_dl_pdf")
         with ex4:
-            safe_docx_download(result, pleading_title, fname, "pl_dl_docx")
+            safe_docx_download(result, pleading_title, fname, "pl_dl_docx", doc_type="pleading")
 
         st.markdown(
             f'<div class="response-box">{esc(result)}</div>',
@@ -6101,7 +5414,7 @@ padding:1.5rem;line-height:1.8;white-space:pre-wrap;font-size:0.95rem;">
             with ex3:
                 safe_pdf_download(result, f"Witness Prep — {role_label}", fname, "wp_dl_pdf")
             with ex4:
-                safe_docx_download(result, f"Witness Prep — {role_label}", fname, "wp_dl_docx")
+                safe_docx_download(result, f"Witness Prep — {role_label}", fname, "wp_dl_docx", doc_type="witness", meta={"role": role_label})
 
             if st.button("🗑️ Clear Current Brief", key="wp_clear_btn", use_container_width=True):
                 for k in ["wp_result", "wp_role_label", "wp_facts_saved", "wp_reexam_result"]:
@@ -7691,7 +7004,7 @@ becomes more complex than currently anticipated.
             with fne3:
                 safe_pdf_download(fn_generated, "Professional Fee Note", fn_fname, "fn_dl_pdf")
             with fne4:
-                safe_docx_download(fn_generated, "Professional Fee Note", fn_fname, "fn_dl_docx")
+                safe_docx_download(fn_generated, "Professional Fee Note", fn_fname, "fn_dl_docx", doc_type="fee_note")
 
 
 # ═══════════════════════════════════════════════════════
@@ -7867,7 +7180,7 @@ padding:1.5rem;line-height:1.8;white-space:pre-wrap;font-size:0.95rem;">
         with e3:
             safe_pdf_download(result, f"Settlement Strategy — {matter_label}", fname, "sa_dl_pdf")
         with e4:
-            safe_docx_download(result, f"Settlement Strategy — {matter_label}", fname, "sa_dl_docx")
+            safe_docx_download(result, f"Settlement Strategy — {matter_label}", fname, "sa_dl_docx", doc_type="settlement", meta={"matter": matter_label})
 
         if st.button("🗑️ Clear", key="sa_clear_btn", use_container_width=True):
             st.session_state["sa_result"] = ""
@@ -8016,7 +7329,7 @@ padding:1.8rem;line-height:1.85;white-space:pre-wrap;font-size:0.93rem;">
         with de3:
             safe_pdf_download(result, f"Due Diligence — {dd_label}", fname, "dd_dl_pdf")
         with de4:
-            safe_docx_download(result, f"Due Diligence — {dd_label}", fname, "dd_dl_docx")
+            safe_docx_download(result, f"Due Diligence — {dd_label}", fname, "dd_dl_docx", doc_type="due_diligence", meta={"subject": dd_label})
 
         if st.button("🗑️ Clear", key="dd_clear_btn", use_container_width=True):
             st.session_state["dd_result"] = ""
@@ -8274,6 +7587,13 @@ def main():
         height=0,
     )
     # ────────────────────────────────────────────────────────────────────────────
+
+
+    import streamlit.components.v1 as _components
+    _components.html(
+        """<script>(function(){var I=10*60*1000;function p(){fetch(window.location.href,{method:"GET",cache:"no-store"}).catch(function(){});}setInterval(p,I);})();</script>""",
+        height=0,
+    )
 
 
 if __name__ == "__main__":
