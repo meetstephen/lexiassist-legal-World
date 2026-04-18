@@ -7861,6 +7861,33 @@ def main():
         f"{user_text} · ⚠️ AI-generated information — not legal advice — verify all citations independently"
     )
 
+    # ── Keep-Alive Ping ─────────────────────────────────────────────────────────
+    # Silently pings the app every 10 minutes from the active browser tab to
+    # prevent Streamlit Cloud from putting the app to sleep during inactivity.
+    # - height=0  → completely invisible, zero visual footprint
+    # - No state changes, no reruns, no widget interference
+    # - Works alongside the GitHub Actions workflow for full coverage
+    import streamlit.components.v1 as _components
+    _components.html(
+        """
+        <script>
+            (function () {
+                var INTERVAL = 10 * 60 * 1000; // 10 minutes in milliseconds
+                function ping() {
+                    fetch(window.location.href, {
+                        method: 'GET',
+                        cache: 'no-store',
+                        credentials: 'same-origin'
+                    }).catch(function () {}); // silently ignore any network errors
+                }
+                setInterval(ping, INTERVAL);
+            })();
+        </script>
+        """,
+        height=0,
+    )
+    # ────────────────────────────────────────────────────────────────────────────
+
 
 if __name__ == "__main__":
     main()
