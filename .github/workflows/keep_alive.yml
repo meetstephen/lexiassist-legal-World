@@ -1,0 +1,57 @@
+# ══════════════════════════════════════════════════════════════════════
+# LexiAssist — Keep-Alive Workflow
+# ══════════════════════════════════════════════════════════════════════
+# Pings the Streamlit Cloud app every 15 minutes to prevent it from
+# going to sleep due to inactivity.
+#
+# HOW IT WORKS:
+#   GitHub's cron scheduler fires this job at regular intervals.
+#   It sends a simple HTTP GET request to your app URL.
+#   Streamlit Cloud registers the traffic and keeps the app awake.
+#
+# COVERAGE:
+#   ✅ Works 24/7 — even when NO browser tab is open
+#   ✅ Complements the in-app JS ping (which covers active sessions)
+#   ✅ Zero impact on app logic, database, or session state
+# ══════════════════════════════════════════════════════════════════════
+
+name: 🔄 Keep LexiAssist Alive
+
+on:
+  schedule:
+    # Runs every 15 minutes (GitHub Actions minimum reliable interval)
+    # Cron syntax: minute  hour  day  month  weekday
+    - cron: '*/15 * * * *'
+
+  # Allows you to trigger this manually from the GitHub Actions tab
+  workflow_dispatch:
+
+jobs:
+  ping:
+    name: Ping Streamlit App
+    runs-on: ubuntu-latest
+    timeout-minutes: 2   # safety: kill the job if it hangs
+
+    steps:
+      - name: 🏓 Ping LexiAssist
+        run: |
+          echo "Pinging https://lexiassist-legal-world.streamlit.app ..."
+
+          HTTP_STATUS=$(curl \
+            --silent \
+            --output /dev/null \
+            --write-out "%{http_code}" \
+            --max-time 30 \
+            --retry 2 \
+            --retry-delay 5 \
+            "https://lexiassist-legal-world.streamlit.app")
+
+          echo "HTTP Status: $HTTP_STATUS"
+
+          # 200 = OK, 302 = redirect (also fine for Streamlit)
+          if [ "$HTTP_STATUS" -eq 200 ] || [ "$HTTP_STATUS" -eq 302 ]; then
+            echo "✅ App is awake and responding."
+          else
+            echo "⚠️  Unexpected status $HTTP_STATUS — app may be cold-starting."
+            # Not failing the workflow — a non-200 during wake-up is normal
+          fi
