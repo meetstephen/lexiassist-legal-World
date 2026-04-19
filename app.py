@@ -991,7 +991,7 @@ THEME_NAMES = list(THEMES.keys())
 
 
 def get_theme(name: str) -> dict:
-    return THEMES.get(name, THEMES["⚖️ Corporate"])
+    return THEMES.get(name, THEMES["🌅 Sunset"])
 
 
 def get_plotly_colors(name: str) -> dict:
