@@ -1514,6 +1514,98 @@ div[data-testid="metric-container"] div[data-testid="stMetricValue"] {{
         animation-duration: 0s !important; transition-duration: 0s !important;
     }}
 }}
+
+/* ── Mobile / small-screen responsiveness ────────────────────────────────── */
+/* Targets phones and small tablets (≤768px) */
+@media (max-width: 768px) {{
+
+    /* Shrink base font slightly on small screens */
+    .stApp {{
+        font-size: {round(base_font * 0.93, 1)}px !important;
+    }}
+
+    /* Hero & page headers — smaller padding and font */
+    .hero {{
+        padding: 1.4rem 1.2rem !important;
+        border-radius: 8px !important;
+    }}
+    .hero h1 {{
+        font-size: 1.45rem !important;
+    }}
+    .hero p {{
+        font-size: 0.92rem !important;
+    }}
+    .page-header {{
+        padding: 1rem 1.2rem !important;
+        border-radius: 8px !important;
+    }}
+    .page-header h2 {{
+        font-size: 1.15rem !important;
+    }}
+
+    /* Stat cards — allow wrapping into 2 columns */
+    .stat-card {{
+        padding: 0.85rem 0.6rem !important;
+    }}
+    .stat-card .stat-value {{
+        font-size: 1.4rem !important;
+    }}
+
+    /* Custom cards — full width, reduced padding */
+    .custom-card, .tool-card, .history-item {{
+        padding: 0.75rem 0.9rem !important;
+        margin-bottom: 0.5rem !important;
+    }}
+
+    /* Response box — less side padding on mobile */
+    .response-box {{
+        padding: 1rem 1rem !important;
+        font-size: 0.88rem !important;
+    }}
+
+    /* Buttons — full width on mobile so they're easy to tap */
+    .stButton > button {{
+        width: 100% !important;
+        min-height: 2.4rem !important;
+        font-size: 0.9rem !important;
+    }}
+
+    /* Tabs — smaller text so all tabs fit */
+    div[data-testid="stTabs"] button {{
+        font-size: 0.75rem !important;
+        padding: 0.35rem 0.5rem !important;
+    }}
+
+    /* File uploader — compact on mobile */
+    [data-testid="stFileUploader"] section {{
+        padding: 0.6rem !important;
+    }}
+
+    /* Metric cards */
+    [data-testid="stMetric"] {{
+        padding: 8px 10px !important;
+    }}
+
+    /* Login card */
+    .login-card {{
+        padding: 1.2rem 1rem !important;
+        border-radius: 8px !important;
+    }}
+}}
+
+/* Slightly larger phones (portrait) */
+@media (max-width: 480px) {{
+    .hero h1 {{
+        font-size: 1.2rem !important;
+    }}
+    .stat-card .stat-value {{
+        font-size: 1.15rem !important;
+    }}
+    .badge {{
+        font-size: 0.65rem !important;
+        padding: 0.12rem 0.45rem !important;
+    }}
+}}
 </style>"""
 
 # ═══════════════════════════════════════════════════════
@@ -2936,6 +3028,38 @@ def render_home():
 
     st.markdown("")
 
+    # ── Getting Started card — shown only to brand-new users ──
+    is_new_user = (
+        len(st.session_state.cases) == 0
+        and len(st.session_state.chat_history) == 0
+        and len(st.session_state.clients) == 0
+    )
+    if is_new_user:
+        st.markdown("""
+<div class="custom-card" style="border-left-color:var(--la-accent-2); margin-bottom:1.2rem;">
+<h4 style="font-size:1.05rem; margin-bottom:0.6rem;">👋 Welcome to LexiAssist — here's how to get started</h4>
+<p style="margin:0 0 0.8rem 0; font-size:0.93rem;">
+Your workspace is empty. Pick any of the three actions below to begin:
+</p>
+<table style="width:100%; border-collapse:separate; border-spacing:0 6px; font-size:0.9rem;">
+<tr>
+  <td style="width:32px; font-size:1.25rem; vertical-align:top;">🧠</td>
+  <td><strong>Ask your first legal question</strong><br>
+  <span style="color:var(--la-text-secondary);">Open the <em>AI Assistant</em> tab, type your query, choose a response mode and hit Generate.</span></td>
+</tr>
+<tr>
+  <td style="font-size:1.25rem; vertical-align:top;">📁</td>
+  <td><strong>Create your first case</strong><br>
+  <span style="color:var(--la-text-secondary);">Go to the <em>Cases</em> tab, click ➕ Add Case and fill in the matter details — all analysis you generate can be saved to it.</span></td>
+</tr>
+<tr>
+  <td style="font-size:1.25rem; vertical-align:top;">📑</td>
+  <td><strong>Review a contract</strong><br>
+  <span style="color:var(--la-text-secondary);">On the <em>AI Assistant</em> tab select <em>Contract Review</em> mode, paste or upload your contract, and receive a full clause-by-clause risk matrix.</span></td>
+</tr>
+</table>
+</div>""", unsafe_allow_html=True)
+
     col_left, col_right = st.columns([3, 2])
     with col_left:
         st.markdown("### 📅 Upcoming Hearings")
@@ -3199,6 +3323,10 @@ def render_ai():
         st.session_state.compare_selections = []
         st.rerun()
 
+    # ── Empty-query guard ──
+    if (generate_btn or issue_btn) and not query.strip():
+        st.warning("⚠️ Please enter your legal query before generating a response.")
+
     # ── Issue Spotting ──
     if issue_btn and query.strip():
         with st.spinner("🔍 Decomposing issues…"):
@@ -3241,6 +3369,34 @@ def render_ai():
             safe_docx_download(response, "Legal Analysis", fname, "resp_dl_docx")
 
         st.markdown(f'<div class="response-box">{esc(response)}</div>', unsafe_allow_html=True)
+
+        # ── Copy to clipboard ──
+        import streamlit.components.v1 as _cmp, json as _json
+        _copy_html = f"""
+<style>
+#la-copy-btn {{
+    display:inline-flex; align-items:center; gap:6px;
+    padding:5px 14px; border-radius:6px; border:1px solid rgba(128,128,128,0.35);
+    background:transparent; cursor:pointer; font-size:13px;
+    color:inherit; font-family:inherit; margin-bottom:4px;
+    transition:background 0.15s;
+}}
+#la-copy-btn:hover {{ background:rgba(128,128,128,0.12); }}
+</style>
+<div style="text-align:right; padding:4px 0 0 0;">
+  <button id="la-copy-btn" onclick="(function(){{
+    navigator.clipboard.writeText({_json.dumps(response)}).then(function(){{
+      var b=document.getElementById('la-copy-btn');
+      b.innerHTML='&#10003;&nbsp;Copied!';
+      b.style.color='#16a34a';
+      setTimeout(function(){{b.innerHTML='&#128203;&nbsp;Copy response';b.style.color=''}},2200);
+    }}).catch(function(){{
+      var b=document.getElementById('la-copy-btn');
+      b.innerHTML='Copy not supported in this browser';
+    }});
+  }})()">&#128203;&nbsp;Copy response</button>
+</div>"""
+        _cmp.html(_copy_html, height=46)
 
         # ── CASE STRENGTH METER ──
         if st.session_state.get("last_task") in ("analysis", "advisory", "contract_review"):
@@ -8641,13 +8797,6 @@ def main():
         height=0,
     )
     # ────────────────────────────────────────────────────────────────────────────
-
-
-    import streamlit.components.v1 as _components
-    _components.html(
-        """<script>(function(){var I=10*60*1000;function p(){fetch(window.location.href,{method:"GET",cache:"no-store"}).catch(function(){});}setInterval(p,I);})();</script>""",
-        height=0,
-    )
 
 
 if __name__ == "__main__":
