@@ -7469,6 +7469,442 @@ def render_user_management():
 # ═══════════════════════════════════════════════════════
 # MAIN ENTRY POINT
 # ═══════════════════════════════════════════════════════
+def _configure_genai(key: str):
+    genai.configure(api_key=key, transport="rest")
+
+
+def add_client(data: dict):
+    data["id"] = new_id()
+    data["created_at"] = datetime.now().isoformat()
+    st.session_state.clients.append(data)
+    persist("clients")
+
+
+def add_time_entry(data: dict):
+    data["id"] = new_id()
+    data["created_at"] = datetime.now().isoformat()
+    data["amount"] = data.get("hours", 0) * data.get("rate", 0)
+    st.session_state.time_entries.append(data)
+    persist("time_entries")
+
+
+def add_to_history(query: str, response: str, task: str, mode: str):
+    entry = {
+        "id": new_id(),
+        "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M"),
+        "query": query,
+        "response": response,
+        "task": task,
+        "mode": mode,
+        "word_count": len(response.split()),
+    }
+    st.session_state.chat_history.append(entry)
+    persist("chat_history")
+    return entry
+
+
+def auto_connect():
+    if st.session_state.api_configured:
+        return
+    k = _resolve_api_key()
+    if k:
+        try:
+            _configure_genai(k)
+            st.session_state.api_key = k
+            st.session_state.api_configured = True
+            m = safe_secret("GEMINI_MODEL") or os.getenv("GEMINI_MODEL", "")
+            if m and m in SUPPORTED_MODELS:
+                st.session_state.gemini_model = m
+        except Exception as e:
+            logger.warning(f"Auto-connect failed: {e}")
+
+
+def build_system_prompt(task: str, mode: str) -> str:
+    base = PROMPTS_BY_MODE.get(mode, PROMPTS_BY_MODE["standard"])
+    modifier = TASK_MODIFIERS.get(task, TASK_MODIFIERS["general"])
+    return base + modifier
+
+
+def client_billable(cid: str) -> float:
+    return sum(e.get("amount", 0) for e in st.session_state.time_entries if e.get("client_id") == cid)
+
+
+def client_case_count(cid: str) -> int:
+    return sum(1 for c in st.session_state.cases if c.get("client_id") == cid)
+
+
+def days_until(d) -> int:
+    if not d:
+        return 9999
+    try:
+        if isinstance(d, str):
+            d = datetime.fromisoformat(d).date()
+        if isinstance(d, datetime):
+            d = d.date()
+        return (d - date.today()).days
+    except Exception:
+        return 9999
+
+
+def delete_case(cid: str):
+    st.session_state.cases = [c for c in st.session_state.cases if c["id"] != cid]
+    persist("cases")
+    get_db().delete_case_analyses_for_case(cid)
+
+
+def delete_client(cid: str):
+    st.session_state.clients = [c for c in st.session_state.clients if c["id"] != cid]
+    persist("clients")
+
+
+def delete_time_entry(eid: str):
+    st.session_state.time_entries = [e for e in st.session_state.time_entries if e["id"] != eid]
+    persist("time_entries")
+
+
+def estimate_cost(input_text: str, output_text: str) -> float:
+    """Estimate API cost from text lengths."""
+    input_tokens = len(input_text) / 4
+    output_tokens = len(output_text) / 4
+    cost = (input_tokens / 1_000_000) * COST_PER_1M_INPUT + (output_tokens / 1_000_000) * COST_PER_1M_OUTPUT
+    return round(cost, 6)
+
+
+def fmt_currency(amount) -> str:
+    try:
+        return f"₦{float(amount):,.2f}"
+    except Exception:
+        return "₦0.00"
+
+
+def fmt_date(d) -> str:
+    if not d:
+        return "—"
+    try:
+        if isinstance(d, str):
+            d = datetime.fromisoformat(d)
+        return d.strftime("%d %b %Y")
+    except Exception:
+        return str(d)
+
+
+def generate(prompt: str, system: str, mode: str, task: str = "general") -> str:
+    """Core generation with retry, cost logging, and proper token limits."""
+    k = _resolve_api_key()
+    if not k:
+        return "⚠️ No API key configured. Please set up your key."
+    _configure_genai(k)
+
+    mode_cfg = RESPONSE_MODES.get(mode, RESPONSE_MODES["standard"])
+    gen_config = {
+        "temperature": mode_cfg["temp"],
+        "top_p": 0.92,
+        "top_k": 40,
+        "max_output_tokens": mode_cfg["tokens"],
+    }
+
+    model_obj = genai.GenerativeModel(
+        st.session_state.gemini_model,
+        system_instruction=system,
+    )
+
+    for attempt in range(3):
+        try:
+            resp = model_obj.generate_content(prompt, generation_config=gen_config)
+            if resp and resp.text:
+                # Log cost
+                cost = estimate_cost(prompt + system, resp.text)
+                db = get_db()
+                db.add_cost_log({
+                    "id": new_id(),
+                    "timestamp": datetime.now().isoformat(),
+                    "model": st.session_state.gemini_model,
+                    "task": task,
+                    "mode": mode,
+                    "input_chars": len(prompt) + len(system),
+                    "output_chars": len(resp.text),
+                    "estimated_cost": cost,
+                    "query_preview": prompt[:120],
+                })
+                return resp.text
+            return "⚠️ Empty response from AI. Try rephrasing your query."
+        except Exception as e:
+            if attempt == 2:
+                return f"⚠️ Generation error after 3 attempts: {str(e)[:200]}"
+            time.sleep(2 * (attempt + 1))
+    return "⚠️ Generation failed. Please try again."
+
+
+def get_active_cases() -> list:
+    return [c for c in st.session_state.cases if c.get("status") == "Active"]
+
+
+def get_all_limitation_periods() -> list:
+    custom = st.session_state.get("custom_limitation_periods", [])
+    return DEFAULT_LIMITATION_PERIODS + custom
+
+
+def get_all_maxims() -> list:
+    custom = st.session_state.get("custom_maxims", [])
+    return DEFAULT_LEGAL_MAXIMS + custom
+
+
+def get_all_templates() -> list:
+    """Combine built-in and custom templates."""
+    custom = st.session_state.get("custom_templates", [])
+    return DEFAULT_TEMPLATES + custom
+
+
+def get_client_name(cid: str) -> str:
+    for c in st.session_state.clients:
+        if c["id"] == cid:
+            return c.get("name", "—")
+    return "—"
+
+
+def get_firm_name() -> str:
+    """Get firm name for branding on exports."""
+    profile = st.session_state.get("profile", {})
+    return profile.get("firm_name", "") or "LexiAssist"
+
+
+def get_hearings() -> list:
+    h = []
+    for c in st.session_state.cases:
+        if c.get("next_hearing") and c.get("status") in ("Active", "Pending"):
+            h.append({
+                "id": c["id"], "title": c.get("title", ""),
+                "date": c["next_hearing"], "court": c.get("court", ""),
+                "suit": c.get("suit_no", ""), "status": c.get("status", ""),
+            })
+    h.sort(key=lambda x: x.get("date", "z"))
+    return h
+
+
+def make_invoice(client_id: str):
+    entries = [e for e in st.session_state.time_entries if e.get("client_id") == client_id]
+    if not entries:
+        return None
+    inv = {
+        "id": new_id(),
+        "invoice_no": f"INV-{datetime.now():%Y%m%d}-{new_id()[:4].upper()}",
+        "client_id": client_id,
+        "client_name": get_client_name(client_id),
+        "entries": entries,
+        "total": sum(e.get("amount", 0) for e in entries),
+        "date": datetime.now().isoformat(),
+        "status": "Draft",
+    }
+    st.session_state.invoices.append(inv)
+    persist("invoices")
+    return inv
+
+
+def manual_connect(key: str) -> bool:
+    try:
+        _configure_genai(key)
+        model = genai.GenerativeModel(st.session_state.gemini_model)
+        model.generate_content("Test", generation_config={"max_output_tokens": 10})
+        st.session_state.api_key = key
+        st.session_state.api_configured = True
+        return True
+    except Exception as e:
+        err = str(e)
+        if "403" in err:
+            st.error("❌ Invalid API key.")
+        elif "429" in err:
+            st.error("⚠️ Rate limit — try again shortly.")
+        else:
+            st.error(f"❌ Connection failed: {err[:120]}")
+        return False
+
+
+def new_id() -> str:
+    return uuid.uuid4().hex[:8]
+
+
+def relative_date(d) -> str:
+    n = days_until(d)
+    if n == 9999:
+        return "—"
+    if n < 0:
+        return f"{abs(n)}d overdue"
+    if n == 0:
+        return "TODAY"
+    if n == 1:
+        return "Tomorrow"
+    if n <= 7:
+        return f"{n} days"
+    return f"{n} days away"
+
+
+def run_comparison(entry_a: dict, entry_b: dict) -> str:
+    prompt = (
+        f"ANALYSIS A (from {entry_a.get('timestamp', '')}):\n"
+        f"Query: {entry_a.get('query', '')}\n"
+        f"Response:\n{entry_a.get('response', '')}\n\n"
+        f"{'='*40}\n\n"
+        f"ANALYSIS B (from {entry_b.get('timestamp', '')}):\n"
+        f"Query: {entry_b.get('query', '')}\n"
+        f"Response:\n{entry_b.get('response', '')}"
+    )
+    return generate(prompt, COMPARISON_PROMPT, "standard", "analysis")
+
+
+def run_critique(query: str, analysis: str) -> str:
+    prompt = f"ORIGINAL QUERY:\n{query}\n\nANALYSIS TO REVIEW:\n{analysis}"
+    return generate(prompt, CRITIQUE_PROMPT, "brief", "analysis")
+
+
+def run_followup(original: str, previous: str, followup: str, mode: str) -> str:
+    prompt = f"ORIGINAL QUERY:\n{original}\n\nPREVIOUS ANALYSIS:\n{previous}\n\nFOLLOW-UP QUESTION:\n{followup}"
+    return generate(prompt, FOLLOWUP_PROMPT, mode, "general")
+
+
+def run_issue_spot(query: str) -> str:
+    return generate(query, ISSUE_SPOT_PROMPT, "brief", "analysis")
+
+
+def run_research(query: str, mode: str) -> str:
+    system = build_system_prompt("research", mode)
+    return generate(query, system, mode, "research")
+
+
+def safe_secret(key: str, default: str = "") -> str:
+    try:
+        return st.secrets[key]
+    except Exception:
+        return default
+
+
+def save_analysis_to_case(case_id: str, query: str, response: str, task: str, mode: str):
+    """Attach an AI analysis to a specific case."""
+    db = get_db()
+    db.add_case_analysis(case_id, {
+        "id": new_id(),
+        "query": query,
+        "response": response,
+        "task": task,
+        "mode": mode,
+        "timestamp": datetime.now().isoformat(),
+    })
+
+
+
+def total_billable() -> float:
+    return sum(e.get("amount", 0) for e in st.session_state.time_entries)
+
+
+def total_hours() -> float:
+    return sum(e.get("hours", 0) for e in st.session_state.time_entries)
+
+
+def update_case(cid: str, updates: dict):
+    for c in st.session_state.cases:
+        if c["id"] == cid:
+            c.update(updates)
+            c["updated_at"] = datetime.now().isoformat()
+    persist("cases")
+
+def init_session_state():
+    """Set non-user-specific session defaults. Called every render cycle."""
+    simple_defaults = {
+        "api_key": "",
+        "api_configured": False,
+        "gemini_model": DEFAULT_MODEL,
+        "theme": "🌿 Emerald",
+        "response_mode": "standard",
+        "authenticated": False,
+        "current_user_id": "",
+        "current_username": "",
+        "current_user_role": "",
+        "user_data_loaded": False,
+        "last_response": "",
+        "original_query": "",
+        "last_task": "general",
+        "last_mode": "standard",
+        "research_results": "",
+        "loaded_template": "",
+        "imported_doc": None,
+        "selected_history_idx": None,
+        "compare_selections": [],
+    }
+    for k, v in simple_defaults.items():
+        if k not in st.session_state:
+            st.session_state[k] = v
+
+
+
+def esc(text: str) -> str:
+    if not text:
+        return ""
+    return html_mod.escape(str(text))
+
+
+def extract_file_text(uploaded_file) -> str:
+    name = uploaded_file.name.lower()
+    data = uploaded_file.getvalue()
+
+    if name.endswith(".pdf"):
+        if not HAS_PDF_READ:
+            raise ValueError("PDF support not available (install pdfplumber)")
+        with pdfplumber.open(BytesIO(data)) as pdf:
+            pages = []
+            for p in pdf.pages:
+                txt = p.extract_text()
+                if txt:
+                    pages.append(txt)
+            return "\n\n".join(pages)
+    elif name.endswith((".docx", ".doc")):
+        if not HAS_DOCX:
+            raise ValueError("DOCX support not available (install python-docx)")
+        doc = DocxDocument(BytesIO(data))
+        return "\n".join(p.text for p in doc.paragraphs if p.text.strip())
+    elif name.endswith(".txt") or name.endswith(".rtf"):
+        return data.decode("utf-8", errors="ignore")
+    elif name.endswith((".xlsx", ".xls")):
+        if not HAS_XLSX:
+            raise ValueError("Excel support not available (install openpyxl)")
+        df = pd.read_excel(BytesIO(data))
+        return df.to_string(index=False)
+    elif name.endswith(".csv"):
+        df = pd.read_csv(BytesIO(data))
+        return df.to_string(index=False)
+    elif name.endswith(".json"):
+        obj = json.loads(data.decode("utf-8", errors="ignore"))
+        return json.dumps(obj, indent=2)
+    else:
+        try:
+            return data.decode("utf-8", errors="ignore")
+        except Exception:
+            raise ValueError(f"Unsupported file type: {name}")
+
+
+def run_ai_query(query: str, task: str, mode: str, context: str = "") -> str:
+    system = build_system_prompt(task, mode)
+    full_prompt = query
+    if context:
+        full_prompt = f"DOCUMENT CONTEXT:\n{context[:8000]}\n\nQUERY:\n{query}"
+    return generate(full_prompt, system, mode, task)
+
+
+def add_case(data: dict):
+    data["id"] = new_id()
+    data["created_at"] = datetime.now().isoformat()
+    st.session_state.cases.append(data)
+    persist("cases")
+
+def _resolve_api_key() -> str:
+    for src in [
+        lambda: safe_secret("GEMINI_API_KEY"),
+        lambda: os.getenv("GEMINI_API_KEY", ""),
+        lambda: st.session_state.get("api_key", ""),
+    ]:
+        k = src()
+        if k and k.strip() and len(k.strip()) >= 10:
+            return k.strip()
+    return ""
+
 def main():
     init_session_state()
     auto_connect()
