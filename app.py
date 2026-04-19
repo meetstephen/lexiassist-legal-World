@@ -842,92 +842,459 @@ DEFAULT_TEMPLATES = [
 # ═══════════════════════════════════════════════════════
 THEMES = {
     "⚖️ Corporate": {
-        "primary": "#1a2e4a", "secondary": "#c9a84c", "accent": "#2d4a6e",
-        "bg": "#f4f6f9", "card_bg": "#ffffff", "text": "#1a2e4a",
-        "header_gradient": "linear-gradient(135deg, #1a2e4a, #2d4a6e)",
-        "sidebar_bg": "#1a2e4a",
+        "display_name": "⚖️ Corporate",
+        "description": "Deep navy & gold — professional law firm portal.",
+        "bg":               "#f4f6f9",
+        "bg_secondary":     "#e8edf4",
+        "card_bg":          "#ffffff",
+        "border":           "#c5d0e0",
+        "text":             "#1a2e4a",
+        "text_secondary":   "#4a6080",
+        "accent":           "#1a2e4a",
+        "accent_secondary": "#c9a84c",
+        "positive":         "#059669",
+        "negative":         "#dc2626",
+        "warning":          "#d97706",
+        "sidebar_bg":       "#1a2e4a",
+        "input_bg":         "#ffffff",
+        "header_gradient":  "linear-gradient(135deg, #1a2e4a, #2d4a6e)",
     },
     "🌿 Emerald": {
-        "primary": "#059669", "secondary": "#0d9488", "accent": "#10b981",
-        "bg": "#f8faf9", "card_bg": "#ffffff", "text": "#1e293b",
-        "header_gradient": "linear-gradient(135deg, #059669, #0d9488)",
-        "sidebar_bg": "#f0fdf4",
+        "display_name": "🌿 Emerald",
+        "description": "Fresh greens — calm and focused.",
+        "bg":               "#f8faf9",
+        "bg_secondary":     "#edf7f2",
+        "card_bg":          "#ffffff",
+        "border":           "#a7d4bc",
+        "text":             "#1e293b",
+        "text_secondary":   "#4a7560",
+        "accent":           "#059669",
+        "accent_secondary": "#0d9488",
+        "positive":         "#10b981",
+        "negative":         "#dc2626",
+        "warning":          "#d97706",
+        "sidebar_bg":       "#064e3b",
+        "input_bg":         "#ffffff",
+        "header_gradient":  "linear-gradient(135deg, #059669, #0d9488)",
+    },
+    "🌊 Deep Ocean": {
+        "display_name": "🌊 Deep Ocean",
+        "description": "Calm deep blues — focused and serene.",
+        "bg":               "#0B1120",
+        "bg_secondary":     "#111B2E",
+        "card_bg":          "#14203A",
+        "border":           "#1E3A5F",
+        "text":             "#E0E7FF",
+        "text_secondary":   "#8899BB",
+        "accent":           "#64FFDA",
+        "accent_secondary": "#7BDFF2",
+        "positive":         "#52D68A",
+        "negative":         "#FF7675",
+        "warning":          "#FFD93D",
+        "sidebar_bg":       "#0D1526",
+        "input_bg":         "#162040",
+        "header_gradient":  "linear-gradient(135deg, #0D1526, #1E3A5F)",
     },
     "🌙 Midnight": {
-        "primary": "#3b82f6", "secondary": "#6366f1", "accent": "#818cf8",
-        "bg": "#0f172a", "card_bg": "#1e293b", "text": "#e2e8f0",
-        "header_gradient": "linear-gradient(135deg, #1e3a5f, #3b82f6)",
-        "sidebar_bg": "#1e293b",
+        "display_name": "🌙 Midnight",
+        "description": "Deep purples — contemplative and restful.",
+        "bg":               "#0D0B1A",
+        "bg_secondary":     "#131024",
+        "card_bg":          "#1A1530",
+        "border":           "#2E2660",
+        "text":             "#E0DCFF",
+        "text_secondary":   "#9990CC",
+        "accent":           "#A29BFE",
+        "accent_secondary": "#C4B5FD",
+        "positive":         "#6BCB77",
+        "negative":         "#FF6B6B",
+        "warning":          "#FFD93D",
+        "sidebar_bg":       "#0A0818",
+        "input_bg":         "#1E1838",
+        "header_gradient":  "linear-gradient(135deg, #0A0818, #2E2660)",
     },
-    "👔 Royal": {
-        "primary": "#7c3aed", "secondary": "#6d28d9", "accent": "#a78bfa",
-        "bg": "#faf5ff", "card_bg": "#ffffff", "text": "#1e1b4b",
-        "header_gradient": "linear-gradient(135deg, #6d28d9, #7c3aed)",
-        "sidebar_bg": "#f5f3ff",
+    "🔥 Ember": {
+        "display_name": "🔥 Ember",
+        "description": "Dark with warm amber — bold and intense.",
+        "bg":               "#1A1210",
+        "bg_secondary":     "#221812",
+        "card_bg":          "#2A1E18",
+        "border":           "#5C3D2E",
+        "text":             "#FFE4CC",
+        "text_secondary":   "#C4977A",
+        "accent":           "#FF9800",
+        "accent_secondary": "#FFB74D",
+        "positive":         "#66BB6A",
+        "negative":         "#EF5350",
+        "warning":          "#FFD54F",
+        "sidebar_bg":       "#16100C",
+        "input_bg":         "#30241C",
+        "header_gradient":  "linear-gradient(135deg, #16100C, #5C3D2E)",
     },
-    "❤️ Crimson": {
-        "primary": "#dc2626", "secondary": "#b91c1c", "accent": "#f87171",
-        "bg": "#fef2f2", "card_bg": "#ffffff", "text": "#1f2937",
-        "header_gradient": "linear-gradient(135deg, #b91c1c, #dc2626)",
-        "sidebar_bg": "#fef2f2",
+    "💜 Lavender": {
+        "display_name": "💜 Lavender",
+        "description": "Soft purples — soothing and creative.",
+        "bg":               "#14101A",
+        "bg_secondary":     "#1C1626",
+        "card_bg":          "#221C30",
+        "border":           "#3D3060",
+        "text":             "#E8E0F0",
+        "text_secondary":   "#A898C8",
+        "accent":           "#B388FF",
+        "accent_secondary": "#CE93D8",
+        "positive":         "#69F0AE",
+        "negative":         "#FF8A80",
+        "warning":          "#FFE57F",
+        "sidebar_bg":       "#110D16",
+        "input_bg":         "#281E3A",
+        "header_gradient":  "linear-gradient(135deg, #110D16, #3D3060)",
+    },
+    "☁️ Cloud": {
+        "display_name": "☁️ Cloud",
+        "description": "Light grays and sky blues — clean and airy.",
+        "bg":               "#F5F7FA",
+        "bg_secondary":     "#E8ECF1",
+        "card_bg":          "#FFFFFF",
+        "border":           "#D1D9E6",
+        "text":             "#2D3748",
+        "text_secondary":   "#718096",
+        "accent":           "#4299E1",
+        "accent_secondary": "#63B3ED",
+        "positive":         "#48BB78",
+        "negative":         "#FC8181",
+        "warning":          "#ECC94B",
+        "sidebar_bg":       "#2D3748",
+        "input_bg":         "#FFFFFF",
+        "header_gradient":  "linear-gradient(135deg, #2D3748, #4299E1)",
     },
     "🌅 Sunset": {
-        "primary": "#ea580c", "secondary": "#d97706", "accent": "#fb923c",
-        "bg": "#fffbeb", "card_bg": "#ffffff", "text": "#1c1917",
-        "header_gradient": "linear-gradient(135deg, #d97706, #ea580c)",
-        "sidebar_bg": "#fefce8",
+        "display_name": "🌅 Sunset",
+        "description": "Warm oranges and ambers — vibrant and expressive.",
+        "bg":               "#1A100D",
+        "bg_secondary":     "#221610",
+        "card_bg":          "#2C1D16",
+        "border":           "#6B3A28",
+        "text":             "#FFE8D6",
+        "text_secondary":   "#C49A7E",
+        "accent":           "#FF6B35",
+        "accent_secondary": "#FF9F1C",
+        "positive":         "#7DCE82",
+        "negative":         "#FF4757",
+        "warning":          "#FFBE0B",
+        "sidebar_bg":       "#15100A",
+        "input_bg":         "#30221A",
+        "header_gradient":  "linear-gradient(135deg, #15100A, #6B3A28)",
     },
 }
 
-def get_theme_css(theme_name: str) -> str:
-    t    = THEMES.get(theme_name, THEMES["⚖️ Corporate"])
-    corp = (theme_name == "⚖️ Corporate")
-    sb_text  = "#e8edf4" if corp else t["text"]
-    sb_muted = "#a0bcd8" if corp else f"{t['text']}99"
-    sb_line  = "#2d4a6e" if corp else f"{t['primary']}33"
+THEME_NAMES = list(THEMES.keys())
+
+
+def get_theme(name: str) -> dict:
+    return THEMES.get(name, THEMES["⚖️ Corporate"])
+
+
+def get_plotly_colors(name: str) -> dict:
+    """Return Plotly-compatible colour config matching the active theme."""
+    t = get_theme(name)
+    return {
+        "paper":  t["card_bg"],
+        "text":   t["text"],
+        "grid":   t["border"],
+        "accent": t["accent"],
+        "colors": [
+            t["accent"], t["accent_secondary"], t["positive"],
+            t["negative"], t["warning"], t["text_secondary"],
+            "#FF6B6B", "#48DBFB", "#FECA57", "#FF9FF3",
+        ],
+    }
+
+def get_theme_css(
+    theme_name: str,
+    font_size_scale: float = 1.0,
+    high_contrast: bool = False,
+    reduce_motion: bool = False,
+) -> str:
+    t = get_theme(theme_name)
+
+    # ── Accessibility overrides ──────────────────────────────────────────
+    text_color = "#FFFFFF" if high_contrast else t["text"]
+    text_sec   = "#CCCCCC" if high_contrast else t["text_secondary"]
+    bg_color   = "#000000" if (high_contrast and t["bg"][1:3] < "33") else t["bg"]
+    base_font  = round(16 * font_size_scale, 1)
+
+    motion_css = ""
+    if reduce_motion:
+        motion_css = """
+        *, *::before, *::after {
+            animation-duration: 0s !important;
+            animation-delay: 0s !important;
+            transition-duration: 0s !important;
+            transition-delay: 0s !important;
+        }"""
+
+    # ── Sidebar colours (dark for dark sidebars, adapted for light) ──────
+    is_dark_sidebar = t["sidebar_bg"][1:3] < "44"
+    sb_text  = "#e8edf4" if is_dark_sidebar else t["text"]
+    sb_muted = "#a0bcd8" if is_dark_sidebar else t["text_secondary"]
+    sb_line  = f"{t['accent']}44" if is_dark_sidebar else f"{t['accent']}33"
+
     return f"""
 <style>
-.stApp{{background-color:{t['bg']};color:{t['text']};font-family:"Inter","Segoe UI",Arial,sans-serif;}}
-section[data-testid="stSidebar"]{{background-color:{t['sidebar_bg']} !important;border-right:1px solid {sb_line};}}
-section[data-testid="stSidebar"] *{{color:{sb_text} !important;}}
-section[data-testid="stSidebar"] .stCaption,
-section[data-testid="stSidebar"] small{{color:{sb_muted} !important;font-size:0.78rem;}}
-section[data-testid="stSidebar"] .stButton>button{{background:transparent !important;border:1px solid {sb_line} !important;color:{sb_text} !important;border-radius:6px !important;}}
-section[data-testid="stSidebar"] hr{{border-color:{sb_line} !important;margin:0.6rem 0;}}
-.hero{{background:{t['header_gradient']};color:white;padding:2.5rem 2.4rem;border-radius:12px;margin-bottom:1.6rem;border-bottom:3px solid {t['secondary']};}}
-.hero h1{{font-size:2.2rem;font-weight:800;margin:0;letter-spacing:-0.02em;}}
-.hero p{{font-size:1.05rem;opacity:0.88;margin-top:0.5rem;}}
-.page-header{{background:{t['header_gradient']};color:white;padding:1.4rem 1.8rem;border-radius:10px;margin-bottom:1.4rem;border-bottom:3px solid {t['secondary']};}}
-.page-header h2{{margin:0;font-size:1.5rem;font-weight:700;}}
-.page-header p{{margin:0.3rem 0 0 0;opacity:0.88;font-size:0.95rem;}}
-.stat-card{{background:{t['card_bg']};border:1px solid {t['primary']}18;border-top:3px solid {t['primary']};border-radius:10px;padding:1.2rem 1rem;text-align:center;}}
-.stat-card .stat-value{{font-size:1.9rem;font-weight:800;color:{t['primary']};line-height:1;}}
-.stat-card .stat-label{{font-size:0.8rem;color:{t['text']}80;margin-top:0.35rem;text-transform:uppercase;letter-spacing:0.05em;}}
-.custom-card{{background:{t['card_bg']};border:1px solid {t['primary']}18;border-left:4px solid {t['primary']};border-radius:8px;padding:1.1rem 1.3rem;margin-bottom:0.8rem;}}
-.custom-card h4{{margin:0 0 0.35rem 0;color:{t['primary']};font-size:0.95rem;font-weight:700;}}
-.response-box{{background:{t['card_bg']};border:1px solid {t['primary']}22;border-left:4px solid {t['primary']};border-radius:8px;padding:1.8rem 2rem;white-space:pre-wrap;line-height:1.75;font-size:0.94rem;}}
-.disclaimer{{background:#fffbeb;border-left:4px solid #f59e0b;border-radius:4px;padding:0.9rem 1.1rem;margin-top:1rem;font-size:0.86rem;color:#78350f;}}
-.badge{{display:inline-block;padding:0.18rem 0.65rem;border-radius:20px;font-size:0.73rem;font-weight:600;letter-spacing:0.02em;}}
-.badge-ok{{background:#d1fae5;color:#065f46;}}
-.badge-warn{{background:#fef3c7;color:#92400e;}}
-.badge-err{{background:#fee2e2;color:#991b1b;}}
-.badge-info{{background:{t['primary']}15;color:{t['primary']};}}
-.history-item{{background:{t['card_bg']};border:1px solid {t['primary']}14;border-radius:7px;padding:0.75rem 1rem;margin-bottom:0.45rem;cursor:pointer;}}
-.history-item:hover{{border-color:{t['primary']};}}
-.tool-card{{background:{t['card_bg']};border:1px solid {t['primary']}12;border-radius:7px;padding:1rem 1.1rem;margin-bottom:0.55rem;}}
-.login-card{{background:{t['card_bg']};border:1px solid {t['primary']}20;border-top:4px solid {t['primary']};border-radius:12px;padding:2rem 2.2rem;}}
-div[data-testid="stTabs"] button{{font-weight:600 !important;font-size:0.88rem !important;border-radius:6px 6px 0 0 !important;}}
-div[data-testid="stTabs"] button[aria-selected="true"]{{color:{t['primary']} !important;border-bottom-color:{t['primary']} !important;background:{t['primary']}0d !important;}}
-.stButton>button[kind="primary"]{{background:{t['primary']} !important;border-color:{t['primary']} !important;color:white !important;border-radius:7px !important;font-weight:600 !important;}}
-.stTextInput input,.stTextArea textarea{{border-color:{t['primary']}30 !important;border-radius:7px !important;}}
-.stTextInput input:focus,.stTextArea textarea:focus{{border-color:{t['primary']} !important;box-shadow:0 0 0 2px {t['primary']}22 !important;}}
-div[data-testid="metric-container"] label{{color:{t['text']}80 !important;font-size:0.78rem !important;text-transform:uppercase;letter-spacing:0.04em;}}
-div[data-testid="metric-container"] div[data-testid="stMetricValue"]{{color:{t['primary']} !important;font-weight:700 !important;}}
-::-webkit-scrollbar{{width:6px;height:6px;}}
-::-webkit-scrollbar-track{{background:transparent;}}
-::-webkit-scrollbar-thumb{{background:{t['primary']}40;border-radius:3px;}}
-</style>"""
+/* ══ LexiAssist — Theme: {t['display_name']} ══════════════════════════════ */
 
+:root {{
+    --la-bg:              {bg_color};
+    --la-bg-secondary:    {t['bg_secondary']};
+    --la-card-bg:         {t['card_bg']};
+    --la-border:          {t['border']};
+    --la-text:            {text_color};
+    --la-text-secondary:  {text_sec};
+    --la-accent:          {t['accent']};
+    --la-accent-2:        {t['accent_secondary']};
+    --la-positive:        {t['positive']};
+    --la-negative:        {t['negative']};
+    --la-warning:         {t['warning']};
+    --la-input-bg:        {t['input_bg']};
+    --la-sidebar-bg:      {t['sidebar_bg']};
+}}
+
+{motion_css}
+
+/* ── Global ─────────────────────────────────────────────────────────── */
+.stApp {{
+    background-color: var(--la-bg) !important;
+    color: var(--la-text) !important;
+    font-size: {base_font}px !important;
+    font-family: "Inter", "Segoe UI", Arial, sans-serif;
+}}
+
+/* ── Sidebar ─────────────────────────────────────────────────────────── */
+section[data-testid="stSidebar"] {{
+    background-color: {t['sidebar_bg']} !important;
+    border-right: 1px solid {sb_line};
+}}
+section[data-testid="stSidebar"] * {{ color: {sb_text} !important; }}
+section[data-testid="stSidebar"] .stCaption,
+section[data-testid="stSidebar"] small {{
+    color: {sb_muted} !important; font-size: 0.78rem;
+}}
+section[data-testid="stSidebar"] .stButton > button {{
+    background: transparent !important;
+    border: 1px solid {sb_line} !important;
+    color: {sb_text} !important;
+    border-radius: 6px !important;
+}}
+section[data-testid="stSidebar"] hr {{ border-color: {sb_line} !important; margin: 0.6rem 0; }}
+
+/* ── Headers ─────────────────────────────────────────────────────────── */
+h1, h2, h3, h4, h5, h6,
+.stMarkdown h1, .stMarkdown h2, .stMarkdown h3 {{
+    color: var(--la-text) !important;
+}}
+
+/* ── Hero & page headers ─────────────────────────────────────────────── */
+.hero {{
+    background: {t['header_gradient']};
+    color: white; padding: 2.5rem 2.4rem;
+    border-radius: 12px; margin-bottom: 1.6rem;
+    border-bottom: 3px solid {t['accent_secondary']};
+}}
+.hero h1 {{ font-size: 2.2rem; font-weight: 800; margin: 0; letter-spacing: -0.02em; }}
+.hero p  {{ font-size: 1.05rem; opacity: 0.88; margin-top: 0.5rem; }}
+.page-header {{
+    background: {t['header_gradient']};
+    color: white; padding: 1.4rem 1.8rem;
+    border-radius: 10px; margin-bottom: 1.4rem;
+    border-bottom: 3px solid {t['accent_secondary']};
+}}
+.page-header h2 {{ margin: 0; font-size: 1.5rem; font-weight: 700; }}
+.page-header p  {{ margin: 0.3rem 0 0 0; opacity: 0.88; font-size: 0.95rem; }}
+
+/* ── Cards ───────────────────────────────────────────────────────────── */
+.stat-card {{
+    background: var(--la-card-bg);
+    border: 1px solid var(--la-border);
+    border-top: 3px solid var(--la-accent);
+    border-radius: 10px; padding: 1.2rem 1rem; text-align: center;
+}}
+.stat-card .stat-value {{
+    font-size: 1.9rem; font-weight: 800;
+    color: var(--la-accent); line-height: 1;
+}}
+.stat-card .stat-label {{
+    font-size: 0.8rem; color: var(--la-text-secondary);
+    margin-top: 0.35rem; text-transform: uppercase; letter-spacing: 0.05em;
+}}
+.custom-card {{
+    background: var(--la-card-bg);
+    border: 1px solid var(--la-border);
+    border-left: 4px solid var(--la-accent);
+    border-radius: 8px; padding: 1.1rem 1.3rem; margin-bottom: 0.8rem;
+}}
+.custom-card h4 {{
+    margin: 0 0 0.35rem 0; color: var(--la-accent);
+    font-size: 0.95rem; font-weight: 700;
+}}
+.login-card {{
+    background: var(--la-card-bg);
+    border: 1px solid var(--la-border);
+    border-top: 4px solid var(--la-accent);
+    border-radius: 12px; padding: 2rem 2.2rem;
+}}
+
+/* ── AI response box ─────────────────────────────────────────────────── */
+.response-box {{
+    background: var(--la-card-bg);
+    border: 1px solid var(--la-border);
+    border-left: 4px solid var(--la-accent);
+    border-radius: 8px; padding: 1.8rem 2rem;
+    white-space: pre-wrap; line-height: 1.75; font-size: 0.94rem;
+    color: var(--la-text);
+}}
+
+/* ── Disclaimer ──────────────────────────────────────────────────────── */
+.disclaimer {{
+    background: {t['warning']}18;
+    border-left: 4px solid {t['warning']};
+    border-radius: 4px; padding: 0.9rem 1.1rem;
+    margin-top: 1rem; font-size: 0.86rem;
+    color: var(--la-text-secondary);
+}}
+
+/* ── Badges ──────────────────────────────────────────────────────────── */
+.badge {{
+    display: inline-block; padding: 0.18rem 0.65rem;
+    border-radius: 20px; font-size: 0.73rem;
+    font-weight: 600; letter-spacing: 0.02em;
+}}
+.badge-ok   {{ background: {t['positive']}22; color: {t['positive']}; }}
+.badge-warn {{ background: {t['warning']}22;  color: {t['warning']}; }}
+.badge-err  {{ background: {t['negative']}22; color: {t['negative']}; }}
+.badge-info {{ background: {t['accent']}22;   color: {t['accent']}; }}
+
+/* ── History & tool cards ────────────────────────────────────────────── */
+.history-item {{
+    background: var(--la-card-bg);
+    border: 1px solid var(--la-border);
+    border-radius: 7px; padding: 0.75rem 1rem;
+    margin-bottom: 0.45rem; cursor: pointer;
+    transition: border-color 0.15s;
+}}
+.history-item:hover {{ border-color: var(--la-accent); }}
+.tool-card {{
+    background: var(--la-card-bg); border: 1px solid var(--la-border);
+    border-radius: 7px; padding: 1rem 1.1rem; margin-bottom: 0.55rem;
+}}
+
+/* ── Inputs ──────────────────────────────────────────────────────────── */
+.stTextInput input, .stTextArea textarea,
+.stSelectbox select, .stNumberInput input {{
+    background-color: var(--la-input-bg) !important;
+    color: var(--la-text) !important;
+    border: 1px solid var(--la-border) !important;
+    border-radius: 7px !important;
+}}
+.stTextInput input:focus, .stTextArea textarea:focus {{
+    border-color: var(--la-accent) !important;
+    box-shadow: 0 0 0 2px {t['accent']}33 !important;
+}}
+
+/* ── Buttons ─────────────────────────────────────────────────────────── */
+.stButton > button[kind="primary"] {{
+    background-color: var(--la-accent) !important;
+    color: {bg_color} !important;
+    border: none !important; border-radius: 7px !important;
+    font-weight: 600 !important;
+}}
+.stButton > button[kind="primary"]:hover {{ opacity: 0.85 !important; }}
+.stButton > button[kind="secondary"] {{
+    background-color: var(--la-bg-secondary) !important;
+    color: var(--la-text) !important;
+    border: 1px solid var(--la-border) !important;
+    border-radius: 7px !important;
+}}
+
+/* ── Tabs ────────────────────────────────────────────────────────────── */
+div[data-testid="stTabs"] button {{
+    font-weight: 600 !important; font-size: 0.88rem !important;
+    border-radius: 6px 6px 0 0 !important;
+    background-color: var(--la-bg-secondary) !important;
+    color: var(--la-text-secondary) !important;
+}}
+div[data-testid="stTabs"] button[aria-selected="true"] {{
+    background-color: var(--la-card-bg) !important;
+    color: var(--la-accent) !important;
+    border-bottom: 2px solid var(--la-accent) !important;
+}}
+
+/* ── Expanders ───────────────────────────────────────────────────────── */
+.streamlit-expanderHeader {{
+    background-color: var(--la-bg-secondary) !important;
+    color: var(--la-text) !important;
+    border-radius: 8px !important;
+    border: 1px solid var(--la-border) !important;
+}}
+.streamlit-expanderContent {{
+    background-color: var(--la-card-bg) !important;
+    border: 1px solid var(--la-border) !important;
+    border-top: none !important; border-radius: 0 0 8px 8px !important;
+}}
+
+/* ── Metrics ─────────────────────────────────────────────────────────── */
+[data-testid="stMetric"] {{
+    background-color: var(--la-card-bg) !important;
+    border: 1px solid var(--la-border) !important;
+    border-radius: 12px !important; padding: 12px 16px !important;
+}}
+[data-testid="stMetricLabel"]  {{ color: var(--la-text-secondary) !important; }}
+[data-testid="stMetricValue"]  {{ color: var(--la-accent) !important; font-weight: 700 !important; }}
+
+div[data-testid="metric-container"] label {{
+    color: var(--la-text-secondary) !important;
+    font-size: 0.78rem !important; text-transform: uppercase; letter-spacing: 0.04em;
+}}
+div[data-testid="metric-container"] div[data-testid="stMetricValue"] {{
+    color: var(--la-accent) !important; font-weight: 700 !important;
+}}
+
+/* ── Progress bars ───────────────────────────────────────────────────── */
+.stProgress > div > div {{ background-color: var(--la-accent) !important; }}
+.stProgress             {{ background-color: var(--la-bg-secondary) !important; }}
+
+/* ── Chat messages ───────────────────────────────────────────────────── */
+[data-testid="stChatMessage"] {{
+    background-color: var(--la-card-bg) !important;
+    border: 1px solid var(--la-border) !important;
+    border-radius: 12px !important; margin-bottom: 8px !important;
+}}
+
+/* ── Dataframes ──────────────────────────────────────────────────────── */
+.stDataFrame {{
+    border: 1px solid var(--la-border) !important; border-radius: 8px !important;
+}}
+
+/* ── Scrollbar ───────────────────────────────────────────────────────── */
+::-webkit-scrollbar       {{ width: 6px; height: 6px; }}
+::-webkit-scrollbar-track {{ background: var(--la-bg-secondary); }}
+::-webkit-scrollbar-thumb {{
+    background: {t['border']}; border-radius: 3px;
+    transition: background 0.2s;
+}}
+::-webkit-scrollbar-thumb:hover {{ background: {t['accent']}88; }}
+
+/* ── Text selection ──────────────────────────────────────────────────── */
+::selection {{
+    background: {t['accent']}44; color: var(--la-text);
+}}
+
+/* ── Reduced-motion media query ──────────────────────────────────────── */
+@media (prefers-reduced-motion: reduce) {{
+    *, *::before, *::after {{
+        animation-duration: 0s !important; transition-duration: 0s !important;
+    }}
+}}
+</style>"""
 # ═══════════════════════════════════════════════════════
 # EXPORT FUNCTIONS (WITH FIRM BRANDING)
 # ═══════════════════════════════════════════════════════
@@ -2225,10 +2592,32 @@ def render_sidebar():
         st.markdown("**🎨 Theme**")
         theme_names = list(THEMES.keys())
         cur_t = theme_names.index(st.session_state.theme) if st.session_state.theme in theme_names else 0
-        theme = st.selectbox("Theme", theme_names, index=cur_t,
-            key="sidebar_theme_sel", label_visibility="collapsed")
+        theme = st.selectbox(
+            "Theme", theme_names, index=cur_t,
+            key="sidebar_theme_sel", label_visibility="collapsed",
+            help=THEMES[theme_names[cur_t]]["description"])
         if theme != st.session_state.theme:
             st.session_state.theme = theme; st.rerun()
+        # ── Accessibility controls ────────────────────────────────
+        with st.expander("♿ Accessibility", expanded=False):
+            fss = st.slider(
+                "Font size", 0.85, 1.4, st.session_state.font_size_scale, 0.05,
+                key="sidebar_font_scale",
+                help="Scale all text up or down")
+            if fss != st.session_state.font_size_scale:
+                st.session_state.font_size_scale = fss; st.rerun()
+            hc = st.checkbox(
+                "High contrast", value=st.session_state.high_contrast,
+                key="sidebar_high_contrast",
+                help="Maximise text/background contrast")
+            if hc != st.session_state.high_contrast:
+                st.session_state.high_contrast = hc; st.rerun()
+            rm = st.checkbox(
+                "Reduce motion", value=st.session_state.reduce_motion,
+                key="sidebar_reduce_motion",
+                help="Disable all CSS animations and transitions")
+            if rm != st.session_state.reduce_motion:
+                st.session_state.reduce_motion = rm; st.rerun()
         st.divider()
         st.markdown("**🤖 AI Engine**")
         if st.session_state.api_configured:
@@ -7812,7 +8201,10 @@ def init_session_state():
         "api_key": "",
         "api_configured": False,
         "gemini_model": DEFAULT_MODEL,
-        "theme": "🌿 Emerald",
+        "theme": "⚖️ Corporate",
+        "font_size_scale": 1.0,
+        "high_contrast": False,
+        "reduce_motion": False,
         "response_mode": "standard",
         "authenticated": False,
         "current_user_id": "",
@@ -7908,7 +8300,12 @@ def _resolve_api_key() -> str:
 def main():
     init_session_state()
     auto_connect()
-    st.markdown(get_theme_css(st.session_state.theme), unsafe_allow_html=True)
+    st.markdown(get_theme_css(
+        st.session_state.theme,
+        font_size_scale=st.session_state.get("font_size_scale", 1.0),
+        high_contrast=st.session_state.get("high_contrast", False),
+        reduce_motion=st.session_state.get("reduce_motion", False),
+    ), unsafe_allow_html=True)
 
     # ── API setup gate ──
     if not st.session_state.api_configured:
