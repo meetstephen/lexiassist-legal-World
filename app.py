@@ -867,8 +867,8 @@ THEMES = {
         "card_bg":          "#ffffff",
         "border":           "#a7d4bc",
         "text":             "#1e293b",
-        "text_secondary":   "#4a7560",
-        "accent":           "#059669",
+        "text_secondary":   "#3d6b54",
+        "accent":           "#047857",
         "accent_secondary": "#0d9488",
         "positive":         "#10b981",
         "negative":         "#dc2626",
@@ -956,10 +956,10 @@ THEMES = {
         "bg_secondary":     "#E8ECF1",
         "card_bg":          "#FFFFFF",
         "border":           "#D1D9E6",
-        "text":             "#2D3748",
-        "text_secondary":   "#718096",
-        "accent":           "#4299E1",
-        "accent_secondary": "#63B3ED",
+        "text":             "#1a202c",
+        "text_secondary":   "#4a5568",
+        "accent":           "#2563EB",
+        "accent_secondary": "#3B82F6",
         "positive":         "#48BB78",
         "negative":         "#FC8181",
         "warning":          "#ECC94B",
@@ -1009,6 +1009,7 @@ def get_plotly_colors(name: str) -> dict:
         ],
     }
 
+
 def get_theme_css(
     theme_name: str,
     font_size_scale: float = 1.0,
@@ -1017,7 +1018,7 @@ def get_theme_css(
 ) -> str:
     t = get_theme(theme_name)
 
-    # ── Accessibility overrides ──────────────────────────────────────────
+    # ── Accessibility overrides ──────────────────────────────────────────────
     text_color = "#FFFFFF" if high_contrast else t["text"]
     text_sec   = "#CCCCCC" if high_contrast else t["text_secondary"]
     bg_color   = "#000000" if (high_contrast and t["bg"][1:3] < "33") else t["bg"]
@@ -1033,35 +1034,53 @@ def get_theme_css(
             transition-delay: 0s !important;
         }"""
 
-    # ── Sidebar colours (dark for dark sidebars, adapted for light) ──────
-    is_dark_sidebar = t["sidebar_bg"][1:3] < "44"
+    # ── Determine if this is a light or dark theme ───────────────────────────
+    # Used to pick WCAG-safe badge/disclaimer text colours
+    is_light = int(t["card_bg"].lstrip("#")[0:2], 16) >= 0x77
+
+    # Badge colours — hardcoded for WCAG AA regardless of theme
+    badge_ok_bg    = "#d1fae5" if is_light else "#052e1644"
+    badge_ok_tx    = "#065f46" if is_light else "#4ade80"
+    badge_warn_bg  = "#fef3c7" if is_light else "#78350f44"
+    badge_warn_tx  = "#92400e" if is_light else "#fbbf24"
+    badge_err_bg   = "#fee2e2" if is_light else "#7f1d1d44"
+    badge_err_tx   = "#991b1b" if is_light else "#f87171"
+    disclaimer_bg  = t["warning"] + ("18" if is_light else "22")
+    disclaimer_tx  = "#78350f" if is_light else text_sec
+
+    # ── Sidebar: dark sidebars use light text; light sidebars use theme text ─
+    is_dark_sidebar = int(t["sidebar_bg"].lstrip("#")[0:2], 16) < 0x44
     sb_text  = "#e8edf4" if is_dark_sidebar else t["text"]
     sb_muted = "#a0bcd8" if is_dark_sidebar else t["text_secondary"]
     sb_line  = f"{t['accent']}44" if is_dark_sidebar else f"{t['accent']}33"
+    # Text INSIDE sidebar inputs must always contrast against their own bg
+    sb_input_text = t["text"]   # dark on white input OR light on dark input
+    sb_input_bg   = t["input_bg"]
 
     return f"""
 <style>
-/* ══ LexiAssist — Theme: {t['display_name']} ══════════════════════════════ */
+/* ══ LexiAssist v8.0 — Theme: {t['display_name']} ══════════════════════════ */
 
+/* ── CSS custom properties ──────────────────────────────────────────────── */
 :root {{
-    --la-bg:              {bg_color};
-    --la-bg-secondary:    {t['bg_secondary']};
-    --la-card-bg:         {t['card_bg']};
-    --la-border:          {t['border']};
-    --la-text:            {text_color};
-    --la-text-secondary:  {text_sec};
-    --la-accent:          {t['accent']};
-    --la-accent-2:        {t['accent_secondary']};
-    --la-positive:        {t['positive']};
-    --la-negative:        {t['negative']};
-    --la-warning:         {t['warning']};
-    --la-input-bg:        {t['input_bg']};
-    --la-sidebar-bg:      {t['sidebar_bg']};
+    --la-bg:             {bg_color};
+    --la-bg-secondary:   {t['bg_secondary']};
+    --la-card-bg:        {t['card_bg']};
+    --la-border:         {t['border']};
+    --la-text:           {text_color};
+    --la-text-secondary: {text_sec};
+    --la-accent:         {t['accent']};
+    --la-accent-2:       {t['accent_secondary']};
+    --la-positive:       {t['positive']};
+    --la-negative:       {t['negative']};
+    --la-warning:        {t['warning']};
+    --la-input-bg:       {t['input_bg']};
+    --la-sidebar-bg:     {t['sidebar_bg']};
 }}
 
 {motion_css}
 
-/* ── Global ─────────────────────────────────────────────────────────── */
+/* ── Global app shell ───────────────────────────────────────────────────── */
 .stApp {{
     background-color: var(--la-bg) !important;
     color: var(--la-text) !important;
@@ -1069,49 +1088,119 @@ def get_theme_css(
     font-family: "Inter", "Segoe UI", Arial, sans-serif;
 }}
 
-/* ── Sidebar ─────────────────────────────────────────────────────────── */
+/* ── Comprehensive Streamlit text element coverage ─────────────────────── */
+/* Targets every element Streamlit's own CSS touches so nothing slips through */
+p, li, td, th, caption, figcaption,
+.stMarkdown, .stMarkdown p, .stMarkdown li, .stMarkdown span,
+[data-testid="stMarkdownContainer"] p,
+[data-testid="stMarkdownContainer"] li,
+[data-testid="stMarkdownContainer"] span,
+[data-testid="stText"],
+[data-testid="stCaptionContainer"],
+.stRadio label,   .stRadio div,
+.stCheckbox label,.stCheckbox div,
+.stSelectbox label, .stMultiSelect label,
+.stTextInput label, .stTextArea label,
+.stNumberInput label, .stDateInput label,
+.stSlider label,
+.stFileUploader label, .stFileUploader span,
+.stExpander label, .stExpander p {{
+    color: var(--la-text) !important;
+}}
+
+/* Secondary / muted text */
+.stCaption, [data-testid="stCaptionContainer"] p,
+small, .stHelp {{
+    color: var(--la-text-secondary) !important;
+}}
+
+/* ── Headings (main content area) ───────────────────────────────────────── */
+h1, h2, h3, h4, h5, h6,
+.stMarkdown h1, .stMarkdown h2, .stMarkdown h3,
+.stMarkdown h4, .stMarkdown h5, .stMarkdown h6 {{
+    color: var(--la-text) !important;
+}}
+
+/* ── Hero & page-header — ALWAYS white text, overrides heading rule above ─ */
+.hero, .hero h1, .hero h2, .hero h3, .hero p,
+.hero *, .hero span, .hero label {{
+    color: white !important;
+}}
+.hero {{
+    background: {t['header_gradient']};
+    padding: 2.5rem 2.4rem; border-radius: 12px;
+    margin-bottom: 1.6rem;
+    border-bottom: 3px solid {t['accent_secondary']};
+}}
+.hero h1 {{
+    font-size: 2.2rem; font-weight: 800;
+    margin: 0; letter-spacing: -0.02em;
+}}
+.hero p {{ font-size: 1.05rem; opacity: 0.92; margin-top: 0.5rem; }}
+
+.page-header, .page-header h2, .page-header p,
+.page-header *, .page-header span {{
+    color: white !important;
+}}
+.page-header {{
+    background: {t['header_gradient']};
+    padding: 1.4rem 1.8rem; border-radius: 10px;
+    margin-bottom: 1.4rem;
+    border-bottom: 3px solid {t['accent_secondary']};
+}}
+.page-header h2 {{ margin: 0; font-size: 1.5rem; font-weight: 700; }}
+.page-header p  {{ margin: 0.3rem 0 0 0; opacity: 0.92; font-size: 0.95rem; }}
+
+/* ── Sidebar ────────────────────────────────────────────────────────────── */
 section[data-testid="stSidebar"] {{
     background-color: {t['sidebar_bg']} !important;
     border-right: 1px solid {sb_line};
 }}
-section[data-testid="stSidebar"] * {{ color: {sb_text} !important; }}
+/* Sidebar labels, headings, paragraphs → sidebar text colour */
+section[data-testid="stSidebar"] p,
+section[data-testid="stSidebar"] span,
+section[data-testid="stSidebar"] label,
+section[data-testid="stSidebar"] h1,
+section[data-testid="stSidebar"] h2,
+section[data-testid="stSidebar"] h3,
+section[data-testid="stSidebar"] h4,
+section[data-testid="stSidebar"] li,
+section[data-testid="stSidebar"] .stMarkdown,
+section[data-testid="stSidebar"] [data-testid="stMarkdownContainer"] p,
+section[data-testid="stSidebar"] [data-testid="stText"],
+section[data-testid="stSidebar"] .stRadio label,
+section[data-testid="stSidebar"] .stCheckbox label,
+section[data-testid="stSidebar"] .stSelectbox label,
+section[data-testid="stSidebar"] .stSlider label {{
+    color: {sb_text} !important;
+}}
 section[data-testid="stSidebar"] .stCaption,
-section[data-testid="stSidebar"] small {{
+section[data-testid="stSidebar"] small,
+section[data-testid="stSidebar"] [data-testid="stCaptionContainer"] p {{
     color: {sb_muted} !important; font-size: 0.78rem;
 }}
+section[data-testid="stSidebar"] hr {{
+    border-color: {sb_line} !important; margin: 0.6rem 0;
+}}
+/* Sidebar buttons */
 section[data-testid="stSidebar"] .stButton > button {{
     background: transparent !important;
     border: 1px solid {sb_line} !important;
     color: {sb_text} !important;
     border-radius: 6px !important;
 }}
-section[data-testid="stSidebar"] hr {{ border-color: {sb_line} !important; margin: 0.6rem 0; }}
-
-/* ── Headers ─────────────────────────────────────────────────────────── */
-h1, h2, h3, h4, h5, h6,
-.stMarkdown h1, .stMarkdown h2, .stMarkdown h3 {{
-    color: var(--la-text) !important;
+/* ── CRITICAL: sidebar INPUT TEXT must contrast against the input background */
+/* Do NOT inherit the sidebar light text colour on white/light input fields   */
+section[data-testid="stSidebar"] .stTextInput input,
+section[data-testid="stSidebar"] .stTextArea textarea,
+section[data-testid="stSidebar"] .stSelectbox div[data-baseweb="select"] *,
+section[data-testid="stSidebar"] .stMultiSelect div[data-baseweb="select"] *,
+section[data-testid="stSidebar"] .stNumberInput input {{
+    color: {sb_input_text} !important;
+    background-color: {sb_input_bg} !important;
 }}
 
-/* ── Hero & page headers ─────────────────────────────────────────────── */
-.hero {{
-    background: {t['header_gradient']};
-    color: white; padding: 2.5rem 2.4rem;
-    border-radius: 12px; margin-bottom: 1.6rem;
-    border-bottom: 3px solid {t['accent_secondary']};
-}}
-.hero h1 {{ font-size: 2.2rem; font-weight: 800; margin: 0; letter-spacing: -0.02em; }}
-.hero p  {{ font-size: 1.05rem; opacity: 0.88; margin-top: 0.5rem; }}
-.page-header {{
-    background: {t['header_gradient']};
-    color: white; padding: 1.4rem 1.8rem;
-    border-radius: 10px; margin-bottom: 1.4rem;
-    border-bottom: 3px solid {t['accent_secondary']};
-}}
-.page-header h2 {{ margin: 0; font-size: 1.5rem; font-weight: 700; }}
-.page-header p  {{ margin: 0.3rem 0 0 0; opacity: 0.88; font-size: 0.95rem; }}
-
-/* ── Cards ───────────────────────────────────────────────────────────── */
+/* ── Cards ──────────────────────────────────────────────────────────────── */
 .stat-card {{
     background: var(--la-card-bg);
     border: 1px solid var(--la-border);
@@ -1120,10 +1209,10 @@ h1, h2, h3, h4, h5, h6,
 }}
 .stat-card .stat-value {{
     font-size: 1.9rem; font-weight: 800;
-    color: var(--la-accent); line-height: 1;
+    color: var(--la-accent) !important; line-height: 1;
 }}
 .stat-card .stat-label {{
-    font-size: 0.8rem; color: var(--la-text-secondary);
+    font-size: 0.8rem; color: var(--la-text-secondary) !important;
     margin-top: 0.35rem; text-transform: uppercase; letter-spacing: 0.05em;
 }}
 .custom-card {{
@@ -1133,8 +1222,11 @@ h1, h2, h3, h4, h5, h6,
     border-radius: 8px; padding: 1.1rem 1.3rem; margin-bottom: 0.8rem;
 }}
 .custom-card h4 {{
-    margin: 0 0 0.35rem 0; color: var(--la-accent);
+    margin: 0 0 0.35rem 0; color: var(--la-accent) !important;
     font-size: 0.95rem; font-weight: 700;
+}}
+.custom-card p, .custom-card span {{
+    color: var(--la-text) !important;
 }}
 .login-card {{
     background: var(--la-card-bg);
@@ -1142,44 +1234,10 @@ h1, h2, h3, h4, h5, h6,
     border-top: 4px solid var(--la-accent);
     border-radius: 12px; padding: 2rem 2.2rem;
 }}
-
-/* ── AI response box ─────────────────────────────────────────────────── */
-.response-box {{
-    background: var(--la-card-bg);
-    border: 1px solid var(--la-border);
-    border-left: 4px solid var(--la-accent);
-    border-radius: 8px; padding: 1.8rem 2rem;
-    white-space: pre-wrap; line-height: 1.75; font-size: 0.94rem;
-    color: var(--la-text);
-}}
-
-/* ── Disclaimer ──────────────────────────────────────────────────────── */
-.disclaimer {{
-    background: {t['warning']}18;
-    border-left: 4px solid {t['warning']};
-    border-radius: 4px; padding: 0.9rem 1.1rem;
-    margin-top: 1rem; font-size: 0.86rem;
-    color: var(--la-text-secondary);
-}}
-
-/* ── Badges ──────────────────────────────────────────────────────────── */
-.badge {{
-    display: inline-block; padding: 0.18rem 0.65rem;
-    border-radius: 20px; font-size: 0.73rem;
-    font-weight: 600; letter-spacing: 0.02em;
-}}
-.badge-ok   {{ background: {t['positive']}22; color: {t['positive']}; }}
-.badge-warn {{ background: {t['warning']}22;  color: {t['warning']}; }}
-.badge-err  {{ background: {t['negative']}22; color: {t['negative']}; }}
-.badge-info {{ background: {t['accent']}22;   color: {t['accent']}; }}
-
-/* ── History & tool cards ────────────────────────────────────────────── */
 .history-item {{
-    background: var(--la-card-bg);
-    border: 1px solid var(--la-border);
+    background: var(--la-card-bg); border: 1px solid var(--la-border);
     border-radius: 7px; padding: 0.75rem 1rem;
-    margin-bottom: 0.45rem; cursor: pointer;
-    transition: border-color 0.15s;
+    margin-bottom: 0.45rem; cursor: pointer; transition: border-color 0.15s;
 }}
 .history-item:hover {{ border-color: var(--la-accent); }}
 .tool-card {{
@@ -1187,9 +1245,41 @@ h1, h2, h3, h4, h5, h6,
     border-radius: 7px; padding: 1rem 1.1rem; margin-bottom: 0.55rem;
 }}
 
-/* ── Inputs ──────────────────────────────────────────────────────────── */
+/* ── AI response box ────────────────────────────────────────────────────── */
+.response-box {{
+    background: var(--la-card-bg);
+    border: 1px solid var(--la-border);
+    border-left: 4px solid var(--la-accent);
+    border-radius: 8px; padding: 1.8rem 2rem;
+    white-space: pre-wrap; line-height: 1.75; font-size: 0.94rem;
+    color: var(--la-text) !important;
+}}
+
+/* ── Disclaimer — WCAG-safe colours per theme mode ──────────────────────── */
+.disclaimer {{
+    background: {disclaimer_bg};
+    border-left: 4px solid {t['warning']};
+    border-radius: 4px; padding: 0.9rem 1.1rem;
+    margin-top: 1rem; font-size: 0.86rem;
+    color: {disclaimer_tx} !important;
+}}
+
+/* ── Badges — hardcoded for WCAG AA regardless of theme ─────────────────── */
+.badge {{
+    display: inline-block; padding: 0.18rem 0.65rem;
+    border-radius: 20px; font-size: 0.73rem;
+    font-weight: 600; letter-spacing: 0.02em;
+}}
+.badge-ok   {{ background: {badge_ok_bg};   color: {badge_ok_tx}  !important; }}
+.badge-warn {{ background: {badge_warn_bg}; color: {badge_warn_tx} !important; }}
+.badge-err  {{ background: {badge_err_bg};  color: {badge_err_tx}  !important; }}
+.badge-info {{ background: {t['accent']}22; color: var(--la-accent) !important; }}
+
+/* ── Inputs ─────────────────────────────────────────────────────────────── */
 .stTextInput input, .stTextArea textarea,
-.stSelectbox select, .stNumberInput input {{
+.stSelectbox div[data-baseweb="select"] *,
+.stMultiSelect div[data-baseweb="select"] *,
+.stNumberInput input, .stDateInput input {{
     background-color: var(--la-input-bg) !important;
     color: var(--la-text) !important;
     border: 1px solid var(--la-border) !important;
@@ -1199,23 +1289,32 @@ h1, h2, h3, h4, h5, h6,
     border-color: var(--la-accent) !important;
     box-shadow: 0 0 0 2px {t['accent']}33 !important;
 }}
+/* Input label text (sits above the box) */
+.stTextInput > label, .stTextArea > label,
+.stSelectbox > label, .stNumberInput > label,
+.stMultiSelect > label, .stDateInput > label,
+.stSlider > label, .stFileUploader > label {{
+    color: var(--la-text) !important;
+    font-weight: 500;
+}}
 
-/* ── Buttons ─────────────────────────────────────────────────────────── */
+/* ── Buttons ────────────────────────────────────────────────────────────── */
 .stButton > button[kind="primary"] {{
     background-color: var(--la-accent) !important;
-    color: {bg_color} !important;
-    border: none !important; border-radius: 7px !important;
-    font-weight: 600 !important;
+    color: {("white" if not is_light or t['accent'][1:3] < '77' else '#ffffff')} !important;
+    border: none !important; border-radius: 7px !important; font-weight: 600 !important;
 }}
-.stButton > button[kind="primary"]:hover {{ opacity: 0.85 !important; }}
+.stButton > button[kind="primary"]:hover {{ opacity: 0.87 !important; }}
 .stButton > button[kind="secondary"] {{
     background-color: var(--la-bg-secondary) !important;
     color: var(--la-text) !important;
-    border: 1px solid var(--la-border) !important;
-    border-radius: 7px !important;
+    border: 1px solid var(--la-border) !important; border-radius: 7px !important;
+}}
+.stButton > button {{
+    color: var(--la-text) !important;
 }}
 
-/* ── Tabs ────────────────────────────────────────────────────────────── */
+/* ── Tabs ───────────────────────────────────────────────────────────────── */
 div[data-testid="stTabs"] button {{
     font-weight: 600 !important; font-size: 0.88rem !important;
     border-radius: 6px 6px 0 0 !important;
@@ -1228,7 +1327,7 @@ div[data-testid="stTabs"] button[aria-selected="true"] {{
     border-bottom: 2px solid var(--la-accent) !important;
 }}
 
-/* ── Expanders ───────────────────────────────────────────────────────── */
+/* ── Expanders ──────────────────────────────────────────────────────────── */
 .streamlit-expanderHeader {{
     background-color: var(--la-bg-secondary) !important;
     color: var(--la-text) !important;
@@ -1240,61 +1339,107 @@ div[data-testid="stTabs"] button[aria-selected="true"] {{
     border: 1px solid var(--la-border) !important;
     border-top: none !important; border-radius: 0 0 8px 8px !important;
 }}
+[data-testid="stExpander"] summary {{
+    color: var(--la-text) !important;
+}}
+[data-testid="stExpander"] details {{
+    background: var(--la-bg-secondary) !important;
+    border: 1px solid var(--la-border) !important;
+    border-radius: 8px !important;
+}}
 
-/* ── Metrics ─────────────────────────────────────────────────────────── */
+/* ── Metrics ────────────────────────────────────────────────────────────── */
 [data-testid="stMetric"] {{
     background-color: var(--la-card-bg) !important;
     border: 1px solid var(--la-border) !important;
     border-radius: 12px !important; padding: 12px 16px !important;
 }}
-[data-testid="stMetricLabel"]  {{ color: var(--la-text-secondary) !important; }}
-[data-testid="stMetricValue"]  {{ color: var(--la-accent) !important; font-weight: 700 !important; }}
-
+[data-testid="stMetricLabel"] p,
 div[data-testid="metric-container"] label {{
     color: var(--la-text-secondary) !important;
     font-size: 0.78rem !important; text-transform: uppercase; letter-spacing: 0.04em;
 }}
+[data-testid="stMetricValue"],
 div[data-testid="metric-container"] div[data-testid="stMetricValue"] {{
     color: var(--la-accent) !important; font-weight: 700 !important;
 }}
+[data-testid="stMetricDelta"] {{ color: var(--la-positive) !important; }}
 
-/* ── Progress bars ───────────────────────────────────────────────────── */
+/* ── Radio & Checkbox ───────────────────────────────────────────────────── */
+.stRadio > div > label, .stCheckbox > label {{
+    color: var(--la-text) !important;
+}}
+.stRadio [data-testid="stMarkdownContainer"] p,
+.stCheckbox [data-testid="stMarkdownContainer"] p {{
+    color: var(--la-text) !important;
+}}
+
+/* ── Select / Dropdown ──────────────────────────────────────────────────── */
+[data-baseweb="menu"],
+[data-baseweb="menu"] li,
+[data-baseweb="popover"] li {{
+    background-color: var(--la-card-bg) !important;
+    color: var(--la-text) !important;
+}}
+[data-baseweb="menu"] li:hover,
+[data-baseweb="popover"] li:hover {{
+    background-color: var(--la-bg-secondary) !important;
+}}
+
+/* ── Progress bars ──────────────────────────────────────────────────────── */
 .stProgress > div > div {{ background-color: var(--la-accent) !important; }}
 .stProgress             {{ background-color: var(--la-bg-secondary) !important; }}
 
-/* ── Chat messages ───────────────────────────────────────────────────── */
+/* ── Chat messages ──────────────────────────────────────────────────────── */
 [data-testid="stChatMessage"] {{
     background-color: var(--la-card-bg) !important;
     border: 1px solid var(--la-border) !important;
     border-radius: 12px !important; margin-bottom: 8px !important;
 }}
+[data-testid="stChatMessage"] p {{
+    color: var(--la-text) !important;
+}}
 
-/* ── Dataframes ──────────────────────────────────────────────────────── */
+/* ── Dataframes / tables ────────────────────────────────────────────────── */
 .stDataFrame {{
     border: 1px solid var(--la-border) !important; border-radius: 8px !important;
 }}
+.stDataFrame th {{
+    background-color: var(--la-bg-secondary) !important;
+    color: var(--la-text) !important;
+}}
+.stDataFrame td {{
+    color: var(--la-text) !important;
+}}
 
-/* ── Scrollbar ───────────────────────────────────────────────────────── */
+/* ── Alerts & notifications ─────────────────────────────────────────────── */
+[data-testid="stAlert"] p,
+[data-testid="stInfo"] p,
+[data-testid="stSuccess"] p,
+[data-testid="stWarning"] p,
+[data-testid="stError"] p {{
+    color: inherit !important;
+}}
+
+/* ── Scrollbar ──────────────────────────────────────────────────────────── */
 ::-webkit-scrollbar       {{ width: 6px; height: 6px; }}
 ::-webkit-scrollbar-track {{ background: var(--la-bg-secondary); }}
 ::-webkit-scrollbar-thumb {{
-    background: {t['border']}; border-radius: 3px;
-    transition: background 0.2s;
+    background: {t['border']}; border-radius: 3px; transition: background 0.2s;
 }}
 ::-webkit-scrollbar-thumb:hover {{ background: {t['accent']}88; }}
 
-/* ── Text selection ──────────────────────────────────────────────────── */
-::selection {{
-    background: {t['accent']}44; color: var(--la-text);
-}}
+/* ── Text selection ─────────────────────────────────────────────────────── */
+::selection {{ background: {t['accent']}44; color: var(--la-text); }}
 
-/* ── Reduced-motion media query ──────────────────────────────────────── */
+/* ── Reduced-motion ─────────────────────────────────────────────────────── */
 @media (prefers-reduced-motion: reduce) {{
     *, *::before, *::after {{
         animation-duration: 0s !important; transition-duration: 0s !important;
     }}
 }}
 </style>"""
+
 # ═══════════════════════════════════════════════════════
 # EXPORT FUNCTIONS (WITH FIRM BRANDING)
 # ═══════════════════════════════════════════════════════
