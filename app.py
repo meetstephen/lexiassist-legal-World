@@ -17,7 +17,6 @@ import logging
 import os
 import re
 import psycopg2
-import time
 import uuid
 from datetime import datetime, date
 from io import BytesIO
@@ -2597,7 +2596,28 @@ def load_user_data():
 # MULTI-USER AUTH
 # ═══════════════════════════════════════════════════════
 def hash_password(password: str) -> str:
-    return hashlib.sha256(password.encode()).hexdigest()
+    """Hash a password with PBKDF2-HMAC-SHA256 + random salt.
+    Format:  pbkdf2$<hex-salt>$<hex-dk>
+    """
+    import secrets as _secrets
+    salt = _secrets.token_hex(16)
+    dk = hashlib.pbkdf2_hmac("sha256", password.encode(), salt.encode(), 260_000)
+    return f"pbkdf2${salt}${dk.hex()}"
+
+
+def verify_password(password: str, stored_hash: str) -> bool:
+    """Verify a password against either a legacy SHA-256 hash or a PBKDF2 hash.
+    Migrates legacy hashes to PBKDF2 transparently on next login (via do_login).
+    """
+    if stored_hash.startswith("pbkdf2$"):
+        try:
+            _, salt, dk_hex = stored_hash.split("$")
+            dk = hashlib.pbkdf2_hmac("sha256", password.encode(), salt.encode(), 260_000)
+            return dk.hex() == dk_hex
+        except Exception:
+            return False
+    # Legacy: plain SHA-256 — compare and flag for upgrade
+    return hashlib.sha256(password.encode()).hexdigest() == stored_hash
 
 
 def is_allow_registration() -> bool:
@@ -2613,9 +2633,13 @@ def do_login(username: str, password: str, remember_me: bool = True) -> bool:
     user = db.get_user_by_username(username.strip())
     if not user:
         return False
-    if hash_password(password) != user["password_hash"]:
+    if not verify_password(password, user["password_hash"]):
         return False
     uid = user["user_id"]
+    # Auto-upgrade legacy SHA-256 hash to PBKDF2 on first successful login
+    if not user["password_hash"].startswith("pbkdf2$"):
+        new_hash = hash_password(password)
+        db.update_user(uid, {"password_hash": new_hash})
     st.session_state.authenticated = True
     st.session_state.current_user_id = uid
     st.session_state.current_username = user["username"]
@@ -2623,14 +2647,10 @@ def do_login(username: str, password: str, remember_me: bool = True) -> bool:
     db.update_user_last_login(uid)
     load_user_data()
     st.session_state.user_data_loaded = True
-    # ── Persistent session token ──
+    # Persistent session token — stored in session_state only, NOT in URL
     if remember_me:
         token = db.create_session_token(uid, days=30)
         st.session_state["_session_token"] = token
-        try:
-            st.query_params["t"] = token
-        except Exception:
-            pass
     return True
 
 
@@ -2642,11 +2662,6 @@ def do_auto_login_from_token(token: str) -> bool:
     db.cleanup_expired_sessions()
     user = db.validate_session_token(token)
     if not user:
-        # Token invalid/expired — clear it from URL
-        try:
-            st.query_params.clear()
-        except Exception:
-            pass
         return False
     uid = user["user_id"]
     st.session_state.authenticated = True
@@ -3119,8 +3134,8 @@ Your workspace is empty. Pick any of the three actions below to begin:
         </div>""", unsafe_allow_html=True)
     with f4:
         st.markdown("""<div class="custom-card">
-            <h4>💾 SQLite Persistence</h4>
-            <p>All data survives restarts — cases, clients, billing, history</p>
+            <h4>💾 Cloud Persistence</h4>
+            <p>PostgreSQL-backed — all data synced across devices and sessions</p>
         </div>""", unsafe_allow_html=True)
 
 
@@ -3371,7 +3386,7 @@ def render_ai():
         st.markdown(f'<div class="response-box">{esc(response)}</div>', unsafe_allow_html=True)
 
         # ── Copy to clipboard ──
-        import streamlit.components.v1 as _cmp, json as _json
+        import streamlit.components.v1 as _cmp
         _copy_html = f"""
 <style>
 #la-copy-btn {{
@@ -3385,7 +3400,7 @@ def render_ai():
 </style>
 <div style="text-align:right; padding:4px 0 0 0;">
   <button id="la-copy-btn" onclick="(function(){{
-    navigator.clipboard.writeText({_json.dumps(response)}).then(function(){{
+    navigator.clipboard.writeText({json.dumps(response)}).then(function(){{
       var b=document.getElementById('la-copy-btn');
       b.innerHTML='&#10003;&nbsp;Copied!';
       b.style.color='#16a34a';
