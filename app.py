@@ -1182,13 +1182,7 @@ section[data-testid="stSidebar"] [data-testid="stCaptionContainer"] p {{
 section[data-testid="stSidebar"] hr {{
     border-color: {sb_line} !important; margin: 0.6rem 0;
 }}
-/* Sidebar buttons */
-section[data-testid="stSidebar"] .stButton > button {{
-    background: transparent !important;
-    border: 1px solid {sb_line} !important;
-    color: {sb_text} !important;
-    border-radius: 6px !important;
-}}
+/* Sidebar buttons — see full rule in the Buttons section above */
 /* ── CRITICAL: sidebar INPUT TEXT must contrast against the input background */
 /* Do NOT inherit the sidebar light text colour on white/light input fields   */
 section[data-testid="stSidebar"] .stTextInput input,
@@ -1298,20 +1292,102 @@ section[data-testid="stSidebar"] .stNumberInput input {{
     font-weight: 500;
 }}
 
-/* ── Buttons ────────────────────────────────────────────────────────────── */
-.stButton > button[kind="primary"] {{
-    background-color: var(--la-accent) !important;
-    color: {("white" if not is_light or t['accent'][1:3] < '77' else '#ffffff')} !important;
-    border: none !important; border-radius: 7px !important; font-weight: 600 !important;
+/* ── Placeholder text — always clearly visible against input background ─── */
+/* Covers main area AND sidebar query/text boxes */
+.stTextInput input::placeholder,
+.stTextArea textarea::placeholder {{
+    color: {("rgba(26,46,74,0.55)" if is_light else "rgba(200,215,235,0.60)")} !important;
+    opacity: 1 !important;
+    font-style: italic;
 }}
-.stButton > button[kind="primary"]:hover {{ opacity: 0.87 !important; }}
-.stButton > button[kind="secondary"] {{
+section[data-testid="stSidebar"] .stTextInput input::placeholder,
+section[data-testid="stSidebar"] .stTextArea textarea::placeholder {{
+    color: {("rgba(26,46,74,0.55)" if is_light else "rgba(200,215,235,0.60)")} !important;
+    opacity: 1 !important;
+    font-style: italic;
+}}
+
+/* ── File uploader — box text, "Browse files" hint, drag-drop instructions ─ */
+[data-testid="stFileUploader"] section,
+[data-testid="stFileUploader"] section p,
+[data-testid="stFileUploader"] section span,
+[data-testid="stFileUploader"] section small,
+[data-testid="stFileUploader"] div[data-testid="stMarkdownContainer"] p,
+[data-testid="stFileDropzoneInstructions"],
+[data-testid="stFileDropzoneInstructions"] span,
+[data-testid="stFileDropzoneInstructions"] small {{
+    color: var(--la-text) !important;
+    opacity: 1 !important;
+}}
+/* The "Drag and drop / Browse files" secondary helper text */
+[data-testid="stFileUploader"] small,
+[data-testid="stFileUploader"] .stCaption {{
+    color: var(--la-text-secondary) !important;
+    font-size: 0.82rem !important;
+    opacity: 1 !important;
+}}
+/* Sidebar file uploader — ensure it inherits contrasting text, not washed-out dark sidebar colour */
+section[data-testid="stSidebar"] [data-testid="stFileUploader"] section p,
+section[data-testid="stSidebar"] [data-testid="stFileUploader"] section span,
+section[data-testid="stSidebar"] [data-testid="stFileDropzoneInstructions"],
+section[data-testid="stSidebar"] [data-testid="stFileDropzoneInstructions"] span {{
+    color: {sb_input_text} !important;
+    opacity: 1 !important;
+}}
+section[data-testid="stSidebar"] [data-testid="stFileUploader"] small {{
+    color: {sb_muted} !important;
+    opacity: 1 !important;
+}}
+
+/* ── Sidebar explainer / helper / caption text — boosted contrast ────────── */
+/* Covers query box helper text, section descriptions, st.caption() in sidebar */
+section[data-testid="stSidebar"] .stCaption p,
+section[data-testid="stSidebar"] [data-testid="stCaptionContainer"] p,
+section[data-testid="stSidebar"] small {{
+    color: {sb_muted} !important;
+    font-size: 0.80rem !important;
+    opacity: 1 !important;
+}}
+
+/* ── Buttons ────────────────────────────────────────────────────────────── */
+/* Primary button: accent background, always white or near-white text for contrast */
+.stButton > button[kind="primary"],
+.stButton > button[data-testid="baseButton-primary"] {{
+    background-color: var(--la-accent) !important;
+    color: #ffffff !important;
+    border: 2px solid transparent !important;
+    border-radius: 7px !important;
+    font-weight: 700 !important;
+    letter-spacing: 0.02em;
+    text-shadow: 0 1px 2px rgba(0,0,0,0.30);
+    box-shadow: 0 2px 6px rgba(0,0,0,0.22) !important;
+}}
+.stButton > button[kind="primary"]:hover,
+.stButton > button[data-testid="baseButton-primary"]:hover {{
+    filter: brightness(1.12) !important;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.28) !important;
+}}
+/* Secondary / default buttons: clearly readable in every theme */
+.stButton > button[kind="secondary"],
+.stButton > button[data-testid="baseButton-secondary"] {{
     background-color: var(--la-bg-secondary) !important;
     color: var(--la-text) !important;
-    border: 1px solid var(--la-border) !important; border-radius: 7px !important;
+    border: 1px solid var(--la-border) !important;
+    border-radius: 7px !important;
+    font-weight: 600 !important;
 }}
+/* Fallback: any button not explicitly typed */
 .stButton > button {{
     color: var(--la-text) !important;
+    border-radius: 7px !important;
+}}
+/* Sidebar buttons: clear border, never invisible */
+section[data-testid="stSidebar"] .stButton > button {{
+    background: transparent !important;
+    border: 1px solid {sb_line} !important;
+    color: {sb_text} !important;
+    border-radius: 6px !important;
+    font-weight: 600 !important;
 }}
 
 /* ── Tabs ───────────────────────────────────────────────────────────────── */
