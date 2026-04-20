@@ -1591,6 +1591,29 @@ div[data-testid="metric-container"] div[data-testid="stMetricValue"]{{
   .hero h1{{font-size:1.15rem!important;}}
   .stat-card .stat-value{{font-size:1.15rem!important;}}
   .badge{{font-size:.64rem!important;}}}}
+
+/* ── Streamlit 1.38+ structural fixes ── */
+/* Fix text overlap: normalize gap between stacked element containers */
+div[data-testid="stVerticalBlock"]>div{{gap:0!important;}}
+div[data-testid="stVerticalBlockBorderWrapper"]{{gap:0!important;}}
+/* Fix button full-width: use_container_width=True targets */
+div[data-testid="stButton"],
+div[data-testid="stDownloadButton"],
+div[data-testid="stFormSubmitButton"]{{width:100%!important;}}
+div[data-testid="stButton"]>button,
+div[data-testid="stDownloadButton"]>button,
+div[data-testid="stFormSubmitButton"]>button{{width:100%!important;}}
+/* Fix column gap (changed in Streamlit 1.38) */
+div[data-testid="stHorizontalBlock"]{{gap:.75rem!important;}}
+/* Normalize element container top-margin to prevent overlap */
+div[data-testid="element-container"]{{margin-top:0!important;}}
+/* Stat-card text overlap inside st.columns */
+div[data-testid="stColumn"] div[data-testid="stMarkdownContainer"]{{
+  margin-bottom:0!important;line-height:normal!important;}}
+/* Hide zero-height keep-alive iframe cleanly */
+iframe[height="0"],iframe[style*="height: 0"]{{
+  display:none!important;height:0!important;min-height:0!important;
+  padding:0!important;margin:0!important;border:none!important;}}
 </style>"""
 
 # ═══════════════════════════════════════════════════════
@@ -1903,9 +1926,9 @@ def safe_pdf_download(text: str, title: str, fname: str, key: str):
     try:
         pdf_data = export_pdf(text, title)
         st.download_button("📥 PDF", data=pdf_data, file_name=f"{fname}.pdf",
-                           mime="application/pdf", key=key, width='stretch')
+                           mime="application/pdf", key=key, use_container_width=True)
     except Exception as e:
-        st.button("📥 PDF (unavailable)", disabled=True, key=key, width='stretch')
+        st.button("📥 PDF (unavailable)", disabled=True, key=key, use_container_width=True)
         logger.warning(f"PDF export failed: {e}")
 
 def safe_docx_download(text: str, title: str, fname: str, key: str,
@@ -1914,9 +1937,9 @@ def safe_docx_download(text: str, title: str, fname: str, key: str,
         docx_data = export_docx(text, title, doc_type=doc_type, meta=meta or {})
         st.download_button("📥 DOCX", data=docx_data, file_name=f"{fname}.docx",
                            mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-                           key=key, width='stretch')
+                           key=key, use_container_width=True)
     except Exception as e:
-        st.button("📥 DOCX (unavailable)", disabled=True, key=key, width='stretch')
+        st.button("📥 DOCX (unavailable)", disabled=True, key=key, use_container_width=True)
         logger.warning(f"DOCX export failed: {e}")
 
 
@@ -2721,7 +2744,7 @@ def render_login_screen():
                 username_inp = st.text_input("Username", placeholder="your.username", key="login_username_inp")
                 password_inp = st.text_input("Password", type="password", key="login_password_inp")
                 remember_me  = st.checkbox("Stay signed in for 30 days", value=True, key="login_remember_me")
-                if st.form_submit_button("🔒 Sign In", type="primary", width='stretch'):
+                if st.form_submit_button("🔒 Sign In", type="primary", use_container_width=True):
                     if not username_inp.strip() or not password_inp:
                         st.error("❌ Enter both username and password.")
                     elif do_login(username_inp.strip(), password_inp, remember_me=remember_me):
@@ -2758,7 +2781,7 @@ def render_register_form(key_prefix: str, admin_mode: bool = False):
         reg_role = st.selectbox("Role", role_options, key=f"{key_prefix}_role") if admin_mode else "user"
 
         btn_label = "🛡️ Create Admin Account" if is_first_user else "✅ Create Account"
-        if st.form_submit_button(btn_label, type="primary", width='stretch'):
+        if st.form_submit_button(btn_label, type="primary", use_container_width=True):
             uname = reg_username.strip().lower()
             if not uname or not reg_pw or not reg_lawyer.strip():
                 st.error("❌ Username, password, and full name are required.")
@@ -2851,7 +2874,7 @@ def render_setup_screen():
             help="Get a key at https://aistudio.google.com/app/apikey",
         )
         model_sel = st.selectbox("AI Model", SUPPORTED_MODELS, index=0)
-        submitted = st.form_submit_button("🔗 Connect", type="primary", width='stretch')
+        submitted = st.form_submit_button("🔗 Connect", type="primary", use_container_width=True)
 
         if submitted:
             if key_input and len(key_input.strip()) >= 10:
@@ -2898,7 +2921,7 @@ def render_sidebar():
   <div style="font-weight:700;font-size:0.9rem;color:{tx_c};">@{esc(uname)}</div>
   <div style="font-size:0.75rem;opacity:0.75;margin-top:0.1rem;">{role_icon}</div>
 </div>""", unsafe_allow_html=True)
-            if st.button("🚪 Sign Out", key="sidebar_logout_btn", width='stretch'):
+            if st.button("🚪 Sign Out", key="sidebar_logout_btn", use_container_width=True):
                 do_logout()
         st.divider()
         c1,c2 = st.columns(2)
@@ -2963,7 +2986,7 @@ def render_sidebar():
             st.error("🔴 Not connected")
         st.divider()
         st.markdown("**💾 Data**")
-        if st.button("📥 Export All Data (JSON)", width='stretch', key="sidebar_export_btn"):
+        if st.button("📥 Export All Data (JSON)", use_container_width=True, key="sidebar_export_btn"):
             export_data = {
                 "export_date": datetime.now().isoformat(), "version": "8.0",
                 "cases": st.session_state.cases,
@@ -2980,7 +3003,7 @@ def render_sidebar():
             st.download_button("⬇️ Download JSON",
                 json.dumps(export_data, indent=2, default=str),
                 f"lexiassist_backup_{datetime.now():%Y%m%d_%H%M}.json",
-                "application/json", key="sidebar_dl_json", width='stretch')
+                "application/json", key="sidebar_dl_json", use_container_width=True)
         st.markdown("**📤 Import Files**")
         uploaded = st.file_uploader("Upload", type=UPLOAD_TYPES, accept_multiple_files=False,
             key="sidebar_file_upload", label_visibility="collapsed",
@@ -3220,11 +3243,11 @@ def render_ai():
             st.text_area("Preview", doc["preview"], height=120, disabled=True, key="doc_preview_ta")
             dc1, dc2 = st.columns(2)
             with dc1:
-                if st.button("📋 Use as Context", key="use_doc_ctx_btn", width='stretch'):
+                if st.button("📋 Use as Context", key="use_doc_ctx_btn", use_container_width=True):
                     doc_context = doc["full_text"]
                     st.success("✅ Document loaded as context for your query.")
             with dc2:
-                if st.button("🗑️ Clear Document", key="clear_doc_btn", width='stretch'):
+                if st.button("🗑️ Clear Document", key="clear_doc_btn", use_container_width=True):
                     st.session_state.imported_doc = None
                     st.rerun()
         if not doc_context and st.session_state.imported_doc:
@@ -3263,7 +3286,7 @@ def render_ai():
                         <small>{esc(entry.get('timestamp', ''))} · {esc(task_lbl)} · {esc(mode_lbl)} · {entry.get('word_count', 0)} words</small>
                     </div>""", unsafe_allow_html=True)
                 with hc3:
-                    if st.button("📖", key=f"load_hist_{real_idx}", width='stretch', help="Load this session"):
+                    if st.button("📖", key=f"load_hist_{real_idx}", use_container_width=True, help="Load this session"):
                         st.session_state.selected_history_idx = real_idx
                         st.session_state.last_response = entry["response"]
                         st.session_state.original_query = entry["query"]
@@ -3276,7 +3299,7 @@ def render_ai():
             if len(compare_sels) == 2:
                 st.markdown("---")
                 st.markdown(f"**📊 Compare:** Session {compare_sels[0]+1} vs Session {compare_sels[1]+1}")
-                if st.button("🔬 Run Analysis Comparison", type="primary", key="run_compare_btn", width='stretch'):
+                if st.button("🔬 Run Analysis Comparison", type="primary", key="run_compare_btn", use_container_width=True):
                     entry_a = st.session_state.chat_history[compare_sels[0]]
                     entry_b = st.session_state.chat_history[compare_sels[1]]
                     with st.spinner("🔬 Comparing analyses…"):
@@ -3296,9 +3319,9 @@ def render_ai():
         fname = f"LexiAssist_Comparison_{datetime.now():%Y%m%d_%H%M}"
         vc1, vc2, vc3, vc4 = st.columns(4)
         with vc1:
-            st.download_button("📥 TXT", export_txt(verdict, "Analysis Comparison"), f"{fname}.txt", "text/plain", key="cmp_dl_txt", width='stretch')
+            st.download_button("📥 TXT", export_txt(verdict, "Analysis Comparison"), f"{fname}.txt", "text/plain", key="cmp_dl_txt", use_container_width=True)
         with vc2:
-            st.download_button("📥 HTML", export_html(verdict, "Analysis Comparison"), f"{fname}.html", "text/html", key="cmp_dl_html", width='stretch')
+            st.download_button("📥 HTML", export_html(verdict, "Analysis Comparison"), f"{fname}.html", "text/html", key="cmp_dl_html", use_container_width=True)
         with vc3:
             safe_pdf_download(verdict, "Analysis Comparison", fname, "cmp_dl_pdf")
         with vc4:
@@ -3326,9 +3349,9 @@ def render_ai():
             fname = f"LexiAssist_{entry.get('timestamp', '').replace(' ', '_').replace(':', '')}"
             hx1, hx2, hx3, hx4 = st.columns(4)
             with hx1:
-                st.download_button("📥 TXT", export_txt(entry["response"]), f"{fname}.txt", "text/plain", key=f"hist_dl_txt_{idx}", width='stretch')
+                st.download_button("📥 TXT", export_txt(entry["response"]), f"{fname}.txt", "text/plain", key=f"hist_dl_txt_{idx}", use_container_width=True)
             with hx2:
-                st.download_button("📥 HTML", export_html(entry["response"]), f"{fname}.html", "text/html", key=f"hist_dl_html_{idx}", width='stretch')
+                st.download_button("📥 HTML", export_html(entry["response"]), f"{fname}.html", "text/html", key=f"hist_dl_html_{idx}", use_container_width=True)
             with hx3:
                 safe_pdf_download(entry["response"], "Legal Analysis", fname, f"hist_dl_pdf_{idx}")
             with hx4:
@@ -3372,17 +3395,17 @@ def render_ai():
     with bc1:
         generate_btn = st.button(
             f"🧠 Generate ({mode_info['label']})",
-            type="primary", width='stretch',
+            type="primary", use_container_width=True,
             disabled=not query.strip(), key="ai_generate_btn",
         )
     with bc2:
         issue_btn = st.button(
-            "🔍 Issue Spot", width='stretch',
+            "🔍 Issue Spot", use_container_width=True,
             disabled=not query.strip(), key="ai_issue_btn",
         )
     with bc3:
         clear_btn = st.button(
-            "🗑️ Clear", width='stretch', key="ai_clear_btn",
+            "🗑️ Clear", use_container_width=True, key="ai_clear_btn",
         )
 
     if clear_btn:
@@ -3430,9 +3453,9 @@ def render_ai():
         fname = f"LexiAssist_Analysis_{datetime.now():%Y%m%d_%H%M}"
         ex1, ex2, ex3, ex4 = st.columns(4)
         with ex1:
-            st.download_button("📥 TXT", export_txt(response), f"{fname}.txt", "text/plain", key="resp_dl_txt", width='stretch')
+            st.download_button("📥 TXT", export_txt(response), f"{fname}.txt", "text/plain", key="resp_dl_txt", use_container_width=True)
         with ex2:
-            st.download_button("📥 HTML", export_html(response), f"{fname}.html", "text/html", key="resp_dl_html", width='stretch')
+            st.download_button("📥 HTML", export_html(response), f"{fname}.html", "text/html", key="resp_dl_html", use_container_width=True)
         with ex3:
             safe_pdf_download(response, "Legal Analysis", fname, "resp_dl_pdf")
         with ex4:
@@ -3530,8 +3553,7 @@ ANALYSIS:
                     sim_btn = st.button(
                         "🎯 Simulate",
                         key="sim_run_btn",
-                        type="primary",
-                        width='stretch',
+                        type="primary", use_container_width=True,
                         disabled=not sim_action.strip(),
                     )
 
@@ -3539,19 +3561,19 @@ ANALYSIS:
                 st.caption("Quick simulations:")
                 qa1, qa2, qa3, qa4 = st.columns(4)
                 with qa1:
-                    if st.button("Preliminary Objection", key="qa1_btn", width='stretch'):
+                    if st.button("Preliminary Objection", key="qa1_btn", use_container_width=True):
                         st.session_state["sim_prefill"] = "File a preliminary objection challenging the court's jurisdiction"
                         st.rerun()
                 with qa2:
-                    if st.button("Strike Out Application", key="qa2_btn", width='stretch'):
+                    if st.button("Strike Out Application", key="qa2_btn", use_container_width=True):
                         st.session_state["sim_prefill"] = "File an application to strike out the suit for want of locus standi"
                         st.rerun()
                 with qa3:
-                    if st.button("Interlocutory Injunction", key="qa3_btn", width='stretch'):
+                    if st.button("Interlocutory Injunction", key="qa3_btn", use_container_width=True):
                         st.session_state["sim_prefill"] = "Apply for an interlocutory injunction to preserve the subject matter"
                         st.rerun()
                 with qa4:
-                    if st.button("Settlement Offer", key="qa4_btn", width='stretch'):
+                    if st.button("Settlement Offer", key="qa4_btn", use_container_width=True):
                         st.session_state["sim_prefill"] = "Make a without-prejudice settlement offer to the opposing party"
                         st.rerun()
 
@@ -3678,7 +3700,7 @@ border-radius:0.75rem;padding:1.2rem;margin-top:1rem;">
                     case_names, key="save_to_case_sel", label_visibility="collapsed",
                 )
             with stc2:
-                if st.button("💾 Save", key="save_to_case_btn", type="primary", width='stretch'):
+                if st.button("💾 Save", key="save_to_case_btn", type="primary", use_container_width=True):
                     case_idx = case_names.index(selected_case)
                     target_case = cases[case_idx]
                     save_analysis_to_case(
@@ -3756,8 +3778,7 @@ def render_research():
             prec_btn = st.button(
                 "🔖 Find Cases",
                 key="prec_btn",
-                disabled=not prec_query.strip(),
-                width='stretch',
+                disabled=not prec_query.strip(), use_container_width=True,
                 type="primary",
             )
         if prec_btn and prec_query.strip():
@@ -3812,11 +3833,11 @@ LEGAL ISSUE: {prec_query}
     with rc1:
         research_btn = st.button(
             f"📚 Research ({mode_info['label']})",
-            type="primary", width='stretch',
+            type="primary", use_container_width=True,
             disabled=not query.strip(), key="research_go_btn",
         )
     with rc2:
-        clear_btn = st.button("🗑️ Clear Results", width='stretch', key="research_clear_btn")
+        clear_btn = st.button("🗑️ Clear Results", use_container_width=True, key="research_clear_btn")
 
     if clear_btn:
         st.session_state.research_results = ""
@@ -3837,9 +3858,9 @@ LEGAL ISSUE: {prec_query}
         fname = f"LexiAssist_Research_{datetime.now():%Y%m%d_%H%M}"
         ex1, ex2, ex3, ex4 = st.columns(4)
         with ex1:
-            st.download_button("📥 TXT", export_txt(result, "Legal Research"), f"{fname}.txt", "text/plain", key="res_dl_txt", width='stretch')
+            st.download_button("📥 TXT", export_txt(result, "Legal Research"), f"{fname}.txt", "text/plain", key="res_dl_txt", use_container_width=True)
         with ex2:
-            st.download_button("📥 HTML", export_html(result, "Legal Research"), f"{fname}.html", "text/html", key="res_dl_html", width='stretch')
+            st.download_button("📥 HTML", export_html(result, "Legal Research"), f"{fname}.html", "text/html", key="res_dl_html", use_container_width=True)
         with ex3:
             safe_pdf_download(result, "Legal Research", fname, "res_dl_pdf")
         with ex4:
@@ -3856,7 +3877,7 @@ LEGAL ISSUE: {prec_query}
                 case_names_r = [f"{c.get('title', 'Untitled')} ({c.get('suit_no', '—')})" for c in cases]
                 sel_case_r = st.selectbox("Select case:", case_names_r, key="res_save_case_sel", label_visibility="collapsed")
             with stc2:
-                if st.button("💾 Save", key="res_save_case_btn", type="primary", width='stretch'):
+                if st.button("💾 Save", key="res_save_case_btn", type="primary", use_container_width=True):
                     cidx = case_names_r.index(sel_case_r)
                     target = cases[cidx]
                     save_analysis_to_case(target["id"], f"[Research] {query.strip()}", result, "research", mode)
@@ -3970,7 +3991,7 @@ def render_cases():
                         )
                         new_hearing = st.date_input("Hearing", value=None, key=f"ch_{c['id']}")
                         new_notes = st.text_area("Notes", value=c.get("notes", ""), height=60, key=f"cn_{c['id']}")
-                        if st.button("💾 Save Changes", key=f"save_{c['id']}", width='stretch'):
+                        if st.button("💾 Save Changes", key=f"save_{c['id']}", use_container_width=True):
                             upd = {"status": new_status, "notes": new_notes}
                             if new_hearing:
                                 upd["next_hearing"] = str(new_hearing)
@@ -3984,7 +4005,7 @@ def render_cases():
                         if c.get("notes"):
                             st.caption(f"📝 {c['notes'][:300]}")
                         st.markdown("")
-                        if st.button("🗑️ Delete Case", key=f"del_{c['id']}", type="secondary", width='stretch'):
+                        if st.button("🗑️ Delete Case", key=f"del_{c['id']}", type="secondary", use_container_width=True):
                             delete_case(c["id"])
                             st.success("✅ Deleted!")
                             st.rerun()
@@ -4004,17 +4025,17 @@ def render_cases():
 
                             sa_view, sa_export, sa_del = st.columns([2, 2, 1])
                             with sa_view:
-                                if st.button("👁️ View", key=f"view_sa_{sa['id']}", width='stretch'):
+                                if st.button("👁️ View", key=f"view_sa_{sa['id']}", use_container_width=True):
                                     st.markdown(f'<div class="response-box">{esc(sa["response"])}</div>', unsafe_allow_html=True)
                             with sa_export:
                                 sa_fname = f"Case_Analysis_{sa['id']}"
                                 st.download_button(
                                     "📥 TXT", export_txt(sa["response"], f"Case Analysis — {c.get('title', '')}"),
                                     f"{sa_fname}.txt", "text/plain",
-                                    key=f"sa_dl_{sa['id']}", width='stretch',
+                                    key=f"sa_dl_{sa['id']}", use_container_width=True,
                                 )
                             with sa_del:
-                                if st.button("🗑️", key=f"del_sa_{sa['id']}", width='stretch', help="Delete this analysis"):
+                                if st.button("🗑️", key=f"del_sa_{sa['id']}", use_container_width=True, help="Delete this analysis"):
                                     db.delete_case_analysis(sa["id"])
                                     st.success("Deleted!")
                                     st.rerun()
@@ -4100,17 +4121,17 @@ def render_templates():
 
             tc1, tc2, tc3 = st.columns(3)
             with tc1:
-                if st.button("👁️ Preview", key=f"prev_t_{t['id']}", width='stretch'):
+                if st.button("👁️ Preview", key=f"prev_t_{t['id']}", use_container_width=True):
                     st.code(t["content"], language=None)
             with tc2:
-                if st.button("📋 Load to AI", key=f"load_t_{t['id']}", width='stretch'):
+                if st.button("📋 Load to AI", key=f"load_t_{t['id']}", use_container_width=True):
                     st.session_state.loaded_template = t["content"]
                     st.success(f"✅ '{t['name']}' loaded! Go to AI Assistant tab.")
             with tc3:
                 st.download_button(
                     "📥 Download", t["content"],
                     f"{t['name'].replace(' ', '_')}.txt", "text/plain",
-                    key=f"dl_t_{t['id']}", width='stretch',
+                    key=f"dl_t_{t['id']}", use_container_width=True,
                 )
 
     with tab_add:
@@ -4161,7 +4182,7 @@ def render_templates():
 
                 ec1, ec2 = st.columns(2)
                 with ec1:
-                    if st.button("💾 Save Changes", key=f"et_save_{t['id']}", width='stretch'):
+                    if st.button("💾 Save Changes", key=f"et_save_{t['id']}", use_container_width=True):
                         st.session_state.custom_templates[i]["name"] = edit_name.strip()
                         st.session_state.custom_templates[i]["cat"] = edit_cat.strip()
                         st.session_state.custom_templates[i]["content"] = edit_content.strip()
@@ -4170,7 +4191,7 @@ def render_templates():
                         st.success("✅ Template updated!")
                         st.rerun()
                 with ec2:
-                    if st.button("🗑️ Delete Template", key=f"et_del_{t['id']}", type="secondary", width='stretch'):
+                    if st.button("🗑️ Delete Template", key=f"et_del_{t['id']}", type="secondary", use_container_width=True):
                         st.session_state.custom_templates.pop(i)
                         persist("custom_templates")
                         st.success("✅ Deleted!")
@@ -4238,7 +4259,7 @@ def render_clients():
 
             bc1, bc2 = st.columns([1, 4])
             with bc1:
-                if st.button("🗑️ Delete", key=f"del_cl_{cl['id']}", width='stretch'):
+                if st.button("🗑️ Delete", key=f"del_cl_{cl['id']}", use_container_width=True):
                     delete_client(cl["id"])
                     st.success("✅ Deleted!")
                     st.rerun()
@@ -4311,7 +4332,7 @@ def render_billing():
         if st.session_state.clients:
             cl_names_inv = [c.get("name", "?") for c in st.session_state.clients]
             inv_client = st.selectbox("Client", cl_names_inv, key="inv_cl_sel")
-            if st.button("📄 Generate Invoice", type="primary", key="gen_inv_btn", width='stretch'):
+            if st.button("📄 Generate Invoice", type="primary", key="gen_inv_btn", use_container_width=True):
                 cidx = cl_names_inv.index(inv_client)
                 cid = st.session_state.clients[cidx]["id"]
                 inv = make_invoice(cid)
@@ -4350,7 +4371,7 @@ def render_billing():
                 with ic1:
                     st.download_button("📥 TXT", export_txt(inv_text, f"Invoice {inv['invoice_no']}"),
                                        f"Invoice_{inv['invoice_no']}.txt", "text/plain",
-                                       key=f"inv_txt_{inv['id']}", width='stretch')
+                                       key=f"inv_txt_{inv['id']}", use_container_width=True)
                 with ic2:
                     safe_pdf_download(inv_text, f"Invoice {inv['invoice_no']}",
                                       f"Invoice_{inv['invoice_no']}", f"inv_pdf_{inv['id']}")
@@ -4385,7 +4406,7 @@ def render_billing():
                     fig = px.bar(chart_df, x="Client", y="Amount",
                                  title="Billable Amount by Client",
                                  color_discrete_sequence=["#059669"])
-                    st.plotly_chart(fig, width='stretch')
+                    st.plotly_chart(fig, use_container_width=True)
 
                 if "date" in df.columns and "hours" in df.columns:
                     df["date"] = pd.to_datetime(df["date"], errors="coerce")
@@ -4394,7 +4415,7 @@ def render_billing():
                         fig2 = px.line(time_df, x="date", y="hours",
                                        title="Hours Over Time",
                                        color_discrete_sequence=["#059669"])
-                        st.plotly_chart(fig2, width='stretch')
+                        st.plotly_chart(fig2, use_container_width=True)
         else:
             st.info("No time entries to report.")
 
@@ -4462,7 +4483,7 @@ def render_billing():
                     fig_cost = px.bar(daily_df, x="Date", y="Cost ($)",
                                       title="Daily AI Cost",
                                       color_discrete_sequence=["#3b82f6"])
-                    st.plotly_chart(fig_cost, width='stretch')
+                    st.plotly_chart(fig_cost, use_container_width=True)
 
                 # Calls by task
                 if "task" in log_df.columns:
@@ -4473,7 +4494,7 @@ def render_billing():
                     task_df.columns = ["Task", "Calls", "Cost ($)"]
                     fig_task = px.pie(task_df, values="Calls", names="Task",
                                      title="API Calls by Task Type")
-                    st.plotly_chart(fig_task, width='stretch')
+                    st.plotly_chart(fig_task, use_container_width=True)
 
                 # Calls by model
                 if "model" in log_df.columns:
@@ -4482,7 +4503,7 @@ def render_billing():
                         total_cost=("estimated_cost", "sum")
                     ).reset_index()
                     model_df.columns = ["Model", "Calls", "Cost ($)"]
-                    st.dataframe(model_df, width='stretch', hide_index=True)
+                    st.dataframe(model_df, use_container_width=True, hide_index=True)
 
             # Log table
             st.markdown("#### 📜 Call Log")
@@ -4499,13 +4520,13 @@ def render_billing():
                 </div>""", unsafe_allow_html=True)
 
             # Export cost logs
-            if st.button("📥 Export Cost Logs (CSV)", key="export_cost_csv", width='stretch'):
+            if st.button("📥 Export Cost Logs (CSV)", key="export_cost_csv", use_container_width=True):
                 cost_df = pd.DataFrame(logs)
                 csv_data = cost_df.to_csv(index=False)
                 st.download_button(
                     "⬇️ Download CSV", csv_data,
                     f"lexiassist_cost_logs_{datetime.now():%Y%m%d}.csv",
-                    "text/csv", key="dl_cost_csv", width='stretch',
+                    "text/csv", key="dl_cost_csv", use_container_width=True,
                 )
         else:
             st.info("No API calls logged yet. Use the AI Assistant to generate your first analysis.")
@@ -4536,7 +4557,7 @@ def render_tools():
             df_lim = pd.DataFrame(all_lim)
             if not df_lim.empty:
                 df_lim.columns = ["Cause of Action", "Limitation Period", "Authority"]
-                st.dataframe(df_lim, width='stretch', hide_index=True)
+                st.dataframe(df_lim, use_container_width=True, hide_index=True)
                 st.download_button(
                     "📥 Download CSV", df_lim.to_csv(index=False),
                     "limitation_periods_nigeria.csv", "text/csv", key="dl_lim_csv",
@@ -4595,8 +4616,7 @@ def render_tools():
             "🧮 Calculate Deadline",
             type="primary",
             disabled=not calc_facts.strip(),
-            key="calc_deadline_btn",
-            width='stretch',
+            key="calc_deadline_btn", use_container_width=True,
         )
         if calc_btn and calc_facts.strip():
             calc_prompt = f"""
@@ -4696,8 +4716,7 @@ No pre-action steps have been taken yet.""",
             "⚠️ Check Pre-Action Requirements",
             type="primary",
             disabled=not pre_facts.strip(),
-            key="pre_action_btn",
-            width='stretch',
+            key="pre_action_btn", use_container_width=True,
         )
 
         if pre_btn and pre_facts.strip():
@@ -4890,8 +4909,7 @@ border-radius:0.5rem;padding:1rem;margin-bottom:0.8rem;">
                         ),
                         f"{pre_fname}.txt",
                         "text/plain",
-                        key="pre_dl_txt",
-                        width='stretch',
+                        key="pre_dl_txt", use_container_width=True,
                     )
                 with pe2:
                     st.download_button(
@@ -4902,8 +4920,7 @@ border-radius:0.5rem;padding:1rem;margin-bottom:0.8rem;">
                         ),
                         f"{pre_fname}.html",
                         "text/html",
-                        key="pre_dl_html",
-                        width='stretch',
+                        key="pre_dl_html", use_container_width=True,
                     )
                 with pe3:
                     safe_pdf_download(
@@ -5067,8 +5084,7 @@ and must register with SCUML — <em>Money Laundering (Prevention & Prohibition)
             "🛡️ Run AML Compliance Check",
             type="primary",
             disabled=not aml_facts.strip(),
-            key="aml_check_btn",
-            width='stretch',
+            key="aml_check_btn", use_container_width=True,
         )
 
         if aml_btn and aml_facts.strip():
@@ -5310,8 +5326,7 @@ arose in January 2024 in Lagos.""",
 
     check_btn = st.button(
         "🔍 Run Conflict Check",
-        type="primary",
-        width='stretch',
+        type="primary", use_container_width=True,
         key="conflict_check_btn",
         disabled=not new_client_name.strip(),
     )
@@ -5516,14 +5531,14 @@ box-shadow:0 1px 4px rgba(0,0,0,0.05);">
             "📥 TXT Report",
             export_txt(report_text, "Conflict of Interest Report"),
             f"{fname}.txt", "text/plain",
-            key="conflict_dl_txt", width='stretch',
+            key="conflict_dl_txt", use_container_width=True,
         )
     with ec2:
         st.download_button(
             "📥 HTML Report",
             export_html(report_text, "Conflict of Interest Report"),
             f"{fname}.html", "text/html",
-            key="conflict_dl_html", width='stretch',
+            key="conflict_dl_html", use_container_width=True,
         )
     with ec3:
         safe_pdf_download(
@@ -5533,8 +5548,7 @@ box-shadow:0 1px 4px rgba(0,0,0,0.05);">
         )
 
     # ── Clear ──
-    if st.button("🗑️ Clear Results", key="conflict_clear_btn",
-                 width='stretch'):
+    if st.button("🗑️ Clear Results", key="conflict_clear_btn", use_container_width=True):
         st.session_state["conflict_result"] = {}
         st.session_state["conflict_matter"] = ""
         st.rerun()
@@ -5777,8 +5791,7 @@ This is a counter-claim so defendant becomes counter-claimant.""",
     # ── Generate button ──
     generate_btn = st.button(
         f"📜 Draft {selected_pleading['label']}",
-        type="primary",
-        width='stretch',
+        type="primary", use_container_width=True,
         key="pleading_generate_btn",
         disabled=not (case_title.strip() and court.strip()),
     )
@@ -5833,14 +5846,14 @@ This is a counter-claim so defendant becomes counter-claimant.""",
                 "📥 TXT",
                 export_txt(result, pleading_title),
                 f"{fname}.txt", "text/plain",
-                key="pl_dl_txt", width='stretch',
+                key="pl_dl_txt", use_container_width=True,
             )
         with ex2:
             st.download_button(
                 "📥 HTML",
                 export_html(result, pleading_title),
                 f"{fname}.html", "text/html",
-                key="pl_dl_html", width='stretch',
+                key="pl_dl_html", use_container_width=True,
             )
         with ex3:
             safe_pdf_download(result, pleading_title, fname, "pl_dl_pdf")
@@ -5861,8 +5874,7 @@ This is a counter-claim so defendant becomes counter-claimant.""",
                 if st.button(
                     "💾 Save to Case",
                     key="pl_save_case_btn",
-                    type="primary",
-                    width='stretch',
+                    type="primary", use_container_width=True,
                 ):
                     save_analysis_to_case(
                         pleading_case_id,
@@ -5874,7 +5886,7 @@ This is a counter-claim so defendant becomes counter-claimant.""",
                     )
 
         # ── Clear ──
-        if st.button("🗑️ Clear Draft", key="pl_clear_btn", width='stretch'):
+        if st.button("🗑️ Clear Draft", key="pl_clear_btn", use_container_width=True):
             st.session_state["pleading_result"] = ""
             st.session_state["pleading_title"] = ""
             st.rerun()
@@ -6028,8 +6040,7 @@ Multiple demand letters sent. No response. Client wants to sue.""",
 
     generate_btn = st.button(
         "⚡ Generate Matter Lifecycle",
-        type="primary",
-        width='stretch',
+        type="primary", use_container_width=True,
         key="lifecycle_generate_btn",
         disabled=not case_type,
     )
@@ -6167,8 +6178,7 @@ border-radius:0.75rem;padding:1.2rem;">
                     if st.button(
                         f"✅ Mark Stage {stage_num} Complete",
                         key=f"lc_done_{case_id}_{stage_num}",
-                        type="primary",
-                        width='stretch',
+                        type="primary", use_container_width=True,
                     ):
                         progress[stage_num] = True
                         db.save_lifecycle_progress(case_id, progress)
@@ -6177,8 +6187,7 @@ border-radius:0.75rem;padding:1.2rem;">
                 else:
                     if st.button(
                         f"↩️ Reopen Stage {stage_num}",
-                        key=f"lc_undo_{case_id}_{stage_num}",
-                        width='stretch',
+                        key=f"lc_undo_{case_id}_{stage_num}", use_container_width=True,
                     ):
                         progress[stage_num] = False
                         db.save_lifecycle_progress(case_id, progress)
@@ -6187,8 +6196,7 @@ border-radius:0.75rem;padding:1.2rem;">
                 # Generate document for this stage
                 if st.button(
                     f"📄 Draft Stage Document",
-                    key=f"lc_draft_{case_id}_{stage_num}",
-                    width='stretch',
+                    key=f"lc_draft_{case_id}_{stage_num}", use_container_width=True,
                 ):
                     draft_prompt = (
                         f"Case: {selected_case.get('title', '')}\n"
@@ -6215,8 +6223,7 @@ border-radius:0.75rem;padding:1.2rem;">
                         st.download_button(
                             "📥 TXT", export_txt(draft_result, stage.get("stage_name", "")),
                             f"{fname}.txt", "text/plain",
-                            key=f"lc_dl_txt_{case_id}_{stage_num}",
-                            width='stretch',
+                            key=f"lc_dl_txt_{case_id}_{stage_num}", use_container_width=True,
                         )
                     with dl2:
                         safe_docx_download(
@@ -6230,8 +6237,7 @@ border-radius:0.75rem;padding:1.2rem;">
     with rg1:
         if st.button(
             "🔄 Regenerate Lifecycle",
-            key="lifecycle_regen_btn",
-            width='stretch',
+            key="lifecycle_regen_btn", use_container_width=True,
         ):
             db.save_lifecycle(case_id, {})
             db.save_lifecycle_progress(case_id, {})
@@ -6252,8 +6258,7 @@ border-radius:0.75rem;padding:1.2rem;">
             export_txt(lifecycle_text, f"Matter Lifecycle — {selected_case.get('title','')}"),
             f"Lifecycle_{selected_case.get('title','').replace(' ','_')}.txt",
             "text/plain",
-            key="lifecycle_export_btn",
-            width='stretch',
+            key="lifecycle_export_btn", use_container_width=True,
         )
 # ═══════════════════════════════════════════════════════
 # PAGE: WITNESS PREPARATION ENGINE
@@ -6336,8 +6341,7 @@ with the defendant.""",
             st.info(f"Mode: {RESPONSE_MODES[mode]['label']}")
             wp_generate_btn = st.button(
                 "🎯 Prepare Witness",
-                type="primary",
-                width='stretch',
+                type="primary", use_container_width=True,
                 key="wp_generate_btn",
                 disabled=not (wp_facts.strip() and wp_role.strip()),
             )
@@ -6425,8 +6429,7 @@ padding:0.9rem 1.2rem;margin-bottom:1rem;">
                         if st.button(
                             "↩️ Generate Re-Examination Questions",
                             type="primary",
-                            key="wp_reexam_btn",
-                            width='stretch',
+                            key="wp_reexam_btn", use_container_width=True,
                         ):
                             reexam_p = REEXAM_PROMPT.format(
                                 witness_role=role_label,
@@ -6448,10 +6451,10 @@ padding:1.5rem;line-height:1.8;white-space:pre-wrap;font-size:0.95rem;">
                                 "📥 Download Re-Examination (TXT)",
                                 export_txt(reexam_result, f"Re-Examination — {role_label}"),
                                 f"ReExam_{role_label.replace(' ','_')}_{datetime.now():%Y%m%d}.txt",
-                                "text/plain", key="wp_reexam_dl_txt", width='stretch',
+                                "text/plain", key="wp_reexam_dl_txt", use_container_width=True,
                             )
                         with re2:
-                            if st.button("🔄 Regenerate", key="wp_reexam_regen", width='stretch'):
+                            if st.button("🔄 Regenerate", key="wp_reexam_regen", use_container_width=True):
                                 st.session_state["wp_reexam_result"] = ""
                                 st.rerun()
 
@@ -6472,7 +6475,7 @@ padding:1.5rem;line-height:1.8;white-space:pre-wrap;font-size:0.95rem;">
                     )
                 with sv2:
                     st.markdown("<br>", unsafe_allow_html=True)
-                    if st.button("💾 Save", type="primary", key="wp_save_case_btn", width='stretch'):
+                    if st.button("💾 Save", type="primary", key="wp_save_case_btn", use_container_width=True):
                         save_analysis_to_case(
                             save_case_id,
                             f"[Witness Prep] {role_label}",
@@ -6486,16 +6489,16 @@ padding:1.5rem;line-height:1.8;white-space:pre-wrap;font-size:0.95rem;">
             ex1, ex2, ex3, ex4 = st.columns(4)
             with ex1:
                 st.download_button("📥 TXT", export_txt(result, f"Witness Prep — {role_label}"),
-                    f"{fname}.txt", "text/plain", key="wp_dl_txt", width='stretch')
+                    f"{fname}.txt", "text/plain", key="wp_dl_txt", use_container_width=True)
             with ex2:
                 st.download_button("📥 HTML", export_html(result, f"Witness Prep — {role_label}"),
-                    f"{fname}.html", "text/html", key="wp_dl_html", width='stretch')
+                    f"{fname}.html", "text/html", key="wp_dl_html", use_container_width=True)
             with ex3:
                 safe_pdf_download(result, f"Witness Prep — {role_label}", fname, "wp_dl_pdf")
             with ex4:
                 safe_docx_download(result, f"Witness Prep — {role_label}", fname, "wp_dl_docx", doc_type="witness", meta={"role": role_label})
 
-            if st.button("🗑️ Clear Current Brief", key="wp_clear_btn", width='stretch'):
+            if st.button("🗑️ Clear Current Brief", key="wp_clear_btn", use_container_width=True):
                 for k in ["wp_result", "wp_role_label", "wp_facts_saved", "wp_reexam_result"]:
                     st.session_state[k] = ""
                 st.rerun()
@@ -6552,7 +6555,7 @@ padding:1.5rem;line-height:1.8;white-space:pre-wrap;font-size:0.95rem;">
                         st.download_button(
                             "📥 TXT", export_txt(entry["result"], f"Witness Prep — {entry['name']}"),
                             f"WitnessPrep_{lname}.txt", "text/plain",
-                            key=f"wp_log_dl_{i}", width='stretch',
+                            key=f"wp_log_dl_{i}", use_container_width=True,
                         )
                     with loge2:
                         safe_pdf_download(
@@ -6560,11 +6563,11 @@ padding:1.5rem;line-height:1.8;white-space:pre-wrap;font-size:0.95rem;">
                             f"WitnessPrep_{lname}", f"wp_log_pdf_{i}",
                         )
                     with loge3:
-                        if st.button("🗑️ Remove from Log", key=f"wp_log_del_{i}", width='stretch'):
+                        if st.button("🗑️ Remove from Log", key=f"wp_log_del_{i}", use_container_width=True):
                             st.session_state["wp_witness_log"].pop(i)
                             st.rerun()
 
-            if st.button("🗑️ Clear Entire Witness Log", key="wp_log_clear_all", width='stretch'):
+            if st.button("🗑️ Clear Entire Witness Log", key="wp_log_clear_all", use_container_width=True):
                 st.session_state["wp_witness_log"] = []
                 st.rerun()
 
@@ -6598,8 +6601,7 @@ padding:1.5rem;line-height:1.8;white-space:pre-wrap;font-size:0.95rem;">
 
             contra_btn = st.button(
                 "🔍 Run Contradiction Check",
-                type="primary",
-                width='stretch',
+                type="primary", use_container_width=True,
                 key="wp_contra_btn",
                 disabled=len(selected_ids) < 2,
             )
@@ -6633,7 +6635,7 @@ padding:1.5rem;line-height:1.8;white-space:pre-wrap;font-size:0.95rem;">
                         "📥 Export Contradiction Report (TXT)",
                         export_txt(contra_result, "Witness Contradiction Analysis"),
                         f"ContradictionCheck_{datetime.now():%Y%m%d_%H%M}.txt",
-                        "text/plain", key="wp_contra_dl_txt", width='stretch',
+                        "text/plain", key="wp_contra_dl_txt", use_container_width=True,
                     )
                 with cd2:
                     safe_pdf_download(
@@ -6641,7 +6643,7 @@ padding:1.5rem;line-height:1.8;white-space:pre-wrap;font-size:0.95rem;">
                         f"ContradictionCheck_{datetime.now():%Y%m%d_%H%M}", "wp_contra_dl_pdf",
                     )
                 with cd3:
-                    if st.button("🗑️ Clear Result", key="wp_contra_clear", width='stretch'):
+                    if st.button("🗑️ Clear Result", key="wp_contra_clear", use_container_width=True):
                         st.session_state["wp_contra_result"] = ""
                         st.rerun()
 
@@ -6701,8 +6703,7 @@ def render_legal_news():
             st.markdown("<br>", unsafe_allow_html=True)
             nf_generate_btn = st.button(
                 "🔄 Fetch Latest",
-                type="primary",
-                width='stretch',
+                type="primary", use_container_width=True,
                 key="nf_generate_btn",
             )
 
@@ -6760,7 +6761,7 @@ display:inline-block;font-size:0.9rem;">
   📌 <strong>{len(bookmarks)} bookmarked</strong>
 </div>""", unsafe_allow_html=True)
             with hd2:
-                if st.button("🗑️ Clear Feed", key="nf_clear_btn", width='stretch'):
+                if st.button("🗑️ Clear Feed", key="nf_clear_btn", use_container_width=True):
                     st.session_state["nf_feed_data"] = None
                     st.session_state["nf_subject_loaded"] = ""
                     st.session_state["nf_deepdive"] = {}
@@ -6815,7 +6816,7 @@ display:inline-block;font-size:0.9rem;">
 
                         with act1:
                             bm_label = "📌 Bookmarked" if is_bookmarked else "🔖 Bookmark"
-                            if st.button(bm_label, key=f"nf_bm_{item_id}", width='stretch'):
+                            if st.button(bm_label, key=f"nf_bm_{item_id}", use_container_width=True):
                                 if is_bookmarked:
                                     st.session_state["nf_bookmarks"] = [
                                         b for b in bookmarks if b.get("id") != item_id
@@ -6838,7 +6839,7 @@ display:inline-block;font-size:0.9rem;">
                             dd_key = f"nf_dd_{item_id}"
                             dd_result = st.session_state["nf_deepdive"].get(item_id, "")
                             if not dd_result:
-                                if st.button("🔬 Deep Dive Analysis", key=dd_key, width='stretch'):
+                                if st.button("🔬 Deep Dive Analysis", key=dd_key, use_container_width=True):
                                     dd_prompt = NEWS_DEEPDIVE_PROMPT.format(
                                         title=title, summary=summary,
                                         takeaway=takeaway, impact=impact,
@@ -6848,7 +6849,7 @@ display:inline-block;font-size:0.9rem;">
                                     st.session_state["nf_deepdive"][item_id] = dd_result
                                     st.rerun()
                             else:
-                                if st.button("🔬 Hide Deep Dive", key=dd_key, width='stretch'):
+                                if st.button("🔬 Hide Deep Dive", key=dd_key, use_container_width=True):
                                     st.session_state["nf_deepdive"].pop(item_id, None)
                                     st.rerun()
 
@@ -6862,8 +6863,7 @@ display:inline-block;font-size:0.9rem;">
                                 ),
                                 f"LegalNews_{item_id}_{datetime.now():%Y%m%d}.txt",
                                 "text/plain",
-                                key=f"nf_dl_{item_id}",
-                                width='stretch',
+                                key=f"nf_dl_{item_id}", use_container_width=True,
                             )
 
                         # ── Deep Dive result ──
@@ -6897,14 +6897,14 @@ border-radius:0.75rem;padding:1.4rem;">
                         "📥 Export Full Feed (TXT)",
                         export_txt(feed_text, f"Nigerian Legal News Feed — {subject_loaded}"),
                         f"{fname}.txt", "text/plain",
-                        key="nf_dl_txt", width='stretch',
+                        key="nf_dl_txt", use_container_width=True,
                     )
                 with ef2:
                     st.download_button(
                         "📥 Export Full Feed (HTML)",
                         export_html(feed_text, f"Nigerian Legal News Feed — {subject_loaded}"),
                         f"{fname}.html", "text/html",
-                        key="nf_dl_html", width='stretch',
+                        key="nf_dl_html", use_container_width=True,
                     )
 
         st.markdown("""<div class="disclaimer">
@@ -6962,11 +6962,10 @@ border-radius:0.75rem;padding:1.4rem;">
                             ),
                             f"Bookmark_{bm.get('id','x')}_{datetime.now():%Y%m%d}.txt",
                             "text/plain",
-                            key=f"bm_dl_{i}",
-                            width='stretch',
+                            key=f"bm_dl_{i}", use_container_width=True,
                         )
                     with bm_act2:
-                        if st.button("🗑️ Remove", key=f"bm_del_{i}", width='stretch'):
+                        if st.button("🗑️ Remove", key=f"bm_del_{i}", use_container_width=True):
                             bm_id = bm.get("id")
                             st.session_state["nf_bookmarks"] = [
                                 b for b in st.session_state["nf_bookmarks"] if b.get("id") != bm_id
@@ -6974,7 +6973,7 @@ border-radius:0.75rem;padding:1.4rem;">
                             st.rerun()
 
             st.markdown("---")
-            if st.button("🗑️ Clear All Bookmarks", key="bm_clear_all", width='stretch'):
+            if st.button("🗑️ Clear All Bookmarks", key="bm_clear_all", use_container_width=True):
                 st.session_state["nf_bookmarks"] = []
                 st.rerun()
 
@@ -7012,8 +7011,7 @@ paid. Matter is before the Lagos State Rent Tribunal.""",
 
             scan_btn = st.button(
                 "🎯 Scan Feed for Relevance",
-                type="primary",
-                width='stretch',
+                type="primary", use_container_width=True,
                 key="nf_scan_btn",
                 disabled=not scan_facts.strip(),
             )
@@ -7125,10 +7123,10 @@ padding:1rem 1.2rem;margin-bottom:0.7rem;">
                             "📥 Export Scan Report (TXT)",
                             export_txt(scan_report, "Case Relevance Scan Report"),
                             f"RelevanceScan_{datetime.now():%Y%m%d_%H%M}.txt",
-                            "text/plain", key="nf_scan_dl_txt", width='stretch',
+                            "text/plain", key="nf_scan_dl_txt", use_container_width=True,
                         )
                     with sc2:
-                        if st.button("🗑️ Clear Scan", key="nf_scan_clear", width='stretch'):
+                        if st.button("🗑️ Clear Scan", key="nf_scan_clear", use_container_width=True):
                             st.session_state["nf_scan_result"] = None
                             st.rerun()
 
@@ -7194,8 +7192,7 @@ stop him from selling. Court? How long? Cost?""",
         st.info(f"Mode: {RESPONSE_MODES[mode]['label']}")
         convert_btn = st.button(
             "✨ Convert Notes",
-            type="primary",
-            width='stretch',
+            type="primary", use_container_width=True,
             disabled=not notes_input.strip(),
             key="notes_convert_btn",
         )
@@ -7273,14 +7270,14 @@ Client: {client_name or '[CLIENT]'} | Ref: {matter_ref or '[REF]'}""",
                 "📥 TXT",
                 export_txt(result, output_types[output_type]),
                 f"{fname}.txt", "text/plain",
-                key="notes_dl_txt", width='stretch',
+                key="notes_dl_txt", use_container_width=True,
             )
         with ex2:
             st.download_button(
                 "📥 HTML",
                 export_html(result, output_types[output_type]),
                 f"{fname}.html", "text/html",
-                key="notes_dl_html", width='stretch',
+                key="notes_dl_html", use_container_width=True,
             )
         with ex3:
             safe_pdf_download(result, output_types[output_type], fname, "notes_dl_pdf")
@@ -7310,7 +7307,7 @@ Client: {client_name or '[CLIENT]'} | Ref: {matter_ref or '[REF]'}""",
                 )
             with sc2:
                 if st.button("💾 Save", key="notes_save_case_btn",
-                             type="primary", width='stretch'):
+                             type="primary", use_container_width=True):
                     idx = case_names.index(sel)
                     save_analysis_to_case(
                         cases[idx]["id"],
@@ -7443,8 +7440,7 @@ def render_profile():
             if st.button(
                 "📬 Send Reminder Emails for All Upcoming Hearings",
                 key="send_reminders_btn",
-                type="primary",
-                width='stretch',
+                type="primary", use_container_width=True,
             ):
                 sent, failed = 0, 0
                 firm = get_firm_name()
@@ -7573,15 +7569,13 @@ display:flex;justify-content:space-between;align-items:center;">
   </div>
 </div>""", unsafe_allow_html=True)
                     if not is_current:
-                        if st.button(f"🚫 Revoke Session {i+1}", key=f"revoke_sess_{i}",
-                                     width='stretch'):
+                        if st.button(f"🚫 Revoke Session {i+1}", key=f"revoke_sess_{i}", use_container_width=True):
                             get_db().revoke_session_token(sess["token"])
                             st.success("✅ Session revoked.")
                             st.rerun()
 
             st.markdown("")
-            if st.button("🚫 Sign Out All Other Devices", key="revoke_all_others",
-                         width='stretch'):
+            if st.button("🚫 Sign Out All Other Devices", key="revoke_all_others", use_container_width=True):
                 db2 = get_db()
                 all_sess = db2.get_user_sessions(uid)
                 for sess in all_sess:
@@ -7593,8 +7587,7 @@ display:flex;justify-content:space-between;align-items:center;">
         st.markdown("---")
         st.markdown("##### 🚪 Sign Out")
         st.caption("Signs you out of this device. Your data is saved.")
-        if st.button("🚪 Sign Out Now", key="profile_logout_btn",
-                     width='stretch', type="primary"):
+        if st.button("🚪 Sign Out Now", key="profile_logout_btn", use_container_width=True, type="primary"):
             do_logout()
 
     # ── Data Management ──
@@ -7604,7 +7597,7 @@ display:flex;justify-content:space-between;align-items:center;">
         # Backup
         st.markdown("##### 📥 Export Full Backup")
         st.caption("Downloads all cases, clients, billing, chat history, templates, references, profile, and cost logs as a single JSON file.")
-        if st.button("📦 Generate Full Backup", key="profile_backup_btn", width='stretch', type="primary"):
+        if st.button("📦 Generate Full Backup", key="profile_backup_btn", use_container_width=True, type="primary"):
             export_data = {
                 "export_date": datetime.now().isoformat(),
                 "version": "8.0",
@@ -7623,8 +7616,7 @@ display:flex;justify-content:space-between;align-items:center;">
                 "⬇️ Download Full Backup",
                 json.dumps(export_data, indent=2, default=str),
                 f"lexiassist_full_backup_{datetime.now():%Y%m%d_%H%M}.json",
-                "application/json", key="profile_dl_backup",
-                width='stretch',
+                "application/json", key="profile_dl_backup", use_container_width=True,
             )
 
         st.markdown("---")
@@ -7647,7 +7639,7 @@ display:flex;justify-content:space-between;align-items:center;">
                     </div>""", unsafe_allow_html=True)
 
                     if st.button("⚠️ Restore This Backup (Overwrites Current Data)", type="primary",
-                                 key="confirm_restore_btn", width='stretch'):
+                                 key="confirm_restore_btn", use_container_width=True):
                         for k in ["cases", "clients", "time_entries", "invoices", "chat_history",
                                    "custom_templates", "custom_limitation_periods", "custom_maxims"]:
                             if k in raw:
@@ -7691,13 +7683,13 @@ display:flex;justify-content:space-between;align-items:center;">
         st.caption("These actions cannot be undone. Export a backup first!")
         dz1, dz2 = st.columns(2)
         with dz1:
-            if st.button("🗑️ Clear All Chat History", key="clear_all_history", width='stretch'):
+            if st.button("🗑️ Clear All Chat History", key="clear_all_history", use_container_width=True):
                 st.session_state.chat_history = []
                 persist("chat_history")
                 st.success("✅ Chat history cleared.")
                 st.rerun()
         with dz2:
-            if st.button("🗑️ Reset All Data", key="reset_all_data", type="secondary", width='stretch'):
+            if st.button("🗑️ Reset All Data", key="reset_all_data", type="secondary", use_container_width=True):
                 for k in ["cases", "clients", "time_entries", "invoices", "chat_history",
                            "custom_templates", "custom_limitation_periods", "custom_maxims"]:
                     st.session_state[k] = []
@@ -7750,7 +7742,7 @@ def render_fee_calculator():
             include_vat = st.checkbox("Add 7.5% VAT on fees", value=True, key="land_vat_chk")
             show_breakdown = st.checkbox("Show band-by-band breakdown", value=True, key="land_bband")
 
-        if st.button("🔢 Calculate Fees", type="primary", key="land_calc_btn", width='stretch'):
+        if st.button("🔢 Calculate Fees", type="primary", key="land_calc_btn", use_container_width=True):
             st.session_state["lf_value"] = land_value
             st.session_state["lf_vat"] = include_vat
 
@@ -7797,7 +7789,7 @@ def render_fee_calculator():
                 if include_vat:
                     df.loc[len(df)] = {"Band": "VAT (7.5%)", "Taxable Amount": "", "Rate": "7.5%", "Fee": fmt_currency(vat)}
                 df.loc[len(df)] = {"Band": "TOTAL", "Taxable Amount": "", "Rate": "", "Fee": fmt_currency(total)}
-                st.dataframe(df, width='stretch', hide_index=True)
+                st.dataframe(df, use_container_width=True, hide_index=True)
 
             # Store for fee note tab
             st.session_state["fn_land_fee"] = base_fee
@@ -7875,7 +7867,7 @@ def render_fee_calculator():
             )
 
             if st.button("🔢 Calculate Stamp Duty", type="primary",
-                         key="sd_calc_btn", width='stretch'):
+                         key="sd_calc_btn", use_container_width=True):
                 st.session_state["sd_result"] = duty
 
             sd_result = st.session_state.get("sd_result", None)
@@ -7931,7 +7923,7 @@ border-radius:0.4rem;margin-top:0.5rem;font-size:0.9rem;">
             )
             st.caption(f"Claim: **{fmt_currency(claim_val)}**")
 
-        if st.button("🔢 Get Filing Fees", type="primary", key="cf_calc_btn", width='stretch'):
+        if st.button("🔢 Get Filing Fees", type="primary", key="cf_calc_btn", use_container_width=True):
             st.session_state["cf_result"] = (court_key, claim_val)
 
         cf_result = st.session_state.get("cf_result", None)
@@ -7963,7 +7955,7 @@ border-radius:0.4rem;margin-top:0.5rem;font-size:0.9rem;">
                     "Filing Fee": fmt_currency(band["fee"]),
                 })
             import pandas as pd
-            st.dataframe(pd.DataFrame(band_rows), width='stretch', hide_index=True)
+            st.dataframe(pd.DataFrame(band_rows), use_container_width=True, hide_index=True)
 
             # Other cost estimates
             st.markdown("##### 💰 Estimated Total Costs to File")
@@ -8023,7 +8015,7 @@ border-radius:0.4rem;margin-top:0.5rem;font-size:0.9rem;">
                                 placeholder="E.g. Includes perfection of title, CAC searches, preparation of Deed of Assignment, and obtaining Governor's Consent.")
 
         gen_btn = st.button("🧾 Generate Fee Note", type="primary",
-                            key="fn_gen_btn", width='stretch',
+                            key="fn_gen_btn", use_container_width=True,
                             disabled=not (fn_client.strip() and fn_matter.strip()))
 
         if gen_btn:
@@ -8120,10 +8112,10 @@ becomes more complex than currently anticipated.
             fne1, fne2, fne3, fne4 = st.columns(4)
             with fne1:
                 st.download_button("📥 TXT", export_txt(fn_generated, "Professional Fee Note"),
-                    f"{fn_fname}.txt", "text/plain", key="fn_dl_txt", width='stretch')
+                    f"{fn_fname}.txt", "text/plain", key="fn_dl_txt", use_container_width=True)
             with fne2:
                 st.download_button("📥 HTML", export_html(fn_generated, "Professional Fee Note"),
-                    f"{fn_fname}.html", "text/html", key="fn_dl_html", width='stretch')
+                    f"{fn_fname}.html", "text/html", key="fn_dl_html", use_container_width=True)
             with fne3:
                 safe_pdf_download(fn_generated, "Professional Fee Note", fn_fname, "fn_dl_pdf")
             with fne4:
@@ -8205,7 +8197,7 @@ XYZ claims ABC refused to pay the last instalment of ₦10M. ABC disputes this."
     st.info(f"Mode: {RESPONSE_MODES[mode]['label']}")
     sa_btn = st.button(
         "🤝 Generate Settlement Strategy",
-        type="primary", width='stretch', key="sa_gen_btn",
+        type="primary", use_container_width=True, key="sa_gen_btn",
         disabled=not (sa_facts.strip() and sa_instructing.strip()),
     )
 
@@ -8287,7 +8279,7 @@ padding:1.5rem;line-height:1.8;white-space:pre-wrap;font-size:0.95rem;">
                     key="sa_save_case_sel")
             with sv2:
                 st.markdown("<br>", unsafe_allow_html=True)
-                if st.button("💾 Save", key="sa_save_btn", type="primary", width='stretch'):
+                if st.button("💾 Save", key="sa_save_btn", type="primary", use_container_width=True):
                     save_analysis_to_case(sc_id, f"[Settlement] {matter_label}", result, "advisory", mode)
                     st.success("✅ Saved to case.")
 
@@ -8296,16 +8288,16 @@ padding:1.5rem;line-height:1.8;white-space:pre-wrap;font-size:0.95rem;">
         e1, e2, e3, e4 = st.columns(4)
         with e1:
             st.download_button("📥 TXT", export_txt(result, f"Settlement Strategy — {matter_label}"),
-                f"{fname}.txt", "text/plain", key="sa_dl_txt", width='stretch')
+                f"{fname}.txt", "text/plain", key="sa_dl_txt", use_container_width=True)
         with e2:
             st.download_button("📥 HTML", export_html(result, f"Settlement Strategy — {matter_label}"),
-                f"{fname}.html", "text/html", key="sa_dl_html", width='stretch')
+                f"{fname}.html", "text/html", key="sa_dl_html", use_container_width=True)
         with e3:
             safe_pdf_download(result, f"Settlement Strategy — {matter_label}", fname, "sa_dl_pdf")
         with e4:
             safe_docx_download(result, f"Settlement Strategy — {matter_label}", fname, "sa_dl_docx", doc_type="settlement", meta={"matter": matter_label})
 
-        if st.button("🗑️ Clear", key="sa_clear_btn", width='stretch'):
+        if st.button("🗑️ Clear", key="sa_clear_btn", use_container_width=True):
             st.session_state["sa_result"] = ""
             st.rerun()
 
@@ -8387,7 +8379,7 @@ is a company with 3 directors. No prior relationship with vendor.""",
 
     dd_btn = st.button(
         f"🔎 Generate Due Diligence Checklist",
-        type="primary", width='stretch', key="dd_gen_btn",
+        type="primary", use_container_width=True, key="dd_gen_btn",
         disabled=not dd_description.strip(),
     )
 
@@ -8435,7 +8427,7 @@ padding:1.8rem;line-height:1.85;white-space:pre-wrap;font-size:0.93rem;">
             with dv2:
                 st.markdown("<br>", unsafe_allow_html=True)
                 if st.button("💾 Save to Case", key="dd_save_btn",
-                             type="primary", width='stretch'):
+                             type="primary", use_container_width=True):
                     save_analysis_to_case(dd_case_id, f"[DD Checklist] {dd_label}",
                                           result, "advisory", mode)
                     st.success("✅ Saved to case file.")
@@ -8445,16 +8437,16 @@ padding:1.8rem;line-height:1.85;white-space:pre-wrap;font-size:0.93rem;">
         de1, de2, de3, de4 = st.columns(4)
         with de1:
             st.download_button("📥 TXT", export_txt(result, f"Due Diligence — {dd_label}"),
-                f"{fname}.txt", "text/plain", key="dd_dl_txt", width='stretch')
+                f"{fname}.txt", "text/plain", key="dd_dl_txt", use_container_width=True)
         with de2:
             st.download_button("📥 HTML", export_html(result, f"Due Diligence — {dd_label}"),
-                f"{fname}.html", "text/html", key="dd_dl_html", width='stretch')
+                f"{fname}.html", "text/html", key="dd_dl_html", use_container_width=True)
         with de3:
             safe_pdf_download(result, f"Due Diligence — {dd_label}", fname, "dd_dl_pdf")
         with de4:
             safe_docx_download(result, f"Due Diligence — {dd_label}", fname, "dd_dl_docx", doc_type="due_diligence", meta={"subject": dd_label})
 
-        if st.button("🗑️ Clear", key="dd_clear_btn", width='stretch'):
+        if st.button("🗑️ Clear", key="dd_clear_btn", use_container_width=True):
             st.session_state["dd_result"] = ""
             st.rerun()
 
@@ -8518,7 +8510,7 @@ def render_user_management():
                     if not is_self:
                         new_role = "user" if user["role"] == "admin" else "admin"
                         role_btn_label = f"⬇️ Demote to User" if user["role"] == "admin" else "⬆️ Promote to Admin"
-                        if st.button(role_btn_label, key=f"um_role_{uid}", width='stretch'):
+                        if st.button(role_btn_label, key=f"um_role_{uid}", use_container_width=True):
                             db.update_user(uid, {"role": new_role})
                             st.success(f"✅ @{user['username']} is now {new_role}.")
                             st.rerun()
@@ -8527,7 +8519,7 @@ def render_user_management():
 
                 # Reset password
                 with act2:
-                    with st.popover(f"🔑 Reset Password", width='stretch'):
+                    with st.popover(f"🔑 Reset Password"):
                         with st.form(f"reset_pw_{uid}"):
                             new_temp_pw = st.text_input("New Password", type="password", key=f"tmp_pw_{uid}")
                             if st.form_submit_button("✅ Set Password"):
@@ -8540,7 +8532,7 @@ def render_user_management():
                 # Delete user
                 with act3:
                     if not is_self:
-                        with st.popover(f"🗑️ Delete User", width='stretch'):
+                        with st.popover(f"🗑️ Delete User"):
                             st.warning(f"Delete @{user['username']}? ALL their data will be permanently erased.")
                             if st.button(f"⚠️ Confirm Delete @{user['username']}",
                                          key=f"um_del_confirm_{uid}", type="primary"):
@@ -9138,7 +9130,7 @@ def main():
     )
 
     # ── Keep-Alive Ping ──────────────────────────────────────────────────────────
-    #st.iframe(src="about:blank", height=0)
+    st.components.v1.html("", height=0)
     # ────────────────────────────────────────────────────────────────────────────
 
 
