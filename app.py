@@ -22,7 +22,8 @@ from datetime import datetime, date
 from io import BytesIO
 from typing import Any, Optional
 
-import google.generativeai as genai
+from google import genai
+from google.genai import types as _genai_types
 import pandas as pd
 import streamlit as st
 
@@ -1017,224 +1018,145 @@ def get_theme_css(
 ) -> str:
     t = get_theme(theme_name)
 
-    # ── Accessibility overrides ──────────────────────────────────────
     text_color = "#FFFFFF" if high_contrast else t["text"]
     text_sec   = "#CCCCCC" if high_contrast else t["text_secondary"]
     bg_color   = "#000000" if (high_contrast and t["bg"][1:3] < "33") else t["bg"]
     base_font  = round(16 * font_size_scale, 1)
+    input_font = round(base_font * 0.94, 1)
+    mobile_font = round(base_font * 0.92, 1)
 
-    # ── Light vs dark detection ──────────────────────────────────────
-    is_light       = int(t["card_bg"].lstrip("#")[0:2], 16) >= 0x77
+    is_light        = int(t["card_bg"].lstrip("#")[0:2], 16) >= 0x77
     is_dark_sidebar = int(t["sidebar_bg"].lstrip("#")[0:2], 16) < 0x44
 
-    # ── Shadow system (meaningful only on light themes) ──────────────
     if is_light:
-        card_shadow       = "0 1px 3px rgba(0,0,0,0.05), 0 2px 10px rgba(0,0,0,0.06)"
-        card_hover_shadow = "0 4px 20px rgba(0,0,0,0.09), 0 2px 8px rgba(0,0,0,0.05)"
-        inset_border      = f"inset 0 0 0 1px {t['border']}"
+        shadow_card  = "0 1px 3px rgba(0,0,0,0.05),0 2px 10px rgba(0,0,0,0.06)"
+        shadow_hover = "0 4px 20px rgba(0,0,0,0.09),0 2px 8px rgba(0,0,0,0.05)"
     else:
-        card_shadow       = f"0 0 0 1px {t['border']}"
-        card_hover_shadow = f"0 0 0 1px {t['accent']}55"
-        inset_border      = "none"
+        shadow_card  = f"0 0 0 1px {t['border']}"
+        shadow_hover = f"0 0 0 1px {t['accent']}55"
 
-    # ── Sidebar colours ──────────────────────────────────────────────
-    sb_text      = "#e6edf8" if is_dark_sidebar else t["text"]
-    sb_text_2    = "#8fa5c8" if is_dark_sidebar else t["text_secondary"]
-    sb_line      = f"rgba(255,255,255,0.07)" if is_dark_sidebar else f"{t['border']}"
-    sb_input_bg  = t["input_bg"]
-    sb_input_tx  = t["text"]
-    sb_hover_bg  = f"rgba(255,255,255,0.06)" if is_dark_sidebar else f"{t['bg_secondary']}"
-    sb_accent_bg = f"{t['accent']}22"
+    sb_text     = "#e6edf8" if is_dark_sidebar else t["text"]
+    sb_text_2   = "#8fa5c8" if is_dark_sidebar else t["text_secondary"]
+    sb_line     = "rgba(255,255,255,0.08)" if is_dark_sidebar else t["border"]
+    sb_input_bg = t["input_bg"]
+    sb_input_tx = t["text"]
+    sb_hover_bg = "rgba(255,255,255,0.06)" if is_dark_sidebar else t["bg_secondary"]
 
-    # ── Badge WCAG-safe colours ──────────────────────────────────────
     badge_ok_bg   = "#dcfce7" if is_light else "#14532d55"
     badge_ok_tx   = "#15803d" if is_light else "#4ade80"
-    badge_warn_bg = "#fef9c3" if is_light else "#713f1255"
+    badge_warn_bg = "#fef9c3" if is_light else "#71360055"
     badge_warn_tx = "#854d0e" if is_light else "#facc15"
     badge_err_bg  = "#fee2e2" if is_light else "#7f1d1d55"
     badge_err_tx  = "#b91c1c" if is_light else "#f87171"
     badge_inf_bg  = f"{t['accent']}18"
     badge_inf_tx  = t["accent"]
 
-    # ── Placeholder & disclaimer colours ────────────────────────────
-    placeholder_col = "rgba(30,46,80,0.40)" if is_light else "rgba(200,215,240,0.38)"
-    disclaimer_bg   = t["warning"] + ("15" if is_light else "20")
-    disclaimer_tx   = "#78350f" if is_light else text_sec
+    ph_col      = "rgba(30,46,80,0.40)" if is_light else "rgba(200,215,240,0.35)"
+    disc_bg     = t["warning"] + ("15" if is_light else "20")
+    disc_tx     = "#78350f" if is_light else text_sec
 
-    # ── Reduce-motion override ───────────────────────────────────────
     motion_css = ""
     if reduce_motion:
-        motion_css = """
-        *, *::before, *::after {
-            animation-duration: 0.01ms !important;
-            animation-iteration-count: 1 !important;
-            transition-duration: 0.01ms !important;
-        }"""
+        motion_css = "*, *::before, *::after { animation-duration:0.01ms!important; transition-duration:0.01ms!important; }"
 
-    return f"""
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:ital,wght@0,300;0,400;0,500;0,600;0,700;0,800;1,400&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
-<style>
-/* ═══ LexiAssist v8.0 — Elite Theme: {t['display_name']} ════════════════════ */
+    acc = t["accent"]
+    acc2 = t["accent_secondary"]
+    warn = t["warning"]
+    pos = t["positive"]
+    border = t["border"]
+    card = t["card_bg"]
+    bg2 = t["bg_secondary"]
+    inp = t["input_bg"]
+    grad = t["header_gradient"]
+    sidebar_bg = t["sidebar_bg"]
 
-/* ── 1. CSS Custom Properties ──────────────────────────────────────────────── */
+    return f"""<style>
+/* ── Google Fonts — loaded inside style tag (no external link tags) ── */
+@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap');
+
+/* ── Custom properties ── */
 :root {{
-    --la-bg:         {bg_color};
-    --la-bg-2:       {t['bg_secondary']};
-    --la-card:       {t['card_bg']};
-    --la-border:     {t['border']};
-    --la-text:       {text_color};
-    --la-text-2:     {text_sec};
-    --la-accent:     {t['accent']};
-    --la-accent-2:   {t['accent_secondary']};
-    --la-pos:        {t['positive']};
-    --la-neg:        {t['negative']};
-    --la-warn:       {t['warning']};
-    --la-input:      {t['input_bg']};
-    --la-sidebar:    {t['sidebar_bg']};
-
-    --r-xs:  4px;
-    --r-sm:  6px;
-    --r-md:  10px;
-    --r-lg:  14px;
-    --r-xl:  18px;
-    --r-2xl: 24px;
-
-    --ease:    cubic-bezier(0.4, 0, 0.2, 1);
-    --ease-out: cubic-bezier(0, 0, 0.2, 1);
-    --t-fast:  0.12s var(--ease);
-    --t-base:  0.18s var(--ease);
-    --t-slow:  0.28s var(--ease);
-
-    --font-body:  'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, 'SF Pro Display',
-                  'Segoe UI Variable Display', 'Segoe UI', system-ui, sans-serif;
-    --font-mono:  'JetBrains Mono', 'Fira Code', 'Cascadia Code', 'SF Mono', 'Consolas', monospace;
-
-    --card-shadow:       {card_shadow};
-    --card-hover-shadow: {card_hover_shadow};
+  --la-bg:{bg_color};--la-bg2:{bg2};--la-card:{card};--la-border:{border};
+  --la-text:{text_color};--la-text2:{text_sec};
+  --la-acc:{acc};--la-acc2:{acc2};--la-pos:{pos};--la-neg:{t['negative']};--la-warn:{warn};
+  --la-input:{inp};--la-sidebar:{sidebar_bg};
+  --r-xs:4px;--r-sm:6px;--r-md:10px;--r-lg:14px;--r-xl:18px;--r-2xl:24px;--r-pill:999px;
+  --ease:cubic-bezier(.4,0,.2,1);--ease-out:cubic-bezier(0,0,.2,1);
+  --tf:.12s var(--ease);--tb:.18s var(--ease);--ts:.28s var(--ease);
+  --font:'Plus Jakarta Sans',-apple-system,BlinkMacSystemFont,'SF Pro Display','Segoe UI Variable Display','Segoe UI',system-ui,sans-serif;
+  --mono:'JetBrains Mono','Fira Code','Cascadia Code','SF Mono',Consolas,monospace;
+  --sh-card:{shadow_card};--sh-hover:{shadow_hover};
 }}
 
+/* ── Reduce motion ── */
 {motion_css}
 
-/* ── 2. Global shell & text rendering ──────────────────────────────────────── */
-.stApp {{
-    background-color: var(--la-bg) !important;
-    color: var(--la-text) !important;
-    font-family: var(--font-body) !important;
-    font-size: {base_font}px !important;
-    font-feature-settings: "kern" 1, "liga" 1, "calt" 1 !important;
-    -webkit-font-smoothing: antialiased !important;
-    -moz-osx-font-smoothing: grayscale !important;
-    text-rendering: optimizeLegibility !important;
-}}
+/* ── Global ── */
+.stApp{{background:var(--la-bg)!important;color:var(--la-text)!important;
+  font-family:var(--font)!important;font-size:{base_font}px!important;
+  font-feature-settings:"kern" 1,"liga" 1,"calt" 1!important;
+  -webkit-font-smoothing:antialiased!important;-moz-osx-font-smoothing:grayscale!important;
+  text-rendering:optimizeLegibility!important;}}
 
-/* ── 3. Text elements — universal sharp rendering ───────────────────────────── */
-p, li, td, th, caption, figcaption, span, label, div,
-.stMarkdown, .stMarkdown p, .stMarkdown li, .stMarkdown span,
-[data-testid="stMarkdownContainer"] *,
-[data-testid="stText"], [data-testid="stCaptionContainer"],
-.stRadio label, .stRadio div, .stCheckbox label, .stCheckbox div,
-.stSelectbox label, .stMultiSelect label,
-.stTextInput label, .stTextArea label, .stNumberInput label,
-.stDateInput label, .stSlider label,
-.stFileUploader label, .stFileUploader span,
-.stExpander label, .stExpander p {{
-    color: var(--la-text) !important;
-    -webkit-font-smoothing: antialiased !important;
-    -moz-osx-font-smoothing: grayscale !important;
-}}
+/* ── Universal text sharpening ── */
+p,li,td,th,caption,figcaption,span,label,div,
+.stMarkdown,.stMarkdown p,.stMarkdown li,.stMarkdown span,
+[data-testid="stMarkdownContainer"] *,[data-testid="stText"],[data-testid="stCaptionContainer"],
+.stRadio label,.stRadio div,.stCheckbox label,.stCheckbox div,
+.stSelectbox label,.stMultiSelect label,.stTextInput label,.stTextArea label,
+.stNumberInput label,.stDateInput label,.stSlider label,
+.stFileUploader label,.stFileUploader span,.stExpander label,.stExpander p{{
+  color:var(--la-text)!important;-webkit-font-smoothing:antialiased!important;
+  -moz-osx-font-smoothing:grayscale!important;font-family:var(--font)!important;}}
+.stCaption,[data-testid="stCaptionContainer"] p,small,.stHelp{{
+  color:var(--la-text2)!important;-webkit-font-smoothing:antialiased!important;}}
 
-.stCaption, [data-testid="stCaptionContainer"] p, small, .stHelp {{
-    color: var(--la-text-2) !important;
-    -webkit-font-smoothing: antialiased !important;
-}}
+/* ── Headings ── */
+h1,h2,h3,h4,h5,h6,
+.stMarkdown h1,.stMarkdown h2,.stMarkdown h3,.stMarkdown h4,.stMarkdown h5,.stMarkdown h6{{
+  color:var(--la-text)!important;font-family:var(--font)!important;
+  letter-spacing:-0.025em!important;line-height:1.2!important;
+  -webkit-font-smoothing:antialiased!important;}}
+.stMarkdown h1{{font-size:1.75rem!important;font-weight:800!important;}}
+.stMarkdown h2{{font-size:1.35rem!important;font-weight:700!important;}}
+.stMarkdown h3{{font-size:1.1rem!important;font-weight:600!important;}}
+.stMarkdown h4{{font-size:0.95rem!important;font-weight:600!important;}}
+code,pre,.stMarkdown code,.stMarkdown pre{{
+  font-family:var(--mono)!important;font-size:0.88em!important;
+  -webkit-font-smoothing:antialiased!important;}}
 
-/* ── 4. Headings — tight tracking, premium weight ───────────────────────────── */
-h1, h2, h3, h4, h5, h6,
-.stMarkdown h1, .stMarkdown h2, .stMarkdown h3,
-.stMarkdown h4, .stMarkdown h5, .stMarkdown h6 {{
-    color: var(--la-text) !important;
-    font-family: var(--font-body) !important;
-    letter-spacing: -0.025em !important;
-    line-height: 1.2 !important;
-    -webkit-font-smoothing: antialiased !important;
-}}
-.stMarkdown h1 {{ font-size: 1.75rem !important; font-weight: 800 !important; }}
-.stMarkdown h2 {{ font-size: 1.35rem !important; font-weight: 700 !important; }}
-.stMarkdown h3 {{ font-size: 1.1rem  !important; font-weight: 600 !important; }}
-.stMarkdown h4 {{ font-size: 0.95rem !important; font-weight: 600 !important; }}
-code, pre, .stMarkdown code, .stMarkdown pre {{
-    font-family: var(--font-mono) !important;
-    font-size: 0.88em !important;
-    -webkit-font-smoothing: antialiased !important;
-}}
+/* ── Hero ── */
+.hero,.hero *,.hero h1,.hero h2,.hero p,.hero span,.hero label{{
+  color:#fff!important;-webkit-font-smoothing:antialiased!important;}}
+.hero{{background:{grad};padding:2.4rem 2.6rem 2.2rem;border-radius:var(--r-xl);
+  margin-bottom:1.8rem;border:1px solid rgba(255,255,255,0.08);
+  position:relative;overflow:hidden;}}
+.hero::before{{content:'';position:absolute;inset:0;
+  background:repeating-linear-gradient(-45deg,transparent,transparent 40px,
+  rgba(255,255,255,0.015) 40px,rgba(255,255,255,0.015) 41px);pointer-events:none;}}
+.hero h1{{font-size:2.15rem!important;font-weight:800!important;
+  letter-spacing:-0.035em!important;margin:0!important;line-height:1.1!important;}}
+.hero p{{font-size:1rem!important;opacity:.85;margin:.55rem 0 0 0!important;
+  font-weight:400!important;line-height:1.55!important;letter-spacing:.005em!important;}}
 
-/* ── 5. Hero — refined gradient header ──────────────────────────────────────── */
-.hero, .hero *, .hero h1, .hero h2, .hero p, .hero span, .hero label {{
-    color: #ffffff !important;
-    -webkit-font-smoothing: antialiased !important;
-}}
-.hero {{
-    background: {t['header_gradient']};
-    padding: 2.4rem 2.6rem 2.2rem;
-    border-radius: var(--r-xl);
-    margin-bottom: 1.8rem;
-    border: 1px solid rgba(255,255,255,0.08);
-    position: relative;
-    overflow: hidden;
-}}
-.hero::before {{
-    content: '';
-    position: absolute; inset: 0;
-    background: repeating-linear-gradient(
-        -45deg, transparent, transparent 40px,
-        rgba(255,255,255,0.015) 40px, rgba(255,255,255,0.015) 41px
-    );
-    pointer-events: none;
-}}
-.hero h1 {{
-    font-size: 2.15rem !important; font-weight: 800 !important;
-    letter-spacing: -0.035em !important; margin: 0 !important;
-    line-height: 1.1 !important;
-}}
-.hero p {{
-    font-size: 1rem !important; opacity: 0.85; margin: 0.55rem 0 0 0 !important;
-    font-weight: 400 !important; line-height: 1.55 !important;
-    letter-spacing: 0.005em !important;
-}}
+/* ── Page sub-header ── */
+.page-header,.page-header *,.page-header h2,.page-header p{{
+  color:#fff!important;-webkit-font-smoothing:antialiased!important;}}
+.page-header{{background:{grad};padding:1.3rem 1.8rem 1.2rem;border-radius:var(--r-lg);
+  margin-bottom:1.5rem;border:1px solid rgba(255,255,255,0.07);}}
+.page-header h2{{margin:0!important;font-size:1.4rem!important;font-weight:700!important;
+  letter-spacing:-0.025em!important;}}
+.page-header p{{margin:.3rem 0 0 0!important;opacity:.82;font-size:.9rem!important;
+  letter-spacing:.005em!important;font-weight:400!important;}}
 
-/* ── 6. Page sub-header ─────────────────────────────────────────────────────── */
-.page-header, .page-header *, .page-header h2, .page-header p {{
-    color: #ffffff !important;
-    -webkit-font-smoothing: antialiased !important;
-}}
-.page-header {{
-    background: {t['header_gradient']};
-    padding: 1.3rem 1.8rem 1.2rem;
-    border-radius: var(--r-lg);
-    margin-bottom: 1.5rem;
-    border: 1px solid rgba(255,255,255,0.07);
-}}
-.page-header h2 {{
-    margin: 0 !important; font-size: 1.4rem !important;
-    font-weight: 700 !important; letter-spacing: -0.025em !important;
-}}
-.page-header p {{
-    margin: 0.3rem 0 0 0 !important; opacity: 0.82; font-size: 0.9rem !important;
-    letter-spacing: 0.005em !important; font-weight: 400 !important;
-}}
-
-/* ── 7. Sidebar — premium dark panel ────────────────────────────────────────── */
-section[data-testid="stSidebar"] {{
-    background: {t['sidebar_bg']} !important;
-    border-right: 1px solid {sb_line} !important;
-}}
+/* ── Sidebar ── */
+section[data-testid="stSidebar"]{{
+  background:{sidebar_bg}!important;border-right:1px solid {sb_line}!important;}}
 section[data-testid="stSidebar"] p,
 section[data-testid="stSidebar"] span,
 section[data-testid="stSidebar"] label,
-section[data-testid="stSidebar"] h1, section[data-testid="stSidebar"] h2,
-section[data-testid="stSidebar"] h3, section[data-testid="stSidebar"] h4,
+section[data-testid="stSidebar"] h1,section[data-testid="stSidebar"] h2,
+section[data-testid="stSidebar"] h3,section[data-testid="stSidebar"] h4,
 section[data-testid="stSidebar"] li,
 section[data-testid="stSidebar"] .stMarkdown,
 section[data-testid="stSidebar"] [data-testid="stMarkdownContainer"] p,
@@ -1242,493 +1164,295 @@ section[data-testid="stSidebar"] [data-testid="stText"],
 section[data-testid="stSidebar"] .stRadio label,
 section[data-testid="stSidebar"] .stCheckbox label,
 section[data-testid="stSidebar"] .stSelectbox label,
-section[data-testid="stSidebar"] .stSlider label {{
-    color: {sb_text} !important;
-    -webkit-font-smoothing: antialiased !important;
-}}
+section[data-testid="stSidebar"] .stSlider label{{
+  color:{sb_text}!important;-webkit-font-smoothing:antialiased!important;}}
 section[data-testid="stSidebar"] .stCaption,
 section[data-testid="stSidebar"] small,
-section[data-testid="stSidebar"] [data-testid="stCaptionContainer"] p {{
-    color: {sb_text_2} !important;
-    font-size: 0.75rem !important;
-    -webkit-font-smoothing: antialiased !important;
-}}
-section[data-testid="stSidebar"] hr {{
-    border-color: {sb_line} !important; margin: 0.5rem 0 !important;
-}}
+section[data-testid="stSidebar"] [data-testid="stCaptionContainer"] p{{
+  color:{sb_text_2}!important;font-size:.75rem!important;
+  -webkit-font-smoothing:antialiased!important;}}
+section[data-testid="stSidebar"] hr{{
+  border-color:{sb_line}!important;margin:.5rem 0!important;}}
 section[data-testid="stSidebar"] .stTextInput input,
 section[data-testid="stSidebar"] .stTextArea textarea,
 section[data-testid="stSidebar"] .stSelectbox div[data-baseweb="select"] *,
 section[data-testid="stSidebar"] .stMultiSelect div[data-baseweb="select"] *,
-section[data-testid="stSidebar"] .stNumberInput input {{
-    color: {sb_input_tx} !important;
-    background-color: {sb_input_bg} !important;
-    -webkit-font-smoothing: antialiased !important;
-}}
+section[data-testid="stSidebar"] .stNumberInput input{{
+  color:{sb_input_tx}!important;background-color:{sb_input_bg}!important;
+  -webkit-font-smoothing:antialiased!important;}}
 section[data-testid="stSidebar"] [data-testid="stFileUploader"] section p,
 section[data-testid="stSidebar"] [data-testid="stFileUploader"] section span,
 section[data-testid="stSidebar"] [data-testid="stFileDropzoneInstructions"],
-section[data-testid="stSidebar"] [data-testid="stFileDropzoneInstructions"] span {{
-    color: {sb_input_tx} !important;
-}}
+section[data-testid="stSidebar"] [data-testid="stFileDropzoneInstructions"] span{{
+  color:{sb_input_tx}!important;}}
 section[data-testid="stSidebar"] [data-testid="stFileUploader"] small,
-section[data-testid="stSidebar"] .stCaption p {{
-    color: {sb_text_2} !important;
-}}
-section[data-testid="stSidebar"] .stButton > button {{
-    background: {sb_hover_bg} !important;
-    border: 1px solid {sb_line} !important;
-    color: {sb_text} !important;
-    border-radius: var(--r-md) !important;
-    font-weight: 500 !important;
-    transition: var(--t-base) !important;
-}}
-section[data-testid="stSidebar"] .stButton > button:hover {{
-    background: {sb_accent_bg} !important;
-    border-color: {t['accent']}55 !important;
-}}
+section[data-testid="stSidebar"] .stCaption p{{color:{sb_text_2}!important;}}
+section[data-testid="stSidebar"] .stButton>button{{
+  background:{sb_hover_bg}!important;border:1px solid {sb_line}!important;
+  color:{sb_text}!important;border-radius:var(--r-md)!important;
+  font-weight:500!important;transition:var(--tb)!important;}}
+section[data-testid="stSidebar"] .stButton>button:hover{{
+  background:{acc}22!important;border-color:{acc}55!important;}}
 
-/* ── 8. Buttons ──────────────────────────────────────────────────────────────── */
-.stButton > button {{
-    font-family: var(--font-body) !important;
-    -webkit-font-smoothing: antialiased !important;
-    border-radius: var(--r-md) !important;
-    font-weight: 500 !important;
-    letter-spacing: 0.005em !important;
-    transition: var(--t-base) !important;
-    transform: translateZ(0);
-}}
-.stButton > button[kind="primary"],
-.stButton > button[data-testid="baseButton-primary"] {{
-    background: {t['accent']} !important;
-    color: #ffffff !important;
-    border: none !important;
-    box-shadow: 0 1px 3px {t['accent']}55, 0 2px 10px {t['accent']}22 !important;
-    font-weight: 600 !important;
-}}
-.stButton > button[kind="primary"]:hover,
-.stButton > button[data-testid="baseButton-primary"]:hover {{
-    filter: brightness(1.10) !important;
-    box-shadow: 0 2px 8px {t['accent']}66, 0 4px 18px {t['accent']}33 !important;
-    transform: translateY(-1px) !important;
-}}
-.stButton > button[kind="primary"]:active,
-.stButton > button[data-testid="baseButton-primary"]:active {{
-    filter: brightness(0.97) !important;
-    transform: translateY(0) !important;
-    box-shadow: 0 1px 3px {t['accent']}44 !important;
-}}
-.stButton > button[kind="secondary"],
-.stButton > button[data-testid="baseButton-secondary"] {{
-    background: transparent !important;
-    color: var(--la-text) !important;
-    border: 1px solid var(--la-border) !important;
-    font-weight: 500 !important;
-}}
-.stButton > button[kind="secondary"]:hover,
-.stButton > button[data-testid="baseButton-secondary"]:hover {{
-    background: var(--la-bg-2) !important;
-    border-color: {t['accent']}66 !important;
-    color: var(--la-accent) !important;
-}}
-.stButton > button:not([kind]) {{
-    background: transparent !important;
-    color: var(--la-text) !important;
-    border: 1px solid var(--la-border) !important;
-}}
-.stButton > button:focus:not(:active) {{
-    box-shadow: 0 0 0 3px {t['accent']}33 !important;
-    outline: none !important;
-}}
-.stDownloadButton > button {{
-    background: var(--la-bg-2) !important;
-    color: var(--la-text) !important;
-    border: 1px solid var(--la-border) !important;
-    border-radius: var(--r-md) !important;
-    font-family: var(--font-body) !important;
-    font-weight: 500 !important;
-    transition: var(--t-base) !important;
-    -webkit-font-smoothing: antialiased !important;
-}}
-.stDownloadButton > button:hover {{
-    border-color: var(--la-accent) !important;
-    color: var(--la-accent) !important;
-}}
+/* ── Buttons ── */
+.stButton>button{{font-family:var(--font)!important;
+  -webkit-font-smoothing:antialiased!important;border-radius:var(--r-md)!important;
+  font-weight:500!important;letter-spacing:.005em!important;
+  transition:var(--tb)!important;transform:translateZ(0);}}
+.stButton>button[kind="primary"],
+.stButton>button[data-testid="baseButton-primary"]{{
+  background:{acc}!important;color:#fff!important;border:none!important;
+  box-shadow:0 1px 3px {acc}55,0 2px 10px {acc}22!important;font-weight:600!important;}}
+.stButton>button[kind="primary"]:hover,
+.stButton>button[data-testid="baseButton-primary"]:hover{{
+  filter:brightness(1.1)!important;
+  box-shadow:0 2px 8px {acc}66,0 4px 18px {acc}33!important;
+  transform:translateY(-1px)!important;}}
+.stButton>button[kind="primary"]:active,
+.stButton>button[data-testid="baseButton-primary"]:active{{
+  filter:brightness(.97)!important;transform:translateY(0)!important;
+  box-shadow:0 1px 3px {acc}44!important;}}
+.stButton>button[kind="secondary"],
+.stButton>button[data-testid="baseButton-secondary"]{{
+  background:transparent!important;color:var(--la-text)!important;
+  border:1px solid var(--la-border)!important;font-weight:500!important;}}
+.stButton>button[kind="secondary"]:hover,
+.stButton>button[data-testid="baseButton-secondary"]:hover{{
+  background:var(--la-bg2)!important;border-color:{acc}66!important;
+  color:var(--la-acc)!important;}}
+.stButton>button:not([kind]){{
+  background:transparent!important;color:var(--la-text)!important;
+  border:1px solid var(--la-border)!important;}}
+.stButton>button:focus:not(:active){{
+  box-shadow:0 0 0 3px {acc}33!important;outline:none!important;}}
+.stDownloadButton>button{{
+  background:var(--la-bg2)!important;color:var(--la-text)!important;
+  border:1px solid var(--la-border)!important;border-radius:var(--r-md)!important;
+  font-family:var(--font)!important;font-weight:500!important;
+  transition:var(--tb)!important;-webkit-font-smoothing:antialiased!important;}}
+.stDownloadButton>button:hover{{
+  border-color:var(--la-acc)!important;color:var(--la-acc)!important;}}
 
-/* ── 9. Inputs — precision styling ─────────────────────────────────────────── */
-.stTextInput input, .stTextArea textarea,
-.stNumberInput input, .stDateInput input {{
-    background-color: var(--la-input) !important;
-    color: var(--la-text) !important;
-    border: 1px solid var(--la-border) !important;
-    border-radius: var(--r-md) !important;
-    font-family: var(--font-body) !important;
-    font-size: {round(base_font * 0.94, 1)}px !important;
-    -webkit-font-smoothing: antialiased !important;
-    transition: border-color var(--t-fast), box-shadow var(--t-fast) !important;
-    padding: 0.45rem 0.8rem !important;
-}}
-.stTextInput input:focus, .stTextArea textarea:focus, .stNumberInput input:focus {{
-    border-color: var(--la-accent) !important;
-    box-shadow: 0 0 0 3px {t['accent']}25 !important;
-    outline: none !important;
-}}
-.stTextInput > label, .stTextArea > label, .stSelectbox > label,
-.stNumberInput > label, .stMultiSelect > label, .stDateInput > label,
-.stSlider > label, .stFileUploader > label {{
-    color: var(--la-text) !important;
-    font-weight: 500 !important;
-    font-size: 0.86rem !important;
-    letter-spacing: 0.01em !important;
-    -webkit-font-smoothing: antialiased !important;
-}}
-.stTextInput input::placeholder, .stTextArea textarea::placeholder {{
-    color: {placeholder_col} !important;
-    opacity: 1 !important;
-    font-style: italic !important;
-}}
+/* ── Inputs ── */
+.stTextInput input,.stTextArea textarea,.stNumberInput input,.stDateInput input{{
+  background-color:var(--la-input)!important;color:var(--la-text)!important;
+  border:1px solid var(--la-border)!important;border-radius:var(--r-md)!important;
+  font-family:var(--font)!important;font-size:{input_font}px!important;
+  -webkit-font-smoothing:antialiased!important;
+  transition:border-color var(--tf),box-shadow var(--tf)!important;
+  padding:.45rem .8rem!important;}}
+.stTextInput input:focus,.stTextArea textarea:focus,.stNumberInput input:focus{{
+  border-color:var(--la-acc)!important;
+  box-shadow:0 0 0 3px {acc}25!important;outline:none!important;}}
+.stTextInput>label,.stTextArea>label,.stSelectbox>label,
+.stNumberInput>label,.stMultiSelect>label,.stDateInput>label,
+.stSlider>label,.stFileUploader>label{{
+  color:var(--la-text)!important;font-weight:500!important;
+  font-size:.86rem!important;letter-spacing:.01em!important;
+  -webkit-font-smoothing:antialiased!important;}}
+.stTextInput input::placeholder,.stTextArea textarea::placeholder{{
+  color:{ph_col}!important;opacity:1!important;font-style:italic!important;}}
+section[data-testid="stSidebar"] .stTextInput input::placeholder,
+section[data-testid="stSidebar"] .stTextArea textarea::placeholder{{
+  color:{ph_col}!important;opacity:1!important;font-style:italic!important;}}
 .stSelectbox div[data-baseweb="select"] *,
-.stMultiSelect div[data-baseweb="select"] * {{
-    background-color: var(--la-input) !important;
-    color: var(--la-text) !important;
-    border-color: var(--la-border) !important;
-    border-radius: var(--r-md) !important;
-    font-family: var(--font-body) !important;
-    -webkit-font-smoothing: antialiased !important;
-}}
+.stMultiSelect div[data-baseweb="select"] *{{
+  background-color:var(--la-input)!important;color:var(--la-text)!important;
+  border-color:var(--la-border)!important;border-radius:var(--r-md)!important;
+  font-family:var(--font)!important;-webkit-font-smoothing:antialiased!important;}}
 
-/* ── 10. File uploader ──────────────────────────────────────────────────────── */
+/* ── File uploader ── */
 [data-testid="stFileUploader"] section,
 [data-testid="stFileUploader"] section p,
 [data-testid="stFileUploader"] section span,
 [data-testid="stFileDropzoneInstructions"],
 [data-testid="stFileDropzoneInstructions"] span,
-[data-testid="stFileDropzoneInstructions"] small {{
-    color: var(--la-text) !important;
-    -webkit-font-smoothing: antialiased !important;
-}}
-[data-testid="stFileUploader"] small,
-[data-testid="stFileUploader"] .stCaption {{
-    color: var(--la-text-2) !important; font-size: 0.8rem !important;
-}}
+[data-testid="stFileDropzoneInstructions"] small{{
+  color:var(--la-text)!important;-webkit-font-smoothing:antialiased!important;}}
+[data-testid="stFileUploader"] small,[data-testid="stFileUploader"] .stCaption{{
+  color:var(--la-text2)!important;font-size:.8rem!important;}}
 
-/* ── 11. Stat cards — metric display ───────────────────────────────────────── */
-.stat-card {{
-    background: var(--la-card);
-    border: 1px solid var(--la-border);
-    border-radius: var(--r-lg);
-    padding: 1.2rem 1rem 1.1rem;
-    text-align: center;
-    box-shadow: var(--card-shadow);
-    transition: box-shadow var(--t-base), transform var(--t-base);
-    position: relative; overflow: hidden;
-}}
-.stat-card::after {{
-    content: '';
-    position: absolute; top: 0; left: 10%; right: 10%; height: 2px;
-    background: linear-gradient(90deg, transparent, {t['accent']}88, transparent);
-    border-radius: 0 0 2px 2px;
-}}
-.stat-card .stat-value {{
-    font-size: 1.95rem !important; font-weight: 800 !important;
-    color: var(--la-accent) !important; line-height: 1 !important;
-    letter-spacing: -0.03em !important;
-    -webkit-font-smoothing: antialiased !important;
-    font-family: var(--font-body) !important;
-}}
-.stat-card .stat-label {{
-    font-size: 0.72rem !important; font-weight: 600 !important;
-    color: var(--la-text-2) !important; margin-top: 0.45rem !important;
-    text-transform: uppercase !important; letter-spacing: 0.08em !important;
-    -webkit-font-smoothing: antialiased !important;
-}}
+/* ── Stat cards ── */
+.stat-card{{background:var(--la-card);border:1px solid var(--la-border);
+  border-radius:var(--r-lg);padding:1.2rem 1rem 1.1rem;text-align:center;
+  box-shadow:var(--sh-card);
+  transition:box-shadow var(--tb),transform var(--tb);
+  position:relative;overflow:hidden;}}
+.stat-card::after{{content:'';position:absolute;top:0;left:10%;right:10%;height:2px;
+  background:linear-gradient(90deg,transparent,{acc}88,transparent);
+  border-radius:0 0 2px 2px;}}
+.stat-card .stat-value{{font-size:1.95rem!important;font-weight:800!important;
+  color:var(--la-acc)!important;line-height:1!important;letter-spacing:-0.03em!important;
+  -webkit-font-smoothing:antialiased!important;font-family:var(--font)!important;}}
+.stat-card .stat-label{{font-size:.72rem!important;font-weight:600!important;
+  color:var(--la-text2)!important;margin-top:.45rem!important;
+  text-transform:uppercase!important;letter-spacing:.08em!important;
+  -webkit-font-smoothing:antialiased!important;}}
 
-/* ── 12. Custom cards ───────────────────────────────────────────────────────── */
-.custom-card {{
-    background: var(--la-card);
-    border: 1px solid var(--la-border);
-    border-radius: var(--r-lg);
-    padding: 1.1rem 1.35rem;
-    margin-bottom: 0.7rem;
-    box-shadow: var(--card-shadow);
-    transition: box-shadow var(--t-base), border-color var(--t-base), transform var(--t-base);
-    position: relative;
-}}
-.custom-card::before {{
-    content: '';
-    position: absolute; left: 0; top: 20%; bottom: 20%;
-    width: 3px; border-radius: 0 2px 2px 0;
-    background: var(--la-accent); opacity: 0.8;
-}}
-.custom-card:hover {{
-    box-shadow: var(--card-hover-shadow) !important;
-    border-color: {t['accent']}44 !important;
-    transform: translateY(-1px);
-}}
-.custom-card h4 {{
-    margin: 0 0 0.3rem 0 !important; color: var(--la-text) !important;
-    font-size: 0.93rem !important; font-weight: 600 !important;
-    letter-spacing: -0.01em !important; -webkit-font-smoothing: antialiased !important;
-}}
-.custom-card p, .custom-card span {{ color: var(--la-text) !important; }}
+/* ── Custom cards ── */
+.custom-card{{background:var(--la-card);border:1px solid var(--la-border);
+  border-radius:var(--r-lg);padding:1.1rem 1.35rem;margin-bottom:.7rem;
+  box-shadow:var(--sh-card);
+  transition:box-shadow var(--tb),border-color var(--tb),transform var(--tb);
+  position:relative;}}
+.custom-card::before{{content:'';position:absolute;left:0;top:20%;bottom:20%;
+  width:3px;border-radius:0 2px 2px 0;background:var(--la-acc);opacity:.8;}}
+.custom-card:hover{{box-shadow:var(--sh-hover)!important;
+  border-color:{acc}44!important;transform:translateY(-1px);}}
+.custom-card h4{{margin:0 0 .3rem 0!important;color:var(--la-text)!important;
+  font-size:.93rem!important;font-weight:600!important;letter-spacing:-.01em!important;
+  -webkit-font-smoothing:antialiased!important;}}
+.custom-card p,.custom-card span{{color:var(--la-text)!important;}}
 
-/* ── 13. History / tool / login cards ──────────────────────────────────────── */
-.history-item {{
-    background: var(--la-card); border: 1px solid var(--la-border);
-    border-radius: var(--r-md); padding: 0.7rem 1rem;
-    margin-bottom: 0.4rem; cursor: pointer;
-    transition: border-color var(--t-base), background var(--t-base);
-}}
-.history-item:hover {{
-    border-color: {t['accent']}66 !important;
-    background: var(--la-bg-2) !important;
-}}
-.tool-card {{
-    background: var(--la-card); border: 1px solid var(--la-border);
-    border-radius: var(--r-md); padding: 0.9rem 1.1rem; margin-bottom: 0.5rem;
-}}
-.login-card {{
-    background: var(--la-card); border: 1px solid var(--la-border);
-    border-top: 3px solid var(--la-accent);
-    border-radius: var(--r-xl); padding: 2.2rem 2.4rem;
-    box-shadow: var(--card-shadow);
-}}
+/* ── History / tool / login cards ── */
+.history-item{{background:var(--la-card);border:1px solid var(--la-border);
+  border-radius:var(--r-md);padding:.7rem 1rem;margin-bottom:.4rem;cursor:pointer;
+  transition:border-color var(--tb),background var(--tb);}}
+.history-item:hover{{border-color:{acc}66!important;background:var(--la-bg2)!important;}}
+.tool-card{{background:var(--la-card);border:1px solid var(--la-border);
+  border-radius:var(--r-md);padding:.9rem 1.1rem;margin-bottom:.5rem;}}
+.login-card{{background:var(--la-card);border:1px solid var(--la-border);
+  border-top:3px solid var(--la-acc);border-radius:var(--r-xl);
+  padding:2.2rem 2.4rem;box-shadow:var(--sh-card);}}
 
-/* ── 14. AI response box ────────────────────────────────────────────────────── */
-.response-box {{
-    background: var(--la-card);
-    border: 1px solid var(--la-border);
-    border-radius: var(--r-lg);
-    padding: 1.8rem 2rem;
-    line-height: 1.78 !important;
-    font-size: {round(base_font * 0.935, 1)}px !important;
-    font-family: var(--font-body) !important;
-    white-space: pre-wrap;
-    color: var(--la-text) !important;
-    -webkit-font-smoothing: antialiased !important;
-    box-shadow: var(--card-shadow);
-    position: relative;
-}}
-.response-box::before {{
-    content: '';
-    position: absolute; top: 0; left: 0; right: 0; height: 2px;
-    background: linear-gradient(90deg, var(--la-accent), var(--la-accent-2));
-    border-radius: var(--r-lg) var(--r-lg) 0 0;
-}}
+/* ── AI response box ── */
+.response-box{{background:var(--la-card);border:1px solid var(--la-border);
+  border-radius:var(--r-lg);padding:1.8rem 2rem;
+  line-height:1.78!important;font-size:{input_font}px!important;
+  font-family:var(--font)!important;white-space:pre-wrap;
+  color:var(--la-text)!important;-webkit-font-smoothing:antialiased!important;
+  box-shadow:var(--sh-card);position:relative;}}
+.response-box::before{{content:'';position:absolute;top:0;left:0;right:0;height:2px;
+  background:linear-gradient(90deg,var(--la-acc),var(--la-acc2));
+  border-radius:var(--r-lg) var(--r-lg) 0 0;}}
 
-/* ── 15. Disclaimer banner ──────────────────────────────────────────────────── */
-.disclaimer {{
-    background: {disclaimer_bg};
-    border-left: 3px solid {t['warning']};
-    border-radius: 0 var(--r-md) var(--r-md) 0;
-    padding: 0.85rem 1.1rem;
-    margin-top: 1rem;
-    font-size: 0.83rem !important;
-    color: {disclaimer_tx} !important;
-    line-height: 1.55 !important;
-    -webkit-font-smoothing: antialiased !important;
-}}
+/* ── Disclaimer ── */
+.disclaimer{{background:{disc_bg};border-left:3px solid {warn};
+  border-radius:0 var(--r-md) var(--r-md) 0;padding:.85rem 1.1rem;margin-top:1rem;
+  font-size:.83rem!important;color:{disc_tx}!important;
+  line-height:1.55!important;-webkit-font-smoothing:antialiased!important;}}
 
-/* ── 16. Badges — compact, sharp, readable ──────────────────────────────────── */
-.badge {{
-    display: inline-flex; align-items: center;
-    padding: 0.2rem 0.6rem;
-    border-radius: var(--r-sm);
-    font-size: 0.71rem !important;
-    font-weight: 600 !important;
-    letter-spacing: 0.04em !important;
-    text-transform: uppercase !important;
-    -webkit-font-smoothing: antialiased !important;
-    font-family: var(--font-body) !important;
-    white-space: nowrap;
-}}
-.badge-ok   {{ background: {badge_ok_bg};   color: {badge_ok_tx}  !important; }}
-.badge-warn {{ background: {badge_warn_bg}; color: {badge_warn_tx} !important; }}
-.badge-err  {{ background: {badge_err_bg};  color: {badge_err_tx}  !important; }}
-.badge-info {{ background: {badge_inf_bg};  color: {badge_inf_tx}  !important; }}
+/* ── Badges ── */
+.badge{{display:inline-flex;align-items:center;padding:.2rem .6rem;
+  border-radius:var(--r-sm);font-size:.71rem!important;font-weight:600!important;
+  letter-spacing:.04em!important;text-transform:uppercase!important;
+  -webkit-font-smoothing:antialiased!important;font-family:var(--font)!important;
+  white-space:nowrap;}}
+.badge-ok{{background:{badge_ok_bg};color:{badge_ok_tx}!important;}}
+.badge-warn{{background:{badge_warn_bg};color:{badge_warn_tx}!important;}}
+.badge-err{{background:{badge_err_bg};color:{badge_err_tx}!important;}}
+.badge-info{{background:{badge_inf_bg};color:{badge_inf_tx}!important;}}
 
-/* ── 17. Tabs — refined indicator style ─────────────────────────────────────── */
-div[data-testid="stTabs"] button {{
-    font-family: var(--font-body) !important;
-    font-weight: 500 !important;
-    font-size: 0.86rem !important;
-    color: var(--la-text-2) !important;
-    background: transparent !important;
-    border: none !important;
-    border-bottom: 2px solid transparent !important;
-    border-radius: 0 !important;
-    padding: 0.55rem 0.9rem !important;
-    transition: color var(--t-base), border-color var(--t-base) !important;
-    -webkit-font-smoothing: antialiased !important;
-    letter-spacing: 0.005em !important;
-}}
-div[data-testid="stTabs"] button:hover {{
-    color: var(--la-accent) !important;
-    background: {t['accent']}0d !important;
-    border-radius: var(--r-sm) var(--r-sm) 0 0 !important;
-}}
-div[data-testid="stTabs"] button[aria-selected="true"] {{
-    color: var(--la-accent) !important;
-    font-weight: 600 !important;
-    background: transparent !important;
-    border-bottom: 2px solid var(--la-accent) !important;
-}}
+/* ── Tabs ── */
+div[data-testid="stTabs"] button{{font-family:var(--font)!important;
+  font-weight:500!important;font-size:.86rem!important;
+  color:var(--la-text2)!important;background:transparent!important;
+  border:none!important;border-bottom:2px solid transparent!important;
+  border-radius:0!important;padding:.55rem .9rem!important;
+  transition:color var(--tb),border-color var(--tb)!important;
+  -webkit-font-smoothing:antialiased!important;letter-spacing:.005em!important;}}
+div[data-testid="stTabs"] button:hover{{color:var(--la-acc)!important;
+  background:{acc}0d!important;border-radius:var(--r-sm) var(--r-sm) 0 0!important;}}
+div[data-testid="stTabs"] button[aria-selected="true"]{{color:var(--la-acc)!important;
+  font-weight:600!important;background:transparent!important;
+  border-bottom:2px solid var(--la-acc)!important;}}
 
-/* ── 18. Expanders ──────────────────────────────────────────────────────────── */
-.streamlit-expanderHeader, [data-testid="stExpander"] summary {{
-    background: var(--la-bg-2) !important;
-    color: var(--la-text) !important;
-    border-radius: var(--r-md) !important;
-    border: 1px solid var(--la-border) !important;
-    font-weight: 500 !important;
-    transition: background var(--t-base), border-color var(--t-base) !important;
-    -webkit-font-smoothing: antialiased !important;
-}}
-.streamlit-expanderHeader:hover, [data-testid="stExpander"] summary:hover {{
-    background: var(--la-card) !important;
-    border-color: {t['accent']}55 !important;
-}}
-.streamlit-expanderContent, [data-testid="stExpander"] details {{
-    background: var(--la-card) !important;
-    border: 1px solid var(--la-border) !important;
-    border-top: none !important;
-    border-radius: 0 0 var(--r-md) var(--r-md) !important;
-}}
+/* ── Expanders ── */
+.streamlit-expanderHeader,[data-testid="stExpander"] summary{{
+  background:var(--la-bg2)!important;color:var(--la-text)!important;
+  border-radius:var(--r-md)!important;border:1px solid var(--la-border)!important;
+  font-weight:500!important;
+  transition:background var(--tb),border-color var(--tb)!important;
+  -webkit-font-smoothing:antialiased!important;}}
+.streamlit-expanderHeader:hover,[data-testid="stExpander"] summary:hover{{
+  background:var(--la-card)!important;border-color:{acc}55!important;}}
+.streamlit-expanderContent,[data-testid="stExpander"] details{{
+  background:var(--la-card)!important;border:1px solid var(--la-border)!important;
+  border-top:none!important;border-radius:0 0 var(--r-md) var(--r-md)!important;}}
 
-/* ── 19. Metrics ────────────────────────────────────────────────────────────── */
-[data-testid="stMetric"] {{
-    background: var(--la-card) !important;
-    border: 1px solid var(--la-border) !important;
-    border-radius: var(--r-lg) !important;
-    padding: 0.9rem 1.1rem !important;
-    box-shadow: var(--card-shadow) !important;
-    transition: box-shadow var(--t-base) !important;
-}}
-[data-testid="stMetricLabel"] p,
-div[data-testid="metric-container"] label {{
-    color: var(--la-text-2) !important;
-    font-size: 0.74rem !important;
-    font-weight: 600 !important;
-    text-transform: uppercase !important;
-    letter-spacing: 0.07em !important;
-    -webkit-font-smoothing: antialiased !important;
-}}
+/* ── Metrics ── */
+[data-testid="stMetric"]{{background:var(--la-card)!important;
+  border:1px solid var(--la-border)!important;border-radius:var(--r-lg)!important;
+  padding:.9rem 1.1rem!important;box-shadow:var(--sh-card)!important;}}
+[data-testid="stMetricLabel"] p,div[data-testid="metric-container"] label{{
+  color:var(--la-text2)!important;font-size:.74rem!important;font-weight:600!important;
+  text-transform:uppercase!important;letter-spacing:.07em!important;
+  -webkit-font-smoothing:antialiased!important;}}
 [data-testid="stMetricValue"],
-div[data-testid="metric-container"] div[data-testid="stMetricValue"] {{
-    color: var(--la-accent) !important;
-    font-weight: 700 !important;
-    letter-spacing: -0.02em !important;
-    -webkit-font-smoothing: antialiased !important;
-}}
-[data-testid="stMetricDelta"] {{ color: var(--la-pos) !important; }}
+div[data-testid="metric-container"] div[data-testid="stMetricValue"]{{
+  color:var(--la-acc)!important;font-weight:700!important;
+  letter-spacing:-.02em!important;-webkit-font-smoothing:antialiased!important;}}
+[data-testid="stMetricDelta"]{{color:var(--la-pos)!important;}}
 
-/* ── 20. Radio & Checkbox ───────────────────────────────────────────────────── */
-.stRadio > div > label, .stCheckbox > label,
+/* ── Radio & Checkbox ── */
+.stRadio>div>label,.stCheckbox>label,
 .stRadio [data-testid="stMarkdownContainer"] p,
-.stCheckbox [data-testid="stMarkdownContainer"] p {{
-    color: var(--la-text) !important;
-    -webkit-font-smoothing: antialiased !important;
-}}
+.stCheckbox [data-testid="stMarkdownContainer"] p{{
+  color:var(--la-text)!important;-webkit-font-smoothing:antialiased!important;}}
 
-/* ── 21. Dropdown menus ─────────────────────────────────────────────────────── */
-[data-baseweb="menu"], [data-baseweb="menu"] li,
-[data-baseweb="popover"] li {{
-    background-color: var(--la-card) !important;
-    color: var(--la-text) !important;
-    font-family: var(--font-body) !important;
-    -webkit-font-smoothing: antialiased !important;
-}}
-[data-baseweb="menu"] li:hover, [data-baseweb="popover"] li:hover {{
-    background-color: {t['accent']}18 !important;
-    color: var(--la-accent) !important;
-}}
+/* ── Dropdowns ── */
+[data-baseweb="menu"],[data-baseweb="menu"] li,[data-baseweb="popover"] li{{
+  background-color:var(--la-card)!important;color:var(--la-text)!important;
+  font-family:var(--font)!important;-webkit-font-smoothing:antialiased!important;}}
+[data-baseweb="menu"] li:hover,[data-baseweb="popover"] li:hover{{
+  background-color:{acc}18!important;color:var(--la-acc)!important;}}
 
-/* ── 22. Progress bars ──────────────────────────────────────────────────────── */
-.stProgress > div > div {{ background-color: var(--la-accent) !important; }}
-.stProgress             {{ background-color: var(--la-bg-2)    !important;
-                           border-radius: var(--r-pill) !important; }}
+/* ── Progress ── */
+.stProgress>div>div{{background-color:var(--la-acc)!important;}}
+.stProgress{{background-color:var(--la-bg2)!important;border-radius:var(--r-pill)!important;}}
 
-/* ── 23. Chat messages ──────────────────────────────────────────────────────── */
-[data-testid="stChatMessage"] {{
-    background: var(--la-card) !important;
-    border: 1px solid var(--la-border) !important;
-    border-radius: var(--r-lg) !important;
-    margin-bottom: 0.6rem !important;
-    -webkit-font-smoothing: antialiased !important;
-}}
-[data-testid="stChatMessage"] p {{ color: var(--la-text) !important; }}
+/* ── Chat ── */
+[data-testid="stChatMessage"]{{background:var(--la-card)!important;
+  border:1px solid var(--la-border)!important;border-radius:var(--r-lg)!important;
+  margin-bottom:.6rem!important;}}
+[data-testid="stChatMessage"] p{{color:var(--la-text)!important;
+  -webkit-font-smoothing:antialiased!important;}}
 
-/* ── 24. Dataframes / tables ────────────────────────────────────────────────── */
-.stDataFrame {{
-    border: 1px solid var(--la-border) !important;
-    border-radius: var(--r-md) !important;
-    overflow: hidden !important;
-}}
-.stDataFrame th {{
-    background: var(--la-bg-2) !important;
-    color: var(--la-text) !important;
-    font-weight: 600 !important;
-    font-size: 0.82rem !important;
-    letter-spacing: 0.03em !important;
-    -webkit-font-smoothing: antialiased !important;
-}}
-.stDataFrame td {{
-    color: var(--la-text) !important;
-    -webkit-font-smoothing: antialiased !important;
-}}
+/* ── Dataframes ── */
+.stDataFrame{{border:1px solid var(--la-border)!important;
+  border-radius:var(--r-md)!important;overflow:hidden!important;}}
+.stDataFrame th{{background:var(--la-bg2)!important;color:var(--la-text)!important;
+  font-weight:600!important;font-size:.82rem!important;letter-spacing:.03em!important;
+  -webkit-font-smoothing:antialiased!important;}}
+.stDataFrame td{{color:var(--la-text)!important;-webkit-font-smoothing:antialiased!important;}}
 
-/* ── 25. Alerts ─────────────────────────────────────────────────────────────── */
-[data-testid="stAlert"] p, [data-testid="stInfo"] p,
-[data-testid="stSuccess"] p, [data-testid="stWarning"] p,
-[data-testid="stError"] p {{
-    color: inherit !important;
-    -webkit-font-smoothing: antialiased !important;
-}}
+/* ── Alerts ── */
+[data-testid="stAlert"] p,[data-testid="stInfo"] p,[data-testid="stSuccess"] p,
+[data-testid="stWarning"] p,[data-testid="stError"] p{{
+  color:inherit!important;-webkit-font-smoothing:antialiased!important;}}
 
-/* ── 26. Scrollbar — thin, elegant ──────────────────────────────────────────── */
-::-webkit-scrollbar {{ width: 5px; height: 5px; }}
-::-webkit-scrollbar-track {{ background: transparent; }}
-::-webkit-scrollbar-thumb {{
-    background: {t['border']};
-    border-radius: var(--r-pill);
-    transition: background var(--t-base);
-}}
-::-webkit-scrollbar-thumb:hover {{ background: {t['accent']}88; }}
+/* ── Scrollbar ── */
+::-webkit-scrollbar{{width:5px;height:5px;}}
+::-webkit-scrollbar-track{{background:transparent;}}
+::-webkit-scrollbar-thumb{{background:{border};border-radius:var(--r-pill);
+  transition:background var(--tb);}}
+::-webkit-scrollbar-thumb:hover{{background:{acc}88;}}
+::selection{{background:{acc}30;color:var(--la-text);}}
 
-/* ── 27. Text selection ──────────────────────────────────────────────────────── */
-::selection {{ background: {t['accent']}30; color: var(--la-text); }}
+/* ── Reduce-motion (prefers) ── */
+@media (prefers-reduced-motion:reduce){{
+  *,*::before,*::after{{animation-duration:.01ms!important;transition-duration:.01ms!important;}}}}
 
-/* ── 28. Reduce-motion media query ──────────────────────────────────────────── */
-@media (prefers-reduced-motion: reduce) {{
-    *, *::before, *::after {{
-        animation-duration: 0.01ms !important;
-        transition-duration: 0.01ms !important;
-    }}
-}}
-
-/* ── 29. Mobile responsive ───────────────────────────────────────────────────── */
-@media (max-width: 768px) {{
-    .stApp {{ font-size: {round(base_font * 0.92, 1)}px !important; }}
-    .hero {{ padding: 1.4rem 1.3rem !important; border-radius: var(--r-lg) !important; }}
-    .hero h1 {{ font-size: 1.4rem !important; }}
-    .hero p  {{ font-size: 0.88rem !important; }}
-    .page-header {{ padding: 1rem 1.2rem !important; }}
-    .page-header h2 {{ font-size: 1.1rem !important; }}
-    .stat-card .stat-value {{ font-size: 1.45rem !important; }}
-    .custom-card {{ padding: 0.75rem 0.9rem !important; }}
-    .response-box {{ padding: 1rem !important; font-size: 0.88rem !important; }}
-    .stButton > button {{ width: 100% !important; min-height: 2.4rem !important; }}
-    div[data-testid="stTabs"] button {{ font-size: 0.72rem !important; padding: 0.35rem 0.5rem !important; }}
-    .login-card {{ padding: 1.3rem 1rem !important; }}
-    [data-testid="stMetric"] {{ padding: 0.7rem 0.9rem !important; }}
-}}
-@media (max-width: 480px) {{
-    .hero h1 {{ font-size: 1.15rem !important; }}
-    .stat-card .stat-value {{ font-size: 1.15rem !important; }}
-    .badge {{ font-size: 0.64rem !important; }}
-}}
+/* ── Mobile ── */
+@media (max-width:768px){{
+  .stApp{{font-size:{mobile_font}px!important;}}
+  .hero{{padding:1.4rem 1.3rem!important;border-radius:var(--r-lg)!important;}}
+  .hero h1{{font-size:1.4rem!important;}}
+  .hero p{{font-size:.88rem!important;}}
+  .page-header{{padding:1rem 1.2rem!important;}}
+  .page-header h2{{font-size:1.1rem!important;}}
+  .stat-card .stat-value{{font-size:1.45rem!important;}}
+  .custom-card{{padding:.75rem .9rem!important;}}
+  .response-box{{padding:1rem!important;font-size:.88rem!important;}}
+  .stButton>button{{width:100%!important;min-height:2.4rem!important;}}
+  div[data-testid="stTabs"] button{{font-size:.72rem!important;padding:.35rem .5rem!important;}}
+  .login-card{{padding:1.3rem 1rem!important;}}
+  [data-testid="stMetric"]{{padding:.7rem .9rem!important;}}}}
+@media (max-width:480px){{
+  .hero h1{{font-size:1.15rem!important;}}
+  .stat-card .stat-value{{font-size:1.15rem!important;}}
+  .badge{{font-size:.64rem!important;}}}}
 </style>"""
-
 
 # ═══════════════════════════════════════════════════════
 # EXPORT FUNCTIONS (WITH FIRM BRANDING)
@@ -2022,9 +1746,9 @@ def safe_pdf_download(text: str, title: str, fname: str, key: str):
     try:
         pdf_data = export_pdf(text, title)
         st.download_button("📥 PDF", data=pdf_data, file_name=f"{fname}.pdf",
-                           mime="application/pdf", key=key, use_container_width=True)
+                           mime="application/pdf", key=key, width='stretch')
     except Exception as e:
-        st.button("📥 PDF (unavailable)", disabled=True, key=key, use_container_width=True)
+        st.button("📥 PDF (unavailable)", disabled=True, key=key, width='stretch')
         logger.warning(f"PDF export failed: {e}")
 
 def safe_docx_download(text: str, title: str, fname: str, key: str,
@@ -2033,9 +1757,9 @@ def safe_docx_download(text: str, title: str, fname: str, key: str,
         docx_data = export_docx(text, title, doc_type=doc_type, meta=meta or {})
         st.download_button("📥 DOCX", data=docx_data, file_name=f"{fname}.docx",
                            mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-                           key=key, use_container_width=True)
+                           key=key, width='stretch')
     except Exception as e:
-        st.button("📥 DOCX (unavailable)", disabled=True, key=key, use_container_width=True)
+        st.button("📥 DOCX (unavailable)", disabled=True, key=key, width='stretch')
         logger.warning(f"DOCX export failed: {e}")
 
 
@@ -2719,28 +2443,23 @@ def load_user_data():
 # MULTI-USER AUTH
 # ═══════════════════════════════════════════════════════
 def hash_password(password: str) -> str:
-    """Hash a password with PBKDF2-HMAC-SHA256 + random salt.
-    Format:  pbkdf2$<hex-salt>$<hex-dk>
-    """
-    import secrets as _secrets
-    salt = _secrets.token_hex(16)
+    """PBKDF2-HMAC-SHA256 with random salt. Format: pbkdf2$<salt>$<dk>"""
+    import secrets as _sec
+    salt = _sec.token_hex(16)
     dk = hashlib.pbkdf2_hmac("sha256", password.encode(), salt.encode(), 260_000)
     return f"pbkdf2${salt}${dk.hex()}"
 
 
-def verify_password(password: str, stored_hash: str) -> bool:
-    """Verify a password against either a legacy SHA-256 hash or a PBKDF2 hash.
-    Migrates legacy hashes to PBKDF2 transparently on next login (via do_login).
-    """
-    if stored_hash.startswith("pbkdf2$"):
+def verify_password(password: str, stored: str) -> bool:
+    """Verify against PBKDF2 hash, or legacy plain SHA-256 (auto-upgrades on login)."""
+    if stored.startswith("pbkdf2$"):
         try:
-            _, salt, dk_hex = stored_hash.split("$")
+            _, salt, dk_hex = stored.split("$")
             dk = hashlib.pbkdf2_hmac("sha256", password.encode(), salt.encode(), 260_000)
             return dk.hex() == dk_hex
         except Exception:
             return False
-    # Legacy: plain SHA-256 — compare and flag for upgrade
-    return hashlib.sha256(password.encode()).hexdigest() == stored_hash
+    return hashlib.sha256(password.encode()).hexdigest() == stored
 
 
 def is_allow_registration() -> bool:
@@ -2758,11 +2477,10 @@ def do_login(username: str, password: str, remember_me: bool = True) -> bool:
         return False
     if not verify_password(password, user["password_hash"]):
         return False
-    uid = user["user_id"]
-    # Auto-upgrade legacy SHA-256 hash to PBKDF2 on first successful login
+    # Auto-upgrade legacy SHA-256 → PBKDF2 on next login
     if not user["password_hash"].startswith("pbkdf2$"):
-        new_hash = hash_password(password)
-        db.update_user(uid, {"password_hash": new_hash})
+        get_db().update_user(user["user_id"], {"password_hash": hash_password(password)})
+    uid = user["user_id"]
     st.session_state.authenticated = True
     st.session_state.current_user_id = uid
     st.session_state.current_username = user["username"]
@@ -2770,10 +2488,11 @@ def do_login(username: str, password: str, remember_me: bool = True) -> bool:
     db.update_user_last_login(uid)
     load_user_data()
     st.session_state.user_data_loaded = True
-    # Persistent session token — stored in session_state only, NOT in URL
+    # ── Persistent session token ──
     if remember_me:
         token = db.create_session_token(uid, days=30)
         st.session_state["_session_token"] = token
+        pass  # token stored in session_state only — never exposed in URL
     return True
 
 
@@ -2785,7 +2504,7 @@ def do_auto_login_from_token(token: str) -> bool:
     db.cleanup_expired_sessions()
     user = db.validate_session_token(token)
     if not user:
-        return False
+        return False  # Token invalid/expired
     uid = user["user_id"]
     st.session_state.authenticated = True
     st.session_state.current_user_id = uid
@@ -2845,7 +2564,7 @@ def render_login_screen():
                 username_inp = st.text_input("Username", placeholder="your.username", key="login_username_inp")
                 password_inp = st.text_input("Password", type="password", key="login_password_inp")
                 remember_me  = st.checkbox("Stay signed in for 30 days", value=True, key="login_remember_me")
-                if st.form_submit_button("🔒 Sign In", type="primary", use_container_width=True):
+                if st.form_submit_button("🔒 Sign In", type="primary", width='stretch'):
                     if not username_inp.strip() or not password_inp:
                         st.error("❌ Enter both username and password.")
                     elif do_login(username_inp.strip(), password_inp, remember_me=remember_me):
@@ -2882,7 +2601,7 @@ def render_register_form(key_prefix: str, admin_mode: bool = False):
         reg_role = st.selectbox("Role", role_options, key=f"{key_prefix}_role") if admin_mode else "user"
 
         btn_label = "🛡️ Create Admin Account" if is_first_user else "✅ Create Account"
-        if st.form_submit_button(btn_label, type="primary", use_container_width=True):
+        if st.form_submit_button(btn_label, type="primary", width='stretch'):
             uname = reg_username.strip().lower()
             if not uname or not reg_pw or not reg_lawyer.strip():
                 st.error("❌ Username, password, and full name are required.")
@@ -2975,7 +2694,7 @@ def render_setup_screen():
             help="Get a key at https://aistudio.google.com/app/apikey",
         )
         model_sel = st.selectbox("AI Model", SUPPORTED_MODELS, index=0)
-        submitted = st.form_submit_button("🔗 Connect", type="primary", use_container_width=True)
+        submitted = st.form_submit_button("🔗 Connect", type="primary", width='stretch')
 
         if submitted:
             if key_input and len(key_input.strip()) >= 10:
@@ -3006,37 +2725,23 @@ def render_sidebar():
         cap_col = "#a0bcd8" if corp else "#64748b"
         div_col = "#2d4a6e" if corp else "#e2e8f0"
         st.markdown(f"""
-<div style="padding:1.1rem 0.5rem 0.9rem;border-bottom:1px solid {div_col};">
-  <div style="display:flex;align-items:center;gap:0.55rem;">
-    <span style="font-size:1.3rem;line-height:1;">⚖️</span>
-    <div>
-      <div style="font-size:0.97rem;font-weight:800;color:{hdr_col};letter-spacing:-0.02em;
-                  -webkit-font-smoothing:antialiased;">{esc(name_display)}</div>
-      <div style="font-size:0.68rem;margin-top:0.05rem;color:{cap_col};
-                  letter-spacing:0.04em;text-transform:uppercase;-webkit-font-smoothing:antialiased;">{esc(tag_display)}</div>
-    </div>
-  </div>
+<div style="padding:1rem 0.4rem 0.8rem 0.4rem;border-bottom:1px solid {div_col};">
+  <div style="font-size:1.05rem;font-weight:800;color:{hdr_col};letter-spacing:-0.01em;">⚖️ {esc(name_display)}</div>
+  <div style="font-size:0.74rem;margin-top:0.15rem;color:{cap_col};">{esc(tag_display)}</div>
 </div>""", unsafe_allow_html=True)
         uname = st.session_state.get("current_username","")
         urole = st.session_state.get("current_user_role","")
         if uname:
-            role_icon = "Admin" if urole=="admin" else "User"
-            role_dot = "#c9a84c" if corp else "#22c55e"
+            role_icon = "🛡️ Admin" if urole=="admin" else "👤 User"
+            bg_c = "#ffffff10" if corp else "#22c55e18"
+            bd_c = "#ffffff25" if corp else "#22c55e55"
+            tx_c = "#c9a84c"   if corp else "#059669"
             st.markdown(f"""
-<div style="margin:0.75rem 0 0.4rem;padding:0.6rem 0.8rem;
-  background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.10);
-  border-radius:10px;display:flex;align-items:center;gap:0.55rem;">
-  <div style="width:8px;height:8px;border-radius:50%;
-    background:{role_dot};flex-shrink:0;box-shadow:0 0 6px {role_dot}88;"></div>
-  <div>
-    <div style="font-weight:700;font-size:0.88rem;color:{role_dot};
-                -webkit-font-smoothing:antialiased;letter-spacing:-0.01em;">@{esc(uname)}</div>
-    <div style="font-size:0.68rem;color:rgba(255,255,255,0.45);
-                -webkit-font-smoothing:antialiased;text-transform:uppercase;
-                letter-spacing:0.06em;margin-top:0.05rem;">{role_icon}</div>
-  </div>
+<div style="margin:0.8rem 0 0.4rem 0;padding:0.6rem 0.8rem;background:{bg_c};border:1px solid {bd_c};border-radius:8px;">
+  <div style="font-weight:700;font-size:0.9rem;color:{tx_c};">@{esc(uname)}</div>
+  <div style="font-size:0.75rem;opacity:0.75;margin-top:0.1rem;">{role_icon}</div>
 </div>""", unsafe_allow_html=True)
-            if st.button("🚪 Sign Out", key="sidebar_logout_btn", use_container_width=True):
+            if st.button("🚪 Sign Out", key="sidebar_logout_btn", width='stretch'):
                 do_logout()
         st.divider()
         c1,c2 = st.columns(2)
@@ -3101,7 +2806,7 @@ def render_sidebar():
             st.error("🔴 Not connected")
         st.divider()
         st.markdown("**💾 Data**")
-        if st.button("📥 Export All Data (JSON)", use_container_width=True, key="sidebar_export_btn"):
+        if st.button("📥 Export All Data (JSON)", width='stretch', key="sidebar_export_btn"):
             export_data = {
                 "export_date": datetime.now().isoformat(), "version": "8.0",
                 "cases": st.session_state.cases,
@@ -3118,7 +2823,7 @@ def render_sidebar():
             st.download_button("⬇️ Download JSON",
                 json.dumps(export_data, indent=2, default=str),
                 f"lexiassist_backup_{datetime.now():%Y%m%d_%H%M}.json",
-                "application/json", key="sidebar_dl_json", use_container_width=True)
+                "application/json", key="sidebar_dl_json", width='stretch')
         st.markdown("**📤 Import Files**")
         uploaded = st.file_uploader("Upload", type=UPLOAD_TYPES, accept_multiple_files=False,
             key="sidebar_file_upload", label_visibility="collapsed",
@@ -3167,23 +2872,16 @@ def render_home():
     # Stats row
     cost_summary = get_db().get_cost_summary()
     c1, c2, c3, c4, c5 = st.columns(5)
-    _cases_total  = len(st.session_state.cases)
-    _cases_active = len(get_active_cases())
-    _clients_n    = len(st.session_state.clients)
-    _hours        = f"{total_hours():.1f}h"
-    _sessions     = len(st.session_state.chat_history)
-    for col, val, lbl in [
-        (c1, _cases_total,  "Total Cases"),
-        (c2, _cases_active, "Active Cases"),
-        (c3, _clients_n,    "Clients"),
-        (c4, _hours,        "Billable Hours"),
-        (c5, _sessions,     "AI Sessions"),
-    ]:
-        with col:
-            st.markdown(f"""<div class="stat-card">
-                <div class="stat-value">{val}</div>
-                <div class="stat-label">{lbl}</div>
-            </div>""", unsafe_allow_html=True)
+    with c1:
+        st.markdown(f'<div class="stat-card"><div class="stat-value">{len(st.session_state.cases)}</div><div class="stat-label">Total Cases</div></div>', unsafe_allow_html=True)
+    with c2:
+        st.markdown(f'<div class="stat-card"><div class="stat-value">{len(get_active_cases())}</div><div class="stat-label">Active Cases</div></div>', unsafe_allow_html=True)
+    with c3:
+        st.markdown(f'<div class="stat-card"><div class="stat-value">{len(st.session_state.clients)}</div><div class="stat-label">Clients</div></div>', unsafe_allow_html=True)
+    with c4:
+        st.markdown(f'<div class="stat-card"><div class="stat-value">{total_hours():.1f}h</div><div class="stat-label">Billable Hours</div></div>', unsafe_allow_html=True)
+    with c5:
+        st.markdown(f'<div class="stat-card"><div class="stat-value">{len(st.session_state.chat_history)}</div><div class="stat-label">AI Sessions</div></div>', unsafe_allow_html=True)
 
     st.markdown("")
 
@@ -3279,7 +2977,7 @@ Your workspace is empty. Pick any of the three actions below to begin:
     with f4:
         st.markdown("""<div class="custom-card">
             <h4>💾 Cloud Persistence</h4>
-            <p>PostgreSQL-backed — all data synced across devices and sessions</p>
+            <p>PostgreSQL-backed — all data synced across sessions and devices</p>
         </div>""", unsafe_allow_html=True)
 
 
@@ -3309,11 +3007,11 @@ def render_ai():
             st.text_area("Preview", doc["preview"], height=120, disabled=True, key="doc_preview_ta")
             dc1, dc2 = st.columns(2)
             with dc1:
-                if st.button("📋 Use as Context", key="use_doc_ctx_btn", use_container_width=True):
+                if st.button("📋 Use as Context", key="use_doc_ctx_btn", width='stretch'):
                     doc_context = doc["full_text"]
                     st.success("✅ Document loaded as context for your query.")
             with dc2:
-                if st.button("🗑️ Clear Document", key="clear_doc_btn", use_container_width=True):
+                if st.button("🗑️ Clear Document", key="clear_doc_btn", width='stretch'):
                     st.session_state.imported_doc = None
                     st.rerun()
         if not doc_context and st.session_state.imported_doc:
@@ -3352,7 +3050,7 @@ def render_ai():
                         <small>{esc(entry.get('timestamp', ''))} · {esc(task_lbl)} · {esc(mode_lbl)} · {entry.get('word_count', 0)} words</small>
                     </div>""", unsafe_allow_html=True)
                 with hc3:
-                    if st.button("📖", key=f"load_hist_{real_idx}", use_container_width=True, help="Load this session"):
+                    if st.button("📖", key=f"load_hist_{real_idx}", width='stretch', help="Load this session"):
                         st.session_state.selected_history_idx = real_idx
                         st.session_state.last_response = entry["response"]
                         st.session_state.original_query = entry["query"]
@@ -3365,7 +3063,7 @@ def render_ai():
             if len(compare_sels) == 2:
                 st.markdown("---")
                 st.markdown(f"**📊 Compare:** Session {compare_sels[0]+1} vs Session {compare_sels[1]+1}")
-                if st.button("🔬 Run Analysis Comparison", type="primary", key="run_compare_btn", use_container_width=True):
+                if st.button("🔬 Run Analysis Comparison", type="primary", key="run_compare_btn", width='stretch'):
                     entry_a = st.session_state.chat_history[compare_sels[0]]
                     entry_b = st.session_state.chat_history[compare_sels[1]]
                     with st.spinner("🔬 Comparing analyses…"):
@@ -3385,9 +3083,9 @@ def render_ai():
         fname = f"LexiAssist_Comparison_{datetime.now():%Y%m%d_%H%M}"
         vc1, vc2, vc3, vc4 = st.columns(4)
         with vc1:
-            st.download_button("📥 TXT", export_txt(verdict, "Analysis Comparison"), f"{fname}.txt", "text/plain", key="cmp_dl_txt", use_container_width=True)
+            st.download_button("📥 TXT", export_txt(verdict, "Analysis Comparison"), f"{fname}.txt", "text/plain", key="cmp_dl_txt", width='stretch')
         with vc2:
-            st.download_button("📥 HTML", export_html(verdict, "Analysis Comparison"), f"{fname}.html", "text/html", key="cmp_dl_html", use_container_width=True)
+            st.download_button("📥 HTML", export_html(verdict, "Analysis Comparison"), f"{fname}.html", "text/html", key="cmp_dl_html", width='stretch')
         with vc3:
             safe_pdf_download(verdict, "Analysis Comparison", fname, "cmp_dl_pdf")
         with vc4:
@@ -3415,9 +3113,9 @@ def render_ai():
             fname = f"LexiAssist_{entry.get('timestamp', '').replace(' ', '_').replace(':', '')}"
             hx1, hx2, hx3, hx4 = st.columns(4)
             with hx1:
-                st.download_button("📥 TXT", export_txt(entry["response"]), f"{fname}.txt", "text/plain", key=f"hist_dl_txt_{idx}", use_container_width=True)
+                st.download_button("📥 TXT", export_txt(entry["response"]), f"{fname}.txt", "text/plain", key=f"hist_dl_txt_{idx}", width='stretch')
             with hx2:
-                st.download_button("📥 HTML", export_html(entry["response"]), f"{fname}.html", "text/html", key=f"hist_dl_html_{idx}", use_container_width=True)
+                st.download_button("📥 HTML", export_html(entry["response"]), f"{fname}.html", "text/html", key=f"hist_dl_html_{idx}", width='stretch')
             with hx3:
                 safe_pdf_download(entry["response"], "Legal Analysis", fname, f"hist_dl_pdf_{idx}")
             with hx4:
@@ -3461,17 +3159,17 @@ def render_ai():
     with bc1:
         generate_btn = st.button(
             f"🧠 Generate ({mode_info['label']})",
-            type="primary", use_container_width=True,
+            type="primary", width='stretch',
             disabled=not query.strip(), key="ai_generate_btn",
         )
     with bc2:
         issue_btn = st.button(
-            "🔍 Issue Spot", use_container_width=True,
+            "🔍 Issue Spot", width='stretch',
             disabled=not query.strip(), key="ai_issue_btn",
         )
     with bc3:
         clear_btn = st.button(
-            "🗑️ Clear", use_container_width=True, key="ai_clear_btn",
+            "🗑️ Clear", width='stretch', key="ai_clear_btn",
         )
 
     if clear_btn:
@@ -3519,9 +3217,9 @@ def render_ai():
         fname = f"LexiAssist_Analysis_{datetime.now():%Y%m%d_%H%M}"
         ex1, ex2, ex3, ex4 = st.columns(4)
         with ex1:
-            st.download_button("📥 TXT", export_txt(response), f"{fname}.txt", "text/plain", key="resp_dl_txt", use_container_width=True)
+            st.download_button("📥 TXT", export_txt(response), f"{fname}.txt", "text/plain", key="resp_dl_txt", width='stretch')
         with ex2:
-            st.download_button("📥 HTML", export_html(response), f"{fname}.html", "text/html", key="resp_dl_html", use_container_width=True)
+            st.download_button("📥 HTML", export_html(response), f"{fname}.html", "text/html", key="resp_dl_html", width='stretch')
         with ex3:
             safe_pdf_download(response, "Legal Analysis", fname, "resp_dl_pdf")
         with ex4:
@@ -3530,7 +3228,6 @@ def render_ai():
         st.markdown(f'<div class="response-box">{esc(response)}</div>', unsafe_allow_html=True)
 
         # ── Copy to clipboard ──
-        import streamlit.components.v1 as _cmp
         _copy_html = f"""
 <style>
 #la-copy-btn {{
@@ -3555,7 +3252,7 @@ def render_ai():
     }});
   }})()">&#128203;&nbsp;Copy response</button>
 </div>"""
-        _cmp.html(_copy_html, height=46)
+        st.html(_copy_html)
 
         # ── CASE STRENGTH METER ──
         if st.session_state.get("last_task") in ("analysis", "advisory", "contract_review"):
@@ -3621,7 +3318,7 @@ ANALYSIS:
                         "🎯 Simulate",
                         key="sim_run_btn",
                         type="primary",
-                        use_container_width=True,
+                        width='stretch',
                         disabled=not sim_action.strip(),
                     )
 
@@ -3629,19 +3326,19 @@ ANALYSIS:
                 st.caption("Quick simulations:")
                 qa1, qa2, qa3, qa4 = st.columns(4)
                 with qa1:
-                    if st.button("Preliminary Objection", key="qa1_btn", use_container_width=True):
+                    if st.button("Preliminary Objection", key="qa1_btn", width='stretch'):
                         st.session_state["sim_prefill"] = "File a preliminary objection challenging the court's jurisdiction"
                         st.rerun()
                 with qa2:
-                    if st.button("Strike Out Application", key="qa2_btn", use_container_width=True):
+                    if st.button("Strike Out Application", key="qa2_btn", width='stretch'):
                         st.session_state["sim_prefill"] = "File an application to strike out the suit for want of locus standi"
                         st.rerun()
                 with qa3:
-                    if st.button("Interlocutory Injunction", key="qa3_btn", use_container_width=True):
+                    if st.button("Interlocutory Injunction", key="qa3_btn", width='stretch'):
                         st.session_state["sim_prefill"] = "Apply for an interlocutory injunction to preserve the subject matter"
                         st.rerun()
                 with qa4:
-                    if st.button("Settlement Offer", key="qa4_btn", use_container_width=True):
+                    if st.button("Settlement Offer", key="qa4_btn", width='stretch'):
                         st.session_state["sim_prefill"] = "Make a without-prejudice settlement offer to the opposing party"
                         st.rerun()
 
@@ -3768,7 +3465,7 @@ border-radius:0.75rem;padding:1.2rem;margin-top:1rem;">
                     case_names, key="save_to_case_sel", label_visibility="collapsed",
                 )
             with stc2:
-                if st.button("💾 Save", key="save_to_case_btn", type="primary", use_container_width=True):
+                if st.button("💾 Save", key="save_to_case_btn", type="primary", width='stretch'):
                     case_idx = case_names.index(selected_case)
                     target_case = cases[case_idx]
                     save_analysis_to_case(
@@ -3847,7 +3544,7 @@ def render_research():
                 "🔖 Find Cases",
                 key="prec_btn",
                 disabled=not prec_query.strip(),
-                use_container_width=True,
+                width='stretch',
                 type="primary",
             )
         if prec_btn and prec_query.strip():
@@ -3902,11 +3599,11 @@ LEGAL ISSUE: {prec_query}
     with rc1:
         research_btn = st.button(
             f"📚 Research ({mode_info['label']})",
-            type="primary", use_container_width=True,
+            type="primary", width='stretch',
             disabled=not query.strip(), key="research_go_btn",
         )
     with rc2:
-        clear_btn = st.button("🗑️ Clear Results", use_container_width=True, key="research_clear_btn")
+        clear_btn = st.button("🗑️ Clear Results", width='stretch', key="research_clear_btn")
 
     if clear_btn:
         st.session_state.research_results = ""
@@ -3927,9 +3624,9 @@ LEGAL ISSUE: {prec_query}
         fname = f"LexiAssist_Research_{datetime.now():%Y%m%d_%H%M}"
         ex1, ex2, ex3, ex4 = st.columns(4)
         with ex1:
-            st.download_button("📥 TXT", export_txt(result, "Legal Research"), f"{fname}.txt", "text/plain", key="res_dl_txt", use_container_width=True)
+            st.download_button("📥 TXT", export_txt(result, "Legal Research"), f"{fname}.txt", "text/plain", key="res_dl_txt", width='stretch')
         with ex2:
-            st.download_button("📥 HTML", export_html(result, "Legal Research"), f"{fname}.html", "text/html", key="res_dl_html", use_container_width=True)
+            st.download_button("📥 HTML", export_html(result, "Legal Research"), f"{fname}.html", "text/html", key="res_dl_html", width='stretch')
         with ex3:
             safe_pdf_download(result, "Legal Research", fname, "res_dl_pdf")
         with ex4:
@@ -3946,7 +3643,7 @@ LEGAL ISSUE: {prec_query}
                 case_names_r = [f"{c.get('title', 'Untitled')} ({c.get('suit_no', '—')})" for c in cases]
                 sel_case_r = st.selectbox("Select case:", case_names_r, key="res_save_case_sel", label_visibility="collapsed")
             with stc2:
-                if st.button("💾 Save", key="res_save_case_btn", type="primary", use_container_width=True):
+                if st.button("💾 Save", key="res_save_case_btn", type="primary", width='stretch'):
                     cidx = case_names_r.index(sel_case_r)
                     target = cases[cidx]
                     save_analysis_to_case(target["id"], f"[Research] {query.strip()}", result, "research", mode)
@@ -4060,7 +3757,7 @@ def render_cases():
                         )
                         new_hearing = st.date_input("Hearing", value=None, key=f"ch_{c['id']}")
                         new_notes = st.text_area("Notes", value=c.get("notes", ""), height=60, key=f"cn_{c['id']}")
-                        if st.button("💾 Save Changes", key=f"save_{c['id']}", use_container_width=True):
+                        if st.button("💾 Save Changes", key=f"save_{c['id']}", width='stretch'):
                             upd = {"status": new_status, "notes": new_notes}
                             if new_hearing:
                                 upd["next_hearing"] = str(new_hearing)
@@ -4074,7 +3771,7 @@ def render_cases():
                         if c.get("notes"):
                             st.caption(f"📝 {c['notes'][:300]}")
                         st.markdown("")
-                        if st.button("🗑️ Delete Case", key=f"del_{c['id']}", type="secondary", use_container_width=True):
+                        if st.button("🗑️ Delete Case", key=f"del_{c['id']}", type="secondary", width='stretch'):
                             delete_case(c["id"])
                             st.success("✅ Deleted!")
                             st.rerun()
@@ -4094,17 +3791,17 @@ def render_cases():
 
                             sa_view, sa_export, sa_del = st.columns([2, 2, 1])
                             with sa_view:
-                                if st.button("👁️ View", key=f"view_sa_{sa['id']}", use_container_width=True):
+                                if st.button("👁️ View", key=f"view_sa_{sa['id']}", width='stretch'):
                                     st.markdown(f'<div class="response-box">{esc(sa["response"])}</div>', unsafe_allow_html=True)
                             with sa_export:
                                 sa_fname = f"Case_Analysis_{sa['id']}"
                                 st.download_button(
                                     "📥 TXT", export_txt(sa["response"], f"Case Analysis — {c.get('title', '')}"),
                                     f"{sa_fname}.txt", "text/plain",
-                                    key=f"sa_dl_{sa['id']}", use_container_width=True,
+                                    key=f"sa_dl_{sa['id']}", width='stretch',
                                 )
                             with sa_del:
-                                if st.button("🗑️", key=f"del_sa_{sa['id']}", use_container_width=True, help="Delete this analysis"):
+                                if st.button("🗑️", key=f"del_sa_{sa['id']}", width='stretch', help="Delete this analysis"):
                                     db.delete_case_analysis(sa["id"])
                                     st.success("Deleted!")
                                     st.rerun()
@@ -4190,17 +3887,17 @@ def render_templates():
 
             tc1, tc2, tc3 = st.columns(3)
             with tc1:
-                if st.button("👁️ Preview", key=f"prev_t_{t['id']}", use_container_width=True):
+                if st.button("👁️ Preview", key=f"prev_t_{t['id']}", width='stretch'):
                     st.code(t["content"], language=None)
             with tc2:
-                if st.button("📋 Load to AI", key=f"load_t_{t['id']}", use_container_width=True):
+                if st.button("📋 Load to AI", key=f"load_t_{t['id']}", width='stretch'):
                     st.session_state.loaded_template = t["content"]
                     st.success(f"✅ '{t['name']}' loaded! Go to AI Assistant tab.")
             with tc3:
                 st.download_button(
                     "📥 Download", t["content"],
                     f"{t['name'].replace(' ', '_')}.txt", "text/plain",
-                    key=f"dl_t_{t['id']}", use_container_width=True,
+                    key=f"dl_t_{t['id']}", width='stretch',
                 )
 
     with tab_add:
@@ -4251,7 +3948,7 @@ def render_templates():
 
                 ec1, ec2 = st.columns(2)
                 with ec1:
-                    if st.button("💾 Save Changes", key=f"et_save_{t['id']}", use_container_width=True):
+                    if st.button("💾 Save Changes", key=f"et_save_{t['id']}", width='stretch'):
                         st.session_state.custom_templates[i]["name"] = edit_name.strip()
                         st.session_state.custom_templates[i]["cat"] = edit_cat.strip()
                         st.session_state.custom_templates[i]["content"] = edit_content.strip()
@@ -4260,7 +3957,7 @@ def render_templates():
                         st.success("✅ Template updated!")
                         st.rerun()
                 with ec2:
-                    if st.button("🗑️ Delete Template", key=f"et_del_{t['id']}", type="secondary", use_container_width=True):
+                    if st.button("🗑️ Delete Template", key=f"et_del_{t['id']}", type="secondary", width='stretch'):
                         st.session_state.custom_templates.pop(i)
                         persist("custom_templates")
                         st.success("✅ Deleted!")
@@ -4328,7 +4025,7 @@ def render_clients():
 
             bc1, bc2 = st.columns([1, 4])
             with bc1:
-                if st.button("🗑️ Delete", key=f"del_cl_{cl['id']}", use_container_width=True):
+                if st.button("🗑️ Delete", key=f"del_cl_{cl['id']}", width='stretch'):
                     delete_client(cl["id"])
                     st.success("✅ Deleted!")
                     st.rerun()
@@ -4401,7 +4098,7 @@ def render_billing():
         if st.session_state.clients:
             cl_names_inv = [c.get("name", "?") for c in st.session_state.clients]
             inv_client = st.selectbox("Client", cl_names_inv, key="inv_cl_sel")
-            if st.button("📄 Generate Invoice", type="primary", key="gen_inv_btn", use_container_width=True):
+            if st.button("📄 Generate Invoice", type="primary", key="gen_inv_btn", width='stretch'):
                 cidx = cl_names_inv.index(inv_client)
                 cid = st.session_state.clients[cidx]["id"]
                 inv = make_invoice(cid)
@@ -4440,7 +4137,7 @@ def render_billing():
                 with ic1:
                     st.download_button("📥 TXT", export_txt(inv_text, f"Invoice {inv['invoice_no']}"),
                                        f"Invoice_{inv['invoice_no']}.txt", "text/plain",
-                                       key=f"inv_txt_{inv['id']}", use_container_width=True)
+                                       key=f"inv_txt_{inv['id']}", width='stretch')
                 with ic2:
                     safe_pdf_download(inv_text, f"Invoice {inv['invoice_no']}",
                                       f"Invoice_{inv['invoice_no']}", f"inv_pdf_{inv['id']}")
@@ -4475,7 +4172,7 @@ def render_billing():
                     fig = px.bar(chart_df, x="Client", y="Amount",
                                  title="Billable Amount by Client",
                                  color_discrete_sequence=["#059669"])
-                    st.plotly_chart(fig, use_container_width=True)
+                    st.plotly_chart(fig, width='stretch')
 
                 if "date" in df.columns and "hours" in df.columns:
                     df["date"] = pd.to_datetime(df["date"], errors="coerce")
@@ -4484,7 +4181,7 @@ def render_billing():
                         fig2 = px.line(time_df, x="date", y="hours",
                                        title="Hours Over Time",
                                        color_discrete_sequence=["#059669"])
-                        st.plotly_chart(fig2, use_container_width=True)
+                        st.plotly_chart(fig2, width='stretch')
         else:
             st.info("No time entries to report.")
 
@@ -4520,7 +4217,7 @@ def render_billing():
                     fig_cost = px.bar(daily_df, x="Date", y="Cost ($)",
                                       title="Daily AI Cost",
                                       color_discrete_sequence=["#3b82f6"])
-                    st.plotly_chart(fig_cost, use_container_width=True)
+                    st.plotly_chart(fig_cost, width='stretch')
 
                 # Calls by task
                 if "task" in log_df.columns:
@@ -4531,7 +4228,7 @@ def render_billing():
                     task_df.columns = ["Task", "Calls", "Cost ($)"]
                     fig_task = px.pie(task_df, values="Calls", names="Task",
                                      title="API Calls by Task Type")
-                    st.plotly_chart(fig_task, use_container_width=True)
+                    st.plotly_chart(fig_task, width='stretch')
 
                 # Calls by model
                 if "model" in log_df.columns:
@@ -4540,7 +4237,7 @@ def render_billing():
                         total_cost=("estimated_cost", "sum")
                     ).reset_index()
                     model_df.columns = ["Model", "Calls", "Cost ($)"]
-                    st.dataframe(model_df, use_container_width=True, hide_index=True)
+                    st.dataframe(model_df, width='stretch', hide_index=True)
 
             # Log table
             st.markdown("#### 📜 Call Log")
@@ -4557,13 +4254,13 @@ def render_billing():
                 </div>""", unsafe_allow_html=True)
 
             # Export cost logs
-            if st.button("📥 Export Cost Logs (CSV)", key="export_cost_csv", use_container_width=True):
+            if st.button("📥 Export Cost Logs (CSV)", key="export_cost_csv", width='stretch'):
                 cost_df = pd.DataFrame(logs)
                 csv_data = cost_df.to_csv(index=False)
                 st.download_button(
                     "⬇️ Download CSV", csv_data,
                     f"lexiassist_cost_logs_{datetime.now():%Y%m%d}.csv",
-                    "text/csv", key="dl_cost_csv", use_container_width=True,
+                    "text/csv", key="dl_cost_csv", width='stretch',
                 )
         else:
             st.info("No API calls logged yet. Use the AI Assistant to generate your first analysis.")
@@ -4594,7 +4291,7 @@ def render_tools():
             df_lim = pd.DataFrame(all_lim)
             if not df_lim.empty:
                 df_lim.columns = ["Cause of Action", "Limitation Period", "Authority"]
-                st.dataframe(df_lim, use_container_width=True, hide_index=True)
+                st.dataframe(df_lim, width='stretch', hide_index=True)
                 st.download_button(
                     "📥 Download CSV", df_lim.to_csv(index=False),
                     "limitation_periods_nigeria.csv", "text/csv", key="dl_lim_csv",
@@ -4654,7 +4351,7 @@ def render_tools():
             type="primary",
             disabled=not calc_facts.strip(),
             key="calc_deadline_btn",
-            use_container_width=True,
+            width='stretch',
         )
         if calc_btn and calc_facts.strip():
             calc_prompt = f"""
@@ -4755,7 +4452,7 @@ No pre-action steps have been taken yet.""",
             type="primary",
             disabled=not pre_facts.strip(),
             key="pre_action_btn",
-            use_container_width=True,
+            width='stretch',
         )
 
         if pre_btn and pre_facts.strip():
@@ -4949,7 +4646,7 @@ border-radius:0.5rem;padding:1rem;margin-bottom:0.8rem;">
                         f"{pre_fname}.txt",
                         "text/plain",
                         key="pre_dl_txt",
-                        use_container_width=True,
+                        width='stretch',
                     )
                 with pe2:
                     st.download_button(
@@ -4961,7 +4658,7 @@ border-radius:0.5rem;padding:1rem;margin-bottom:0.8rem;">
                         f"{pre_fname}.html",
                         "text/html",
                         key="pre_dl_html",
-                        use_container_width=True,
+                        width='stretch',
                     )
                 with pe3:
                     safe_pdf_download(
@@ -5194,7 +4891,7 @@ arose in January 2024 in Lagos.""",
     check_btn = st.button(
         "🔍 Run Conflict Check",
         type="primary",
-        use_container_width=True,
+        width='stretch',
         key="conflict_check_btn",
         disabled=not new_client_name.strip(),
     )
@@ -5399,14 +5096,14 @@ box-shadow:0 1px 4px rgba(0,0,0,0.05);">
             "📥 TXT Report",
             export_txt(report_text, "Conflict of Interest Report"),
             f"{fname}.txt", "text/plain",
-            key="conflict_dl_txt", use_container_width=True,
+            key="conflict_dl_txt", width='stretch',
         )
     with ec2:
         st.download_button(
             "📥 HTML Report",
             export_html(report_text, "Conflict of Interest Report"),
             f"{fname}.html", "text/html",
-            key="conflict_dl_html", use_container_width=True,
+            key="conflict_dl_html", width='stretch',
         )
     with ec3:
         safe_pdf_download(
@@ -5417,7 +5114,7 @@ box-shadow:0 1px 4px rgba(0,0,0,0.05);">
 
     # ── Clear ──
     if st.button("🗑️ Clear Results", key="conflict_clear_btn",
-                 use_container_width=True):
+                 width='stretch'):
         st.session_state["conflict_result"] = {}
         st.session_state["conflict_matter"] = ""
         st.rerun()
@@ -5624,7 +5321,7 @@ This is a counter-claim so defendant becomes counter-claimant.""",
     generate_btn = st.button(
         f"📜 Draft {selected_pleading['label']}",
         type="primary",
-        use_container_width=True,
+        width='stretch',
         key="pleading_generate_btn",
         disabled=not (case_title.strip() and court.strip()),
     )
@@ -5679,14 +5376,14 @@ This is a counter-claim so defendant becomes counter-claimant.""",
                 "📥 TXT",
                 export_txt(result, pleading_title),
                 f"{fname}.txt", "text/plain",
-                key="pl_dl_txt", use_container_width=True,
+                key="pl_dl_txt", width='stretch',
             )
         with ex2:
             st.download_button(
                 "📥 HTML",
                 export_html(result, pleading_title),
                 f"{fname}.html", "text/html",
-                key="pl_dl_html", use_container_width=True,
+                key="pl_dl_html", width='stretch',
             )
         with ex3:
             safe_pdf_download(result, pleading_title, fname, "pl_dl_pdf")
@@ -5708,7 +5405,7 @@ This is a counter-claim so defendant becomes counter-claimant.""",
                     "💾 Save to Case",
                     key="pl_save_case_btn",
                     type="primary",
-                    use_container_width=True,
+                    width='stretch',
                 ):
                     save_analysis_to_case(
                         pleading_case_id,
@@ -5720,7 +5417,7 @@ This is a counter-claim so defendant becomes counter-claimant.""",
                     )
 
         # ── Clear ──
-        if st.button("🗑️ Clear Draft", key="pl_clear_btn", use_container_width=True):
+        if st.button("🗑️ Clear Draft", key="pl_clear_btn", width='stretch'):
             st.session_state["pleading_result"] = ""
             st.session_state["pleading_title"] = ""
             st.rerun()
@@ -5875,7 +5572,7 @@ Multiple demand letters sent. No response. Client wants to sue.""",
     generate_btn = st.button(
         "⚡ Generate Matter Lifecycle",
         type="primary",
-        use_container_width=True,
+        width='stretch',
         key="lifecycle_generate_btn",
         disabled=not case_type,
     )
@@ -6014,7 +5711,7 @@ border-radius:0.75rem;padding:1.2rem;">
                         f"✅ Mark Stage {stage_num} Complete",
                         key=f"lc_done_{case_id}_{stage_num}",
                         type="primary",
-                        use_container_width=True,
+                        width='stretch',
                     ):
                         progress[stage_num] = True
                         db.save_lifecycle_progress(case_id, progress)
@@ -6024,7 +5721,7 @@ border-radius:0.75rem;padding:1.2rem;">
                     if st.button(
                         f"↩️ Reopen Stage {stage_num}",
                         key=f"lc_undo_{case_id}_{stage_num}",
-                        use_container_width=True,
+                        width='stretch',
                     ):
                         progress[stage_num] = False
                         db.save_lifecycle_progress(case_id, progress)
@@ -6034,7 +5731,7 @@ border-radius:0.75rem;padding:1.2rem;">
                 if st.button(
                     f"📄 Draft Stage Document",
                     key=f"lc_draft_{case_id}_{stage_num}",
-                    use_container_width=True,
+                    width='stretch',
                 ):
                     draft_prompt = (
                         f"Case: {selected_case.get('title', '')}\n"
@@ -6062,7 +5759,7 @@ border-radius:0.75rem;padding:1.2rem;">
                             "📥 TXT", export_txt(draft_result, stage.get("stage_name", "")),
                             f"{fname}.txt", "text/plain",
                             key=f"lc_dl_txt_{case_id}_{stage_num}",
-                            use_container_width=True,
+                            width='stretch',
                         )
                     with dl2:
                         safe_docx_download(
@@ -6077,7 +5774,7 @@ border-radius:0.75rem;padding:1.2rem;">
         if st.button(
             "🔄 Regenerate Lifecycle",
             key="lifecycle_regen_btn",
-            use_container_width=True,
+            width='stretch',
         ):
             db.save_lifecycle(case_id, {})
             db.save_lifecycle_progress(case_id, {})
@@ -6099,7 +5796,7 @@ border-radius:0.75rem;padding:1.2rem;">
             f"Lifecycle_{selected_case.get('title','').replace(' ','_')}.txt",
             "text/plain",
             key="lifecycle_export_btn",
-            use_container_width=True,
+            width='stretch',
         )
 # ═══════════════════════════════════════════════════════
 # PAGE: WITNESS PREPARATION ENGINE
@@ -6183,7 +5880,7 @@ with the defendant.""",
             wp_generate_btn = st.button(
                 "🎯 Prepare Witness",
                 type="primary",
-                use_container_width=True,
+                width='stretch',
                 key="wp_generate_btn",
                 disabled=not (wp_facts.strip() and wp_role.strip()),
             )
@@ -6272,7 +5969,7 @@ padding:0.9rem 1.2rem;margin-bottom:1rem;">
                             "↩️ Generate Re-Examination Questions",
                             type="primary",
                             key="wp_reexam_btn",
-                            use_container_width=True,
+                            width='stretch',
                         ):
                             reexam_p = REEXAM_PROMPT.format(
                                 witness_role=role_label,
@@ -6294,10 +5991,10 @@ padding:1.5rem;line-height:1.8;white-space:pre-wrap;font-size:0.95rem;">
                                 "📥 Download Re-Examination (TXT)",
                                 export_txt(reexam_result, f"Re-Examination — {role_label}"),
                                 f"ReExam_{role_label.replace(' ','_')}_{datetime.now():%Y%m%d}.txt",
-                                "text/plain", key="wp_reexam_dl_txt", use_container_width=True,
+                                "text/plain", key="wp_reexam_dl_txt", width='stretch',
                             )
                         with re2:
-                            if st.button("🔄 Regenerate", key="wp_reexam_regen", use_container_width=True):
+                            if st.button("🔄 Regenerate", key="wp_reexam_regen", width='stretch'):
                                 st.session_state["wp_reexam_result"] = ""
                                 st.rerun()
 
@@ -6318,7 +6015,7 @@ padding:1.5rem;line-height:1.8;white-space:pre-wrap;font-size:0.95rem;">
                     )
                 with sv2:
                     st.markdown("<br>", unsafe_allow_html=True)
-                    if st.button("💾 Save", type="primary", key="wp_save_case_btn", use_container_width=True):
+                    if st.button("💾 Save", type="primary", key="wp_save_case_btn", width='stretch'):
                         save_analysis_to_case(
                             save_case_id,
                             f"[Witness Prep] {role_label}",
@@ -6332,16 +6029,16 @@ padding:1.5rem;line-height:1.8;white-space:pre-wrap;font-size:0.95rem;">
             ex1, ex2, ex3, ex4 = st.columns(4)
             with ex1:
                 st.download_button("📥 TXT", export_txt(result, f"Witness Prep — {role_label}"),
-                    f"{fname}.txt", "text/plain", key="wp_dl_txt", use_container_width=True)
+                    f"{fname}.txt", "text/plain", key="wp_dl_txt", width='stretch')
             with ex2:
                 st.download_button("📥 HTML", export_html(result, f"Witness Prep — {role_label}"),
-                    f"{fname}.html", "text/html", key="wp_dl_html", use_container_width=True)
+                    f"{fname}.html", "text/html", key="wp_dl_html", width='stretch')
             with ex3:
                 safe_pdf_download(result, f"Witness Prep — {role_label}", fname, "wp_dl_pdf")
             with ex4:
                 safe_docx_download(result, f"Witness Prep — {role_label}", fname, "wp_dl_docx", doc_type="witness", meta={"role": role_label})
 
-            if st.button("🗑️ Clear Current Brief", key="wp_clear_btn", use_container_width=True):
+            if st.button("🗑️ Clear Current Brief", key="wp_clear_btn", width='stretch'):
                 for k in ["wp_result", "wp_role_label", "wp_facts_saved", "wp_reexam_result"]:
                     st.session_state[k] = ""
                 st.rerun()
@@ -6398,7 +6095,7 @@ padding:1.5rem;line-height:1.8;white-space:pre-wrap;font-size:0.95rem;">
                         st.download_button(
                             "📥 TXT", export_txt(entry["result"], f"Witness Prep — {entry['name']}"),
                             f"WitnessPrep_{lname}.txt", "text/plain",
-                            key=f"wp_log_dl_{i}", use_container_width=True,
+                            key=f"wp_log_dl_{i}", width='stretch',
                         )
                     with loge2:
                         safe_pdf_download(
@@ -6406,11 +6103,11 @@ padding:1.5rem;line-height:1.8;white-space:pre-wrap;font-size:0.95rem;">
                             f"WitnessPrep_{lname}", f"wp_log_pdf_{i}",
                         )
                     with loge3:
-                        if st.button("🗑️ Remove from Log", key=f"wp_log_del_{i}", use_container_width=True):
+                        if st.button("🗑️ Remove from Log", key=f"wp_log_del_{i}", width='stretch'):
                             st.session_state["wp_witness_log"].pop(i)
                             st.rerun()
 
-            if st.button("🗑️ Clear Entire Witness Log", key="wp_log_clear_all", use_container_width=True):
+            if st.button("🗑️ Clear Entire Witness Log", key="wp_log_clear_all", width='stretch'):
                 st.session_state["wp_witness_log"] = []
                 st.rerun()
 
@@ -6445,7 +6142,7 @@ padding:1.5rem;line-height:1.8;white-space:pre-wrap;font-size:0.95rem;">
             contra_btn = st.button(
                 "🔍 Run Contradiction Check",
                 type="primary",
-                use_container_width=True,
+                width='stretch',
                 key="wp_contra_btn",
                 disabled=len(selected_ids) < 2,
             )
@@ -6479,7 +6176,7 @@ padding:1.5rem;line-height:1.8;white-space:pre-wrap;font-size:0.95rem;">
                         "📥 Export Contradiction Report (TXT)",
                         export_txt(contra_result, "Witness Contradiction Analysis"),
                         f"ContradictionCheck_{datetime.now():%Y%m%d_%H%M}.txt",
-                        "text/plain", key="wp_contra_dl_txt", use_container_width=True,
+                        "text/plain", key="wp_contra_dl_txt", width='stretch',
                     )
                 with cd2:
                     safe_pdf_download(
@@ -6487,7 +6184,7 @@ padding:1.5rem;line-height:1.8;white-space:pre-wrap;font-size:0.95rem;">
                         f"ContradictionCheck_{datetime.now():%Y%m%d_%H%M}", "wp_contra_dl_pdf",
                     )
                 with cd3:
-                    if st.button("🗑️ Clear Result", key="wp_contra_clear", use_container_width=True):
+                    if st.button("🗑️ Clear Result", key="wp_contra_clear", width='stretch'):
                         st.session_state["wp_contra_result"] = ""
                         st.rerun()
 
@@ -6548,7 +6245,7 @@ def render_legal_news():
             nf_generate_btn = st.button(
                 "🔄 Fetch Latest",
                 type="primary",
-                use_container_width=True,
+                width='stretch',
                 key="nf_generate_btn",
             )
 
@@ -6606,7 +6303,7 @@ display:inline-block;font-size:0.9rem;">
   📌 <strong>{len(bookmarks)} bookmarked</strong>
 </div>""", unsafe_allow_html=True)
             with hd2:
-                if st.button("🗑️ Clear Feed", key="nf_clear_btn", use_container_width=True):
+                if st.button("🗑️ Clear Feed", key="nf_clear_btn", width='stretch'):
                     st.session_state["nf_feed_data"] = None
                     st.session_state["nf_subject_loaded"] = ""
                     st.session_state["nf_deepdive"] = {}
@@ -6661,7 +6358,7 @@ display:inline-block;font-size:0.9rem;">
 
                         with act1:
                             bm_label = "📌 Bookmarked" if is_bookmarked else "🔖 Bookmark"
-                            if st.button(bm_label, key=f"nf_bm_{item_id}", use_container_width=True):
+                            if st.button(bm_label, key=f"nf_bm_{item_id}", width='stretch'):
                                 if is_bookmarked:
                                     st.session_state["nf_bookmarks"] = [
                                         b for b in bookmarks if b.get("id") != item_id
@@ -6684,7 +6381,7 @@ display:inline-block;font-size:0.9rem;">
                             dd_key = f"nf_dd_{item_id}"
                             dd_result = st.session_state["nf_deepdive"].get(item_id, "")
                             if not dd_result:
-                                if st.button("🔬 Deep Dive Analysis", key=dd_key, use_container_width=True):
+                                if st.button("🔬 Deep Dive Analysis", key=dd_key, width='stretch'):
                                     dd_prompt = NEWS_DEEPDIVE_PROMPT.format(
                                         title=title, summary=summary,
                                         takeaway=takeaway, impact=impact,
@@ -6694,7 +6391,7 @@ display:inline-block;font-size:0.9rem;">
                                     st.session_state["nf_deepdive"][item_id] = dd_result
                                     st.rerun()
                             else:
-                                if st.button("🔬 Hide Deep Dive", key=dd_key, use_container_width=True):
+                                if st.button("🔬 Hide Deep Dive", key=dd_key, width='stretch'):
                                     st.session_state["nf_deepdive"].pop(item_id, None)
                                     st.rerun()
 
@@ -6709,7 +6406,7 @@ display:inline-block;font-size:0.9rem;">
                                 f"LegalNews_{item_id}_{datetime.now():%Y%m%d}.txt",
                                 "text/plain",
                                 key=f"nf_dl_{item_id}",
-                                use_container_width=True,
+                                width='stretch',
                             )
 
                         # ── Deep Dive result ──
@@ -6743,14 +6440,14 @@ border-radius:0.75rem;padding:1.4rem;">
                         "📥 Export Full Feed (TXT)",
                         export_txt(feed_text, f"Nigerian Legal News Feed — {subject_loaded}"),
                         f"{fname}.txt", "text/plain",
-                        key="nf_dl_txt", use_container_width=True,
+                        key="nf_dl_txt", width='stretch',
                     )
                 with ef2:
                     st.download_button(
                         "📥 Export Full Feed (HTML)",
                         export_html(feed_text, f"Nigerian Legal News Feed — {subject_loaded}"),
                         f"{fname}.html", "text/html",
-                        key="nf_dl_html", use_container_width=True,
+                        key="nf_dl_html", width='stretch',
                     )
 
         st.markdown("""<div class="disclaimer">
@@ -6809,10 +6506,10 @@ border-radius:0.75rem;padding:1.4rem;">
                             f"Bookmark_{bm.get('id','x')}_{datetime.now():%Y%m%d}.txt",
                             "text/plain",
                             key=f"bm_dl_{i}",
-                            use_container_width=True,
+                            width='stretch',
                         )
                     with bm_act2:
-                        if st.button("🗑️ Remove", key=f"bm_del_{i}", use_container_width=True):
+                        if st.button("🗑️ Remove", key=f"bm_del_{i}", width='stretch'):
                             bm_id = bm.get("id")
                             st.session_state["nf_bookmarks"] = [
                                 b for b in st.session_state["nf_bookmarks"] if b.get("id") != bm_id
@@ -6820,7 +6517,7 @@ border-radius:0.75rem;padding:1.4rem;">
                             st.rerun()
 
             st.markdown("---")
-            if st.button("🗑️ Clear All Bookmarks", key="bm_clear_all", use_container_width=True):
+            if st.button("🗑️ Clear All Bookmarks", key="bm_clear_all", width='stretch'):
                 st.session_state["nf_bookmarks"] = []
                 st.rerun()
 
@@ -6859,7 +6556,7 @@ paid. Matter is before the Lagos State Rent Tribunal.""",
             scan_btn = st.button(
                 "🎯 Scan Feed for Relevance",
                 type="primary",
-                use_container_width=True,
+                width='stretch',
                 key="nf_scan_btn",
                 disabled=not scan_facts.strip(),
             )
@@ -6971,10 +6668,10 @@ padding:1rem 1.2rem;margin-bottom:0.7rem;">
                             "📥 Export Scan Report (TXT)",
                             export_txt(scan_report, "Case Relevance Scan Report"),
                             f"RelevanceScan_{datetime.now():%Y%m%d_%H%M}.txt",
-                            "text/plain", key="nf_scan_dl_txt", use_container_width=True,
+                            "text/plain", key="nf_scan_dl_txt", width='stretch',
                         )
                     with sc2:
-                        if st.button("🗑️ Clear Scan", key="nf_scan_clear", use_container_width=True):
+                        if st.button("🗑️ Clear Scan", key="nf_scan_clear", width='stretch'):
                             st.session_state["nf_scan_result"] = None
                             st.rerun()
 
@@ -7039,7 +6736,7 @@ stop him from selling. Court? How long? Cost?""",
         convert_btn = st.button(
             "✨ Convert Notes",
             type="primary",
-            use_container_width=True,
+            width='stretch',
             disabled=not notes_input.strip(),
             key="notes_convert_btn",
         )
@@ -7091,14 +6788,14 @@ Client: {client_name or '[CLIENT]'} | Ref: {matter_ref or '[REF]'}""",
                 "📥 TXT",
                 export_txt(result, output_types[output_type]),
                 f"{fname}.txt", "text/plain",
-                key="notes_dl_txt", use_container_width=True,
+                key="notes_dl_txt", width='stretch',
             )
         with ex2:
             st.download_button(
                 "📥 HTML",
                 export_html(result, output_types[output_type]),
                 f"{fname}.html", "text/html",
-                key="notes_dl_html", use_container_width=True,
+                key="notes_dl_html", width='stretch',
             )
         with ex3:
             safe_pdf_download(result, output_types[output_type], fname, "notes_dl_pdf")
@@ -7128,7 +6825,7 @@ Client: {client_name or '[CLIENT]'} | Ref: {matter_ref or '[REF]'}""",
                 )
             with sc2:
                 if st.button("💾 Save", key="notes_save_case_btn",
-                             type="primary", use_container_width=True):
+                             type="primary", width='stretch'):
                     idx = case_names.index(sel)
                     save_analysis_to_case(
                         cases[idx]["id"],
@@ -7246,7 +6943,7 @@ def render_profile():
                 "📬 Send Reminder Emails for All Upcoming Hearings",
                 key="send_reminders_btn",
                 type="primary",
-                use_container_width=True,
+                width='stretch',
             ):
                 sent, failed = 0, 0
                 firm = get_firm_name()
@@ -7376,14 +7073,14 @@ display:flex;justify-content:space-between;align-items:center;">
 </div>""", unsafe_allow_html=True)
                     if not is_current:
                         if st.button(f"🚫 Revoke Session {i+1}", key=f"revoke_sess_{i}",
-                                     use_container_width=True):
+                                     width='stretch'):
                             get_db().revoke_session_token(sess["token"])
                             st.success("✅ Session revoked.")
                             st.rerun()
 
             st.markdown("")
             if st.button("🚫 Sign Out All Other Devices", key="revoke_all_others",
-                         use_container_width=True):
+                         width='stretch'):
                 db2 = get_db()
                 all_sess = db2.get_user_sessions(uid)
                 for sess in all_sess:
@@ -7396,7 +7093,7 @@ display:flex;justify-content:space-between;align-items:center;">
         st.markdown("##### 🚪 Sign Out")
         st.caption("Signs you out of this device. Your data is saved.")
         if st.button("🚪 Sign Out Now", key="profile_logout_btn",
-                     use_container_width=True, type="primary"):
+                     width='stretch', type="primary"):
             do_logout()
 
     # ── Data Management ──
@@ -7406,7 +7103,7 @@ display:flex;justify-content:space-between;align-items:center;">
         # Backup
         st.markdown("##### 📥 Export Full Backup")
         st.caption("Downloads all cases, clients, billing, chat history, templates, references, profile, and cost logs as a single JSON file.")
-        if st.button("📦 Generate Full Backup", key="profile_backup_btn", use_container_width=True, type="primary"):
+        if st.button("📦 Generate Full Backup", key="profile_backup_btn", width='stretch', type="primary"):
             export_data = {
                 "export_date": datetime.now().isoformat(),
                 "version": "8.0",
@@ -7426,7 +7123,7 @@ display:flex;justify-content:space-between;align-items:center;">
                 json.dumps(export_data, indent=2, default=str),
                 f"lexiassist_full_backup_{datetime.now():%Y%m%d_%H%M}.json",
                 "application/json", key="profile_dl_backup",
-                use_container_width=True,
+                width='stretch',
             )
 
         st.markdown("---")
@@ -7449,7 +7146,7 @@ display:flex;justify-content:space-between;align-items:center;">
                     </div>""", unsafe_allow_html=True)
 
                     if st.button("⚠️ Restore This Backup (Overwrites Current Data)", type="primary",
-                                 key="confirm_restore_btn", use_container_width=True):
+                                 key="confirm_restore_btn", width='stretch'):
                         for k in ["cases", "clients", "time_entries", "invoices", "chat_history",
                                    "custom_templates", "custom_limitation_periods", "custom_maxims"]:
                             if k in raw:
@@ -7493,13 +7190,13 @@ display:flex;justify-content:space-between;align-items:center;">
         st.caption("These actions cannot be undone. Export a backup first!")
         dz1, dz2 = st.columns(2)
         with dz1:
-            if st.button("🗑️ Clear All Chat History", key="clear_all_history", use_container_width=True):
+            if st.button("🗑️ Clear All Chat History", key="clear_all_history", width='stretch'):
                 st.session_state.chat_history = []
                 persist("chat_history")
                 st.success("✅ Chat history cleared.")
                 st.rerun()
         with dz2:
-            if st.button("🗑️ Reset All Data", key="reset_all_data", type="secondary", use_container_width=True):
+            if st.button("🗑️ Reset All Data", key="reset_all_data", type="secondary", width='stretch'):
                 for k in ["cases", "clients", "time_entries", "invoices", "chat_history",
                            "custom_templates", "custom_limitation_periods", "custom_maxims"]:
                     st.session_state[k] = []
@@ -7552,7 +7249,7 @@ def render_fee_calculator():
             include_vat = st.checkbox("Add 7.5% VAT on fees", value=True, key="land_vat_chk")
             show_breakdown = st.checkbox("Show band-by-band breakdown", value=True, key="land_bband")
 
-        if st.button("🔢 Calculate Fees", type="primary", key="land_calc_btn", use_container_width=True):
+        if st.button("🔢 Calculate Fees", type="primary", key="land_calc_btn", width='stretch'):
             st.session_state["lf_value"] = land_value
             st.session_state["lf_vat"] = include_vat
 
@@ -7599,7 +7296,7 @@ def render_fee_calculator():
                 if include_vat:
                     df.loc[len(df)] = {"Band": "VAT (7.5%)", "Taxable Amount": "", "Rate": "7.5%", "Fee": fmt_currency(vat)}
                 df.loc[len(df)] = {"Band": "TOTAL", "Taxable Amount": "", "Rate": "", "Fee": fmt_currency(total)}
-                st.dataframe(df, use_container_width=True, hide_index=True)
+                st.dataframe(df, width='stretch', hide_index=True)
 
             # Store for fee note tab
             st.session_state["fn_land_fee"] = base_fee
@@ -7677,7 +7374,7 @@ def render_fee_calculator():
             )
 
             if st.button("🔢 Calculate Stamp Duty", type="primary",
-                         key="sd_calc_btn", use_container_width=True):
+                         key="sd_calc_btn", width='stretch'):
                 st.session_state["sd_result"] = duty
 
             sd_result = st.session_state.get("sd_result", None)
@@ -7733,7 +7430,7 @@ border-radius:0.4rem;margin-top:0.5rem;font-size:0.9rem;">
             )
             st.caption(f"Claim: **{fmt_currency(claim_val)}**")
 
-        if st.button("🔢 Get Filing Fees", type="primary", key="cf_calc_btn", use_container_width=True):
+        if st.button("🔢 Get Filing Fees", type="primary", key="cf_calc_btn", width='stretch'):
             st.session_state["cf_result"] = (court_key, claim_val)
 
         cf_result = st.session_state.get("cf_result", None)
@@ -7765,7 +7462,7 @@ border-radius:0.4rem;margin-top:0.5rem;font-size:0.9rem;">
                     "Filing Fee": fmt_currency(band["fee"]),
                 })
             import pandas as pd
-            st.dataframe(pd.DataFrame(band_rows), use_container_width=True, hide_index=True)
+            st.dataframe(pd.DataFrame(band_rows), width='stretch', hide_index=True)
 
             # Other cost estimates
             st.markdown("##### 💰 Estimated Total Costs to File")
@@ -7825,7 +7522,7 @@ border-radius:0.4rem;margin-top:0.5rem;font-size:0.9rem;">
                                 placeholder="E.g. Includes perfection of title, CAC searches, preparation of Deed of Assignment, and obtaining Governor's Consent.")
 
         gen_btn = st.button("🧾 Generate Fee Note", type="primary",
-                            key="fn_gen_btn", use_container_width=True,
+                            key="fn_gen_btn", width='stretch',
                             disabled=not (fn_client.strip() and fn_matter.strip()))
 
         if gen_btn:
@@ -7922,10 +7619,10 @@ becomes more complex than currently anticipated.
             fne1, fne2, fne3, fne4 = st.columns(4)
             with fne1:
                 st.download_button("📥 TXT", export_txt(fn_generated, "Professional Fee Note"),
-                    f"{fn_fname}.txt", "text/plain", key="fn_dl_txt", use_container_width=True)
+                    f"{fn_fname}.txt", "text/plain", key="fn_dl_txt", width='stretch')
             with fne2:
                 st.download_button("📥 HTML", export_html(fn_generated, "Professional Fee Note"),
-                    f"{fn_fname}.html", "text/html", key="fn_dl_html", use_container_width=True)
+                    f"{fn_fname}.html", "text/html", key="fn_dl_html", width='stretch')
             with fne3:
                 safe_pdf_download(fn_generated, "Professional Fee Note", fn_fname, "fn_dl_pdf")
             with fne4:
@@ -8007,7 +7704,7 @@ XYZ claims ABC refused to pay the last instalment of ₦10M. ABC disputes this."
     st.info(f"Mode: {RESPONSE_MODES[mode]['label']}")
     sa_btn = st.button(
         "🤝 Generate Settlement Strategy",
-        type="primary", use_container_width=True, key="sa_gen_btn",
+        type="primary", width='stretch', key="sa_gen_btn",
         disabled=not (sa_facts.strip() and sa_instructing.strip()),
     )
 
@@ -8089,7 +7786,7 @@ padding:1.5rem;line-height:1.8;white-space:pre-wrap;font-size:0.95rem;">
                     key="sa_save_case_sel")
             with sv2:
                 st.markdown("<br>", unsafe_allow_html=True)
-                if st.button("💾 Save", key="sa_save_btn", type="primary", use_container_width=True):
+                if st.button("💾 Save", key="sa_save_btn", type="primary", width='stretch'):
                     save_analysis_to_case(sc_id, f"[Settlement] {matter_label}", result, "advisory", mode)
                     st.success("✅ Saved to case.")
 
@@ -8098,16 +7795,16 @@ padding:1.5rem;line-height:1.8;white-space:pre-wrap;font-size:0.95rem;">
         e1, e2, e3, e4 = st.columns(4)
         with e1:
             st.download_button("📥 TXT", export_txt(result, f"Settlement Strategy — {matter_label}"),
-                f"{fname}.txt", "text/plain", key="sa_dl_txt", use_container_width=True)
+                f"{fname}.txt", "text/plain", key="sa_dl_txt", width='stretch')
         with e2:
             st.download_button("📥 HTML", export_html(result, f"Settlement Strategy — {matter_label}"),
-                f"{fname}.html", "text/html", key="sa_dl_html", use_container_width=True)
+                f"{fname}.html", "text/html", key="sa_dl_html", width='stretch')
         with e3:
             safe_pdf_download(result, f"Settlement Strategy — {matter_label}", fname, "sa_dl_pdf")
         with e4:
             safe_docx_download(result, f"Settlement Strategy — {matter_label}", fname, "sa_dl_docx", doc_type="settlement", meta={"matter": matter_label})
 
-        if st.button("🗑️ Clear", key="sa_clear_btn", use_container_width=True):
+        if st.button("🗑️ Clear", key="sa_clear_btn", width='stretch'):
             st.session_state["sa_result"] = ""
             st.rerun()
 
@@ -8189,7 +7886,7 @@ is a company with 3 directors. No prior relationship with vendor.""",
 
     dd_btn = st.button(
         f"🔎 Generate Due Diligence Checklist",
-        type="primary", use_container_width=True, key="dd_gen_btn",
+        type="primary", width='stretch', key="dd_gen_btn",
         disabled=not dd_description.strip(),
     )
 
@@ -8237,7 +7934,7 @@ padding:1.8rem;line-height:1.85;white-space:pre-wrap;font-size:0.93rem;">
             with dv2:
                 st.markdown("<br>", unsafe_allow_html=True)
                 if st.button("💾 Save to Case", key="dd_save_btn",
-                             type="primary", use_container_width=True):
+                             type="primary", width='stretch'):
                     save_analysis_to_case(dd_case_id, f"[DD Checklist] {dd_label}",
                                           result, "advisory", mode)
                     st.success("✅ Saved to case file.")
@@ -8247,16 +7944,16 @@ padding:1.8rem;line-height:1.85;white-space:pre-wrap;font-size:0.93rem;">
         de1, de2, de3, de4 = st.columns(4)
         with de1:
             st.download_button("📥 TXT", export_txt(result, f"Due Diligence — {dd_label}"),
-                f"{fname}.txt", "text/plain", key="dd_dl_txt", use_container_width=True)
+                f"{fname}.txt", "text/plain", key="dd_dl_txt", width='stretch')
         with de2:
             st.download_button("📥 HTML", export_html(result, f"Due Diligence — {dd_label}"),
-                f"{fname}.html", "text/html", key="dd_dl_html", use_container_width=True)
+                f"{fname}.html", "text/html", key="dd_dl_html", width='stretch')
         with de3:
             safe_pdf_download(result, f"Due Diligence — {dd_label}", fname, "dd_dl_pdf")
         with de4:
             safe_docx_download(result, f"Due Diligence — {dd_label}", fname, "dd_dl_docx", doc_type="due_diligence", meta={"subject": dd_label})
 
-        if st.button("🗑️ Clear", key="dd_clear_btn", use_container_width=True):
+        if st.button("🗑️ Clear", key="dd_clear_btn", width='stretch'):
             st.session_state["dd_result"] = ""
             st.rerun()
 
@@ -8320,7 +8017,7 @@ def render_user_management():
                     if not is_self:
                         new_role = "user" if user["role"] == "admin" else "admin"
                         role_btn_label = f"⬇️ Demote to User" if user["role"] == "admin" else "⬆️ Promote to Admin"
-                        if st.button(role_btn_label, key=f"um_role_{uid}", use_container_width=True):
+                        if st.button(role_btn_label, key=f"um_role_{uid}", width='stretch'):
                             db.update_user(uid, {"role": new_role})
                             st.success(f"✅ @{user['username']} is now {new_role}.")
                             st.rerun()
@@ -8329,7 +8026,7 @@ def render_user_management():
 
                 # Reset password
                 with act2:
-                    with st.popover(f"🔑 Reset Password", use_container_width=True):
+                    with st.popover(f"🔑 Reset Password", width='stretch'):
                         with st.form(f"reset_pw_{uid}"):
                             new_temp_pw = st.text_input("New Password", type="password", key=f"tmp_pw_{uid}")
                             if st.form_submit_button("✅ Set Password"):
@@ -8342,7 +8039,7 @@ def render_user_management():
                 # Delete user
                 with act3:
                     if not is_self:
-                        with st.popover(f"🗑️ Delete User", use_container_width=True):
+                        with st.popover(f"🗑️ Delete User", width='stretch'):
                             st.warning(f"Delete @{user['username']}? ALL their data will be permanently erased.")
                             if st.button(f"⚠️ Confirm Delete @{user['username']}",
                                          key=f"um_del_confirm_{uid}", type="primary"):
@@ -8394,8 +8091,8 @@ def render_user_management():
 # ═══════════════════════════════════════════════════════
 # MAIN ENTRY POINT
 # ═══════════════════════════════════════════════════════
-def _configure_genai(key: str):
-    genai.configure(api_key=key, transport="rest")
+def _get_genai_client(key: str):
+    return genai.Client(api_key=key)
 
 
 def add_client(data: dict):
@@ -8434,7 +8131,7 @@ def auto_connect():
     k = _resolve_api_key()
     if k:
         try:
-            _configure_genai(k)
+            # Validate key is non-empty; actual connection tested lazily in generate()
             st.session_state.api_key = k
             st.session_state.api_configured = True
             m = safe_secret("GEMINI_MODEL") or os.getenv("GEMINI_MODEL", "")
@@ -8518,24 +8215,23 @@ def generate(prompt: str, system: str, mode: str, task: str = "general") -> str:
     k = _resolve_api_key()
     if not k:
         return "⚠️ No API key configured. Please set up your key."
-    _configure_genai(k)
-
     mode_cfg = RESPONSE_MODES.get(mode, RESPONSE_MODES["standard"])
-    gen_config = {
-        "temperature": mode_cfg["temp"],
-        "top_p": 0.92,
-        "top_k": 40,
-        "max_output_tokens": mode_cfg["tokens"],
-    }
-
-    model_obj = genai.GenerativeModel(
-        st.session_state.gemini_model,
+    gen_config = _genai_types.GenerateContentConfig(
         system_instruction=system,
+        temperature=mode_cfg["temp"],
+        top_p=0.92,
+        top_k=40,
+        max_output_tokens=mode_cfg["tokens"],
     )
+    client = _get_genai_client(k)
 
     for attempt in range(3):
         try:
-            resp = model_obj.generate_content(prompt, generation_config=gen_config)
+            resp = client.models.generate_content(
+                model=st.session_state.gemini_model,
+                contents=prompt,
+                config=gen_config,
+            )
             if resp and resp.text:
                 # Log cost
                 cost = estimate_cost(prompt + system, resp.text)
@@ -8627,9 +8323,12 @@ def make_invoice(client_id: str):
 
 def manual_connect(key: str) -> bool:
     try:
-        _configure_genai(key)
-        model = genai.GenerativeModel(st.session_state.gemini_model)
-        model.generate_content("Test", generation_config={"max_output_tokens": 10})
+        client = _get_genai_client(key)
+        client.models.generate_content(
+            model=st.session_state.gemini_model,
+            contents="Test",
+            config=_genai_types.GenerateContentConfig(max_output_tokens=10),
+        )
         st.session_state.api_key = key
         st.session_state.api_configured = True
         return True
@@ -8937,23 +8636,11 @@ def main():
         f"{user_text} · ⚠️ AI-generated information — not legal advice — verify all citations independently"
     )
 
-    # ── Keep-Alive Ping ─────────────────────────────────────────────────────────
-    import streamlit.components.v1 as _components
-    _components.html(
-        """
-        <script>
-            (function () {
-                var INTERVAL = 10 * 60 * 1000;
-                function ping() {
-                    fetch(window.location.href, {
-                        method: 'GET', cache: 'no-store', credentials: 'same-origin'
-                    }).catch(function () {});
-                }
-                setInterval(ping, INTERVAL);
-            })();
-        </script>
-        """,
+    # ── Keep-Alive Ping (st.iframe replaces deprecated components.v1.html) ────
+    st.iframe(
+        src="about:blank",
         height=0,
+        scrolling=False,
     )
     # ────────────────────────────────────────────────────────────────────────────
 
