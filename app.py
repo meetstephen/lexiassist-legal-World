@@ -1017,152 +1017,224 @@ def get_theme_css(
 ) -> str:
     t = get_theme(theme_name)
 
-    # ── Accessibility overrides ──────────────────────────────────────────────
+    # ── Accessibility overrides ──────────────────────────────────────
     text_color = "#FFFFFF" if high_contrast else t["text"]
     text_sec   = "#CCCCCC" if high_contrast else t["text_secondary"]
     bg_color   = "#000000" if (high_contrast and t["bg"][1:3] < "33") else t["bg"]
     base_font  = round(16 * font_size_scale, 1)
 
+    # ── Light vs dark detection ──────────────────────────────────────
+    is_light       = int(t["card_bg"].lstrip("#")[0:2], 16) >= 0x77
+    is_dark_sidebar = int(t["sidebar_bg"].lstrip("#")[0:2], 16) < 0x44
+
+    # ── Shadow system (meaningful only on light themes) ──────────────
+    if is_light:
+        card_shadow       = "0 1px 3px rgba(0,0,0,0.05), 0 2px 10px rgba(0,0,0,0.06)"
+        card_hover_shadow = "0 4px 20px rgba(0,0,0,0.09), 0 2px 8px rgba(0,0,0,0.05)"
+        inset_border      = f"inset 0 0 0 1px {t['border']}"
+    else:
+        card_shadow       = f"0 0 0 1px {t['border']}"
+        card_hover_shadow = f"0 0 0 1px {t['accent']}55"
+        inset_border      = "none"
+
+    # ── Sidebar colours ──────────────────────────────────────────────
+    sb_text      = "#e6edf8" if is_dark_sidebar else t["text"]
+    sb_text_2    = "#8fa5c8" if is_dark_sidebar else t["text_secondary"]
+    sb_line      = f"rgba(255,255,255,0.07)" if is_dark_sidebar else f"{t['border']}"
+    sb_input_bg  = t["input_bg"]
+    sb_input_tx  = t["text"]
+    sb_hover_bg  = f"rgba(255,255,255,0.06)" if is_dark_sidebar else f"{t['bg_secondary']}"
+    sb_accent_bg = f"{t['accent']}22"
+
+    # ── Badge WCAG-safe colours ──────────────────────────────────────
+    badge_ok_bg   = "#dcfce7" if is_light else "#14532d55"
+    badge_ok_tx   = "#15803d" if is_light else "#4ade80"
+    badge_warn_bg = "#fef9c3" if is_light else "#713f1255"
+    badge_warn_tx = "#854d0e" if is_light else "#facc15"
+    badge_err_bg  = "#fee2e2" if is_light else "#7f1d1d55"
+    badge_err_tx  = "#b91c1c" if is_light else "#f87171"
+    badge_inf_bg  = f"{t['accent']}18"
+    badge_inf_tx  = t["accent"]
+
+    # ── Placeholder & disclaimer colours ────────────────────────────
+    placeholder_col = "rgba(30,46,80,0.40)" if is_light else "rgba(200,215,240,0.38)"
+    disclaimer_bg   = t["warning"] + ("15" if is_light else "20")
+    disclaimer_tx   = "#78350f" if is_light else text_sec
+
+    # ── Reduce-motion override ───────────────────────────────────────
     motion_css = ""
     if reduce_motion:
         motion_css = """
         *, *::before, *::after {
-            animation-duration: 0s !important;
-            animation-delay: 0s !important;
-            transition-duration: 0s !important;
-            transition-delay: 0s !important;
+            animation-duration: 0.01ms !important;
+            animation-iteration-count: 1 !important;
+            transition-duration: 0.01ms !important;
         }"""
 
-    # ── Determine if this is a light or dark theme ───────────────────────────
-    # Used to pick WCAG-safe badge/disclaimer text colours
-    is_light = int(t["card_bg"].lstrip("#")[0:2], 16) >= 0x77
-
-    # Badge colours — hardcoded for WCAG AA regardless of theme
-    badge_ok_bg    = "#d1fae5" if is_light else "#052e1644"
-    badge_ok_tx    = "#065f46" if is_light else "#4ade80"
-    badge_warn_bg  = "#fef3c7" if is_light else "#78350f44"
-    badge_warn_tx  = "#92400e" if is_light else "#fbbf24"
-    badge_err_bg   = "#fee2e2" if is_light else "#7f1d1d44"
-    badge_err_tx   = "#991b1b" if is_light else "#f87171"
-    disclaimer_bg  = t["warning"] + ("18" if is_light else "22")
-    disclaimer_tx  = "#78350f" if is_light else text_sec
-
-    # ── Sidebar: dark sidebars use light text; light sidebars use theme text ─
-    is_dark_sidebar = int(t["sidebar_bg"].lstrip("#")[0:2], 16) < 0x44
-    sb_text  = "#e8edf4" if is_dark_sidebar else t["text"]
-    sb_muted = "#a0bcd8" if is_dark_sidebar else t["text_secondary"]
-    sb_line  = f"{t['accent']}44" if is_dark_sidebar else f"{t['accent']}33"
-    # Text INSIDE sidebar inputs must always contrast against their own bg
-    sb_input_text = t["text"]   # dark on white input OR light on dark input
-    sb_input_bg   = t["input_bg"]
-
     return f"""
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:ital,wght@0,300;0,400;0,500;0,600;0,700;0,800;1,400&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
 <style>
-/* ══ LexiAssist v8.0 — Theme: {t['display_name']} ══════════════════════════ */
+/* ═══ LexiAssist v8.0 — Elite Theme: {t['display_name']} ════════════════════ */
 
-/* ── CSS custom properties ──────────────────────────────────────────────── */
+/* ── 1. CSS Custom Properties ──────────────────────────────────────────────── */
 :root {{
-    --la-bg:             {bg_color};
-    --la-bg-secondary:   {t['bg_secondary']};
-    --la-card-bg:        {t['card_bg']};
-    --la-border:         {t['border']};
-    --la-text:           {text_color};
-    --la-text-secondary: {text_sec};
-    --la-accent:         {t['accent']};
-    --la-accent-2:       {t['accent_secondary']};
-    --la-positive:       {t['positive']};
-    --la-negative:       {t['negative']};
-    --la-warning:        {t['warning']};
-    --la-input-bg:       {t['input_bg']};
-    --la-sidebar-bg:     {t['sidebar_bg']};
+    --la-bg:         {bg_color};
+    --la-bg-2:       {t['bg_secondary']};
+    --la-card:       {t['card_bg']};
+    --la-border:     {t['border']};
+    --la-text:       {text_color};
+    --la-text-2:     {text_sec};
+    --la-accent:     {t['accent']};
+    --la-accent-2:   {t['accent_secondary']};
+    --la-pos:        {t['positive']};
+    --la-neg:        {t['negative']};
+    --la-warn:       {t['warning']};
+    --la-input:      {t['input_bg']};
+    --la-sidebar:    {t['sidebar_bg']};
+
+    --r-xs:  4px;
+    --r-sm:  6px;
+    --r-md:  10px;
+    --r-lg:  14px;
+    --r-xl:  18px;
+    --r-2xl: 24px;
+
+    --ease:    cubic-bezier(0.4, 0, 0.2, 1);
+    --ease-out: cubic-bezier(0, 0, 0.2, 1);
+    --t-fast:  0.12s var(--ease);
+    --t-base:  0.18s var(--ease);
+    --t-slow:  0.28s var(--ease);
+
+    --font-body:  'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, 'SF Pro Display',
+                  'Segoe UI Variable Display', 'Segoe UI', system-ui, sans-serif;
+    --font-mono:  'JetBrains Mono', 'Fira Code', 'Cascadia Code', 'SF Mono', 'Consolas', monospace;
+
+    --card-shadow:       {card_shadow};
+    --card-hover-shadow: {card_hover_shadow};
 }}
 
 {motion_css}
 
-/* ── Global app shell ───────────────────────────────────────────────────── */
+/* ── 2. Global shell & text rendering ──────────────────────────────────────── */
 .stApp {{
     background-color: var(--la-bg) !important;
     color: var(--la-text) !important;
+    font-family: var(--font-body) !important;
     font-size: {base_font}px !important;
-    font-family: "Inter", "Segoe UI", Arial, sans-serif;
+    font-feature-settings: "kern" 1, "liga" 1, "calt" 1 !important;
+    -webkit-font-smoothing: antialiased !important;
+    -moz-osx-font-smoothing: grayscale !important;
+    text-rendering: optimizeLegibility !important;
 }}
 
-/* ── Comprehensive Streamlit text element coverage ─────────────────────── */
-/* Targets every element Streamlit's own CSS touches so nothing slips through */
-p, li, td, th, caption, figcaption,
+/* ── 3. Text elements — universal sharp rendering ───────────────────────────── */
+p, li, td, th, caption, figcaption, span, label, div,
 .stMarkdown, .stMarkdown p, .stMarkdown li, .stMarkdown span,
-[data-testid="stMarkdownContainer"] p,
-[data-testid="stMarkdownContainer"] li,
-[data-testid="stMarkdownContainer"] span,
-[data-testid="stText"],
-[data-testid="stCaptionContainer"],
-.stRadio label,   .stRadio div,
-.stCheckbox label,.stCheckbox div,
+[data-testid="stMarkdownContainer"] *,
+[data-testid="stText"], [data-testid="stCaptionContainer"],
+.stRadio label, .stRadio div, .stCheckbox label, .stCheckbox div,
 .stSelectbox label, .stMultiSelect label,
-.stTextInput label, .stTextArea label,
-.stNumberInput label, .stDateInput label,
-.stSlider label,
+.stTextInput label, .stTextArea label, .stNumberInput label,
+.stDateInput label, .stSlider label,
 .stFileUploader label, .stFileUploader span,
 .stExpander label, .stExpander p {{
     color: var(--la-text) !important;
+    -webkit-font-smoothing: antialiased !important;
+    -moz-osx-font-smoothing: grayscale !important;
 }}
 
-/* Secondary / muted text */
-.stCaption, [data-testid="stCaptionContainer"] p,
-small, .stHelp {{
-    color: var(--la-text-secondary) !important;
+.stCaption, [data-testid="stCaptionContainer"] p, small, .stHelp {{
+    color: var(--la-text-2) !important;
+    -webkit-font-smoothing: antialiased !important;
 }}
 
-/* ── Headings (main content area) ───────────────────────────────────────── */
+/* ── 4. Headings — tight tracking, premium weight ───────────────────────────── */
 h1, h2, h3, h4, h5, h6,
 .stMarkdown h1, .stMarkdown h2, .stMarkdown h3,
 .stMarkdown h4, .stMarkdown h5, .stMarkdown h6 {{
     color: var(--la-text) !important;
+    font-family: var(--font-body) !important;
+    letter-spacing: -0.025em !important;
+    line-height: 1.2 !important;
+    -webkit-font-smoothing: antialiased !important;
+}}
+.stMarkdown h1 {{ font-size: 1.75rem !important; font-weight: 800 !important; }}
+.stMarkdown h2 {{ font-size: 1.35rem !important; font-weight: 700 !important; }}
+.stMarkdown h3 {{ font-size: 1.1rem  !important; font-weight: 600 !important; }}
+.stMarkdown h4 {{ font-size: 0.95rem !important; font-weight: 600 !important; }}
+code, pre, .stMarkdown code, .stMarkdown pre {{
+    font-family: var(--font-mono) !important;
+    font-size: 0.88em !important;
+    -webkit-font-smoothing: antialiased !important;
 }}
 
-/* ── Hero & page-header — ALWAYS white text, overrides heading rule above ─ */
-.hero, .hero h1, .hero h2, .hero h3, .hero p,
-.hero *, .hero span, .hero label {{
-    color: white !important;
+/* ── 5. Hero — refined gradient header ──────────────────────────────────────── */
+.hero, .hero *, .hero h1, .hero h2, .hero p, .hero span, .hero label {{
+    color: #ffffff !important;
+    -webkit-font-smoothing: antialiased !important;
 }}
 .hero {{
     background: {t['header_gradient']};
-    padding: 2.5rem 2.4rem; border-radius: 12px;
-    margin-bottom: 1.6rem;
-    border-bottom: 3px solid {t['accent_secondary']};
+    padding: 2.4rem 2.6rem 2.2rem;
+    border-radius: var(--r-xl);
+    margin-bottom: 1.8rem;
+    border: 1px solid rgba(255,255,255,0.08);
+    position: relative;
+    overflow: hidden;
+}}
+.hero::before {{
+    content: '';
+    position: absolute; inset: 0;
+    background: repeating-linear-gradient(
+        -45deg, transparent, transparent 40px,
+        rgba(255,255,255,0.015) 40px, rgba(255,255,255,0.015) 41px
+    );
+    pointer-events: none;
 }}
 .hero h1 {{
-    font-size: 2.2rem; font-weight: 800;
-    margin: 0; letter-spacing: -0.02em;
+    font-size: 2.15rem !important; font-weight: 800 !important;
+    letter-spacing: -0.035em !important; margin: 0 !important;
+    line-height: 1.1 !important;
 }}
-.hero p {{ font-size: 1.05rem; opacity: 0.92; margin-top: 0.5rem; }}
+.hero p {{
+    font-size: 1rem !important; opacity: 0.85; margin: 0.55rem 0 0 0 !important;
+    font-weight: 400 !important; line-height: 1.55 !important;
+    letter-spacing: 0.005em !important;
+}}
 
-.page-header, .page-header h2, .page-header p,
-.page-header *, .page-header span {{
-    color: white !important;
+/* ── 6. Page sub-header ─────────────────────────────────────────────────────── */
+.page-header, .page-header *, .page-header h2, .page-header p {{
+    color: #ffffff !important;
+    -webkit-font-smoothing: antialiased !important;
 }}
 .page-header {{
     background: {t['header_gradient']};
-    padding: 1.4rem 1.8rem; border-radius: 10px;
-    margin-bottom: 1.4rem;
-    border-bottom: 3px solid {t['accent_secondary']};
+    padding: 1.3rem 1.8rem 1.2rem;
+    border-radius: var(--r-lg);
+    margin-bottom: 1.5rem;
+    border: 1px solid rgba(255,255,255,0.07);
 }}
-.page-header h2 {{ margin: 0; font-size: 1.5rem; font-weight: 700; }}
-.page-header p  {{ margin: 0.3rem 0 0 0; opacity: 0.92; font-size: 0.95rem; }}
+.page-header h2 {{
+    margin: 0 !important; font-size: 1.4rem !important;
+    font-weight: 700 !important; letter-spacing: -0.025em !important;
+}}
+.page-header p {{
+    margin: 0.3rem 0 0 0 !important; opacity: 0.82; font-size: 0.9rem !important;
+    letter-spacing: 0.005em !important; font-weight: 400 !important;
+}}
 
-/* ── Sidebar ────────────────────────────────────────────────────────────── */
+/* ── 7. Sidebar — premium dark panel ────────────────────────────────────────── */
 section[data-testid="stSidebar"] {{
-    background-color: {t['sidebar_bg']} !important;
-    border-right: 1px solid {sb_line};
+    background: {t['sidebar_bg']} !important;
+    border-right: 1px solid {sb_line} !important;
 }}
-/* Sidebar labels, headings, paragraphs → sidebar text colour */
 section[data-testid="stSidebar"] p,
 section[data-testid="stSidebar"] span,
 section[data-testid="stSidebar"] label,
-section[data-testid="stSidebar"] h1,
-section[data-testid="stSidebar"] h2,
-section[data-testid="stSidebar"] h3,
-section[data-testid="stSidebar"] h4,
+section[data-testid="stSidebar"] h1, section[data-testid="stSidebar"] h2,
+section[data-testid="stSidebar"] h3, section[data-testid="stSidebar"] h4,
 section[data-testid="stSidebar"] li,
 section[data-testid="stSidebar"] .stMarkdown,
 section[data-testid="stSidebar"] [data-testid="stMarkdownContainer"] p,
@@ -1172,440 +1244,491 @@ section[data-testid="stSidebar"] .stCheckbox label,
 section[data-testid="stSidebar"] .stSelectbox label,
 section[data-testid="stSidebar"] .stSlider label {{
     color: {sb_text} !important;
+    -webkit-font-smoothing: antialiased !important;
 }}
 section[data-testid="stSidebar"] .stCaption,
 section[data-testid="stSidebar"] small,
 section[data-testid="stSidebar"] [data-testid="stCaptionContainer"] p {{
-    color: {sb_muted} !important; font-size: 0.78rem;
+    color: {sb_text_2} !important;
+    font-size: 0.75rem !important;
+    -webkit-font-smoothing: antialiased !important;
 }}
 section[data-testid="stSidebar"] hr {{
-    border-color: {sb_line} !important; margin: 0.6rem 0;
+    border-color: {sb_line} !important; margin: 0.5rem 0 !important;
 }}
-/* Sidebar buttons — see full rule in the Buttons section above */
-/* ── CRITICAL: sidebar INPUT TEXT must contrast against the input background */
-/* Do NOT inherit the sidebar light text colour on white/light input fields   */
 section[data-testid="stSidebar"] .stTextInput input,
 section[data-testid="stSidebar"] .stTextArea textarea,
 section[data-testid="stSidebar"] .stSelectbox div[data-baseweb="select"] *,
 section[data-testid="stSidebar"] .stMultiSelect div[data-baseweb="select"] *,
 section[data-testid="stSidebar"] .stNumberInput input {{
-    color: {sb_input_text} !important;
+    color: {sb_input_tx} !important;
     background-color: {sb_input_bg} !important;
+    -webkit-font-smoothing: antialiased !important;
 }}
-
-/* ── Cards ──────────────────────────────────────────────────────────────── */
-.stat-card {{
-    background: var(--la-card-bg);
-    border: 1px solid var(--la-border);
-    border-top: 3px solid var(--la-accent);
-    border-radius: 10px; padding: 1.2rem 1rem; text-align: center;
-}}
-.stat-card .stat-value {{
-    font-size: 1.9rem; font-weight: 800;
-    color: var(--la-accent) !important; line-height: 1;
-}}
-.stat-card .stat-label {{
-    font-size: 0.8rem; color: var(--la-text-secondary) !important;
-    margin-top: 0.35rem; text-transform: uppercase; letter-spacing: 0.05em;
-}}
-.custom-card {{
-    background: var(--la-card-bg);
-    border: 1px solid var(--la-border);
-    border-left: 4px solid var(--la-accent);
-    border-radius: 8px; padding: 1.1rem 1.3rem; margin-bottom: 0.8rem;
-}}
-.custom-card h4 {{
-    margin: 0 0 0.35rem 0; color: var(--la-accent) !important;
-    font-size: 0.95rem; font-weight: 700;
-}}
-.custom-card p, .custom-card span {{
-    color: var(--la-text) !important;
-}}
-.login-card {{
-    background: var(--la-card-bg);
-    border: 1px solid var(--la-border);
-    border-top: 4px solid var(--la-accent);
-    border-radius: 12px; padding: 2rem 2.2rem;
-}}
-.history-item {{
-    background: var(--la-card-bg); border: 1px solid var(--la-border);
-    border-radius: 7px; padding: 0.75rem 1rem;
-    margin-bottom: 0.45rem; cursor: pointer; transition: border-color 0.15s;
-}}
-.history-item:hover {{ border-color: var(--la-accent); }}
-.tool-card {{
-    background: var(--la-card-bg); border: 1px solid var(--la-border);
-    border-radius: 7px; padding: 1rem 1.1rem; margin-bottom: 0.55rem;
-}}
-
-/* ── AI response box ────────────────────────────────────────────────────── */
-.response-box {{
-    background: var(--la-card-bg);
-    border: 1px solid var(--la-border);
-    border-left: 4px solid var(--la-accent);
-    border-radius: 8px; padding: 1.8rem 2rem;
-    white-space: pre-wrap; line-height: 1.75; font-size: 0.94rem;
-    color: var(--la-text) !important;
-}}
-
-/* ── Disclaimer — WCAG-safe colours per theme mode ──────────────────────── */
-.disclaimer {{
-    background: {disclaimer_bg};
-    border-left: 4px solid {t['warning']};
-    border-radius: 4px; padding: 0.9rem 1.1rem;
-    margin-top: 1rem; font-size: 0.86rem;
-    color: {disclaimer_tx} !important;
-}}
-
-/* ── Badges — hardcoded for WCAG AA regardless of theme ─────────────────── */
-.badge {{
-    display: inline-block; padding: 0.18rem 0.65rem;
-    border-radius: 20px; font-size: 0.73rem;
-    font-weight: 600; letter-spacing: 0.02em;
-}}
-.badge-ok   {{ background: {badge_ok_bg};   color: {badge_ok_tx}  !important; }}
-.badge-warn {{ background: {badge_warn_bg}; color: {badge_warn_tx} !important; }}
-.badge-err  {{ background: {badge_err_bg};  color: {badge_err_tx}  !important; }}
-.badge-info {{ background: {t['accent']}22; color: var(--la-accent) !important; }}
-
-/* ── Inputs ─────────────────────────────────────────────────────────────── */
-.stTextInput input, .stTextArea textarea,
-.stSelectbox div[data-baseweb="select"] *,
-.stMultiSelect div[data-baseweb="select"] *,
-.stNumberInput input, .stDateInput input {{
-    background-color: var(--la-input-bg) !important;
-    color: var(--la-text) !important;
-    border: 1px solid var(--la-border) !important;
-    border-radius: 7px !important;
-}}
-.stTextInput input:focus, .stTextArea textarea:focus {{
-    border-color: var(--la-accent) !important;
-    box-shadow: 0 0 0 2px {t['accent']}33 !important;
-}}
-/* Input label text (sits above the box) */
-.stTextInput > label, .stTextArea > label,
-.stSelectbox > label, .stNumberInput > label,
-.stMultiSelect > label, .stDateInput > label,
-.stSlider > label, .stFileUploader > label {{
-    color: var(--la-text) !important;
-    font-weight: 500;
-}}
-
-/* ── Placeholder text — always clearly visible against input background ─── */
-/* Covers main area AND sidebar query/text boxes */
-.stTextInput input::placeholder,
-.stTextArea textarea::placeholder {{
-    color: {("rgba(26,46,74,0.55)" if is_light else "rgba(200,215,235,0.60)")} !important;
-    opacity: 1 !important;
-    font-style: italic;
-}}
-section[data-testid="stSidebar"] .stTextInput input::placeholder,
-section[data-testid="stSidebar"] .stTextArea textarea::placeholder {{
-    color: {("rgba(26,46,74,0.55)" if is_light else "rgba(200,215,235,0.60)")} !important;
-    opacity: 1 !important;
-    font-style: italic;
-}}
-
-/* ── File uploader — box text, "Browse files" hint, drag-drop instructions ─ */
-[data-testid="stFileUploader"] section,
-[data-testid="stFileUploader"] section p,
-[data-testid="stFileUploader"] section span,
-[data-testid="stFileUploader"] section small,
-[data-testid="stFileUploader"] div[data-testid="stMarkdownContainer"] p,
-[data-testid="stFileDropzoneInstructions"],
-[data-testid="stFileDropzoneInstructions"] span,
-[data-testid="stFileDropzoneInstructions"] small {{
-    color: var(--la-text) !important;
-    opacity: 1 !important;
-}}
-/* The "Drag and drop / Browse files" secondary helper text */
-[data-testid="stFileUploader"] small,
-[data-testid="stFileUploader"] .stCaption {{
-    color: var(--la-text-secondary) !important;
-    font-size: 0.82rem !important;
-    opacity: 1 !important;
-}}
-/* Sidebar file uploader — ensure it inherits contrasting text, not washed-out dark sidebar colour */
 section[data-testid="stSidebar"] [data-testid="stFileUploader"] section p,
 section[data-testid="stSidebar"] [data-testid="stFileUploader"] section span,
 section[data-testid="stSidebar"] [data-testid="stFileDropzoneInstructions"],
 section[data-testid="stSidebar"] [data-testid="stFileDropzoneInstructions"] span {{
-    color: {sb_input_text} !important;
-    opacity: 1 !important;
+    color: {sb_input_tx} !important;
 }}
-section[data-testid="stSidebar"] [data-testid="stFileUploader"] small {{
-    color: {sb_muted} !important;
-    opacity: 1 !important;
+section[data-testid="stSidebar"] [data-testid="stFileUploader"] small,
+section[data-testid="stSidebar"] .stCaption p {{
+    color: {sb_text_2} !important;
+}}
+section[data-testid="stSidebar"] .stButton > button {{
+    background: {sb_hover_bg} !important;
+    border: 1px solid {sb_line} !important;
+    color: {sb_text} !important;
+    border-radius: var(--r-md) !important;
+    font-weight: 500 !important;
+    transition: var(--t-base) !important;
+}}
+section[data-testid="stSidebar"] .stButton > button:hover {{
+    background: {sb_accent_bg} !important;
+    border-color: {t['accent']}55 !important;
 }}
 
-/* ── Sidebar explainer / helper / caption text — boosted contrast ────────── */
-/* Covers query box helper text, section descriptions, st.caption() in sidebar */
-section[data-testid="stSidebar"] .stCaption p,
-section[data-testid="stSidebar"] [data-testid="stCaptionContainer"] p,
-section[data-testid="stSidebar"] small {{
-    color: {sb_muted} !important;
-    font-size: 0.80rem !important;
-    opacity: 1 !important;
+/* ── 8. Buttons ──────────────────────────────────────────────────────────────── */
+.stButton > button {{
+    font-family: var(--font-body) !important;
+    -webkit-font-smoothing: antialiased !important;
+    border-radius: var(--r-md) !important;
+    font-weight: 500 !important;
+    letter-spacing: 0.005em !important;
+    transition: var(--t-base) !important;
+    transform: translateZ(0);
 }}
-
-/* ── Buttons ────────────────────────────────────────────────────────────── */
-/* Primary button: accent background, always white or near-white text for contrast */
 .stButton > button[kind="primary"],
 .stButton > button[data-testid="baseButton-primary"] {{
-    background-color: var(--la-accent) !important;
+    background: {t['accent']} !important;
     color: #ffffff !important;
-    border: 2px solid transparent !important;
-    border-radius: 7px !important;
-    font-weight: 700 !important;
-    letter-spacing: 0.02em;
-    text-shadow: 0 1px 2px rgba(0,0,0,0.30);
-    box-shadow: 0 2px 6px rgba(0,0,0,0.22) !important;
+    border: none !important;
+    box-shadow: 0 1px 3px {t['accent']}55, 0 2px 10px {t['accent']}22 !important;
+    font-weight: 600 !important;
 }}
 .stButton > button[kind="primary"]:hover,
 .stButton > button[data-testid="baseButton-primary"]:hover {{
-    filter: brightness(1.12) !important;
-    box-shadow: 0 4px 12px rgba(0,0,0,0.28) !important;
+    filter: brightness(1.10) !important;
+    box-shadow: 0 2px 8px {t['accent']}66, 0 4px 18px {t['accent']}33 !important;
+    transform: translateY(-1px) !important;
 }}
-/* Secondary / default buttons: clearly readable in every theme */
+.stButton > button[kind="primary"]:active,
+.stButton > button[data-testid="baseButton-primary"]:active {{
+    filter: brightness(0.97) !important;
+    transform: translateY(0) !important;
+    box-shadow: 0 1px 3px {t['accent']}44 !important;
+}}
 .stButton > button[kind="secondary"],
 .stButton > button[data-testid="baseButton-secondary"] {{
-    background-color: var(--la-bg-secondary) !important;
+    background: transparent !important;
     color: var(--la-text) !important;
     border: 1px solid var(--la-border) !important;
-    border-radius: 7px !important;
-    font-weight: 600 !important;
+    font-weight: 500 !important;
 }}
-/* Fallback: any button not explicitly typed */
-.stButton > button {{
-    color: var(--la-text) !important;
-    border-radius: 7px !important;
+.stButton > button[kind="secondary"]:hover,
+.stButton > button[data-testid="baseButton-secondary"]:hover {{
+    background: var(--la-bg-2) !important;
+    border-color: {t['accent']}66 !important;
+    color: var(--la-accent) !important;
 }}
-/* Sidebar buttons: clear border, never invisible */
-section[data-testid="stSidebar"] .stButton > button {{
+.stButton > button:not([kind]) {{
     background: transparent !important;
-    border: 1px solid {sb_line} !important;
-    color: {sb_text} !important;
-    border-radius: 6px !important;
-    font-weight: 600 !important;
+    color: var(--la-text) !important;
+    border: 1px solid var(--la-border) !important;
+}}
+.stButton > button:focus:not(:active) {{
+    box-shadow: 0 0 0 3px {t['accent']}33 !important;
+    outline: none !important;
+}}
+.stDownloadButton > button {{
+    background: var(--la-bg-2) !important;
+    color: var(--la-text) !important;
+    border: 1px solid var(--la-border) !important;
+    border-radius: var(--r-md) !important;
+    font-family: var(--font-body) !important;
+    font-weight: 500 !important;
+    transition: var(--t-base) !important;
+    -webkit-font-smoothing: antialiased !important;
+}}
+.stDownloadButton > button:hover {{
+    border-color: var(--la-accent) !important;
+    color: var(--la-accent) !important;
 }}
 
-/* ── Tabs ───────────────────────────────────────────────────────────────── */
+/* ── 9. Inputs — precision styling ─────────────────────────────────────────── */
+.stTextInput input, .stTextArea textarea,
+.stNumberInput input, .stDateInput input {{
+    background-color: var(--la-input) !important;
+    color: var(--la-text) !important;
+    border: 1px solid var(--la-border) !important;
+    border-radius: var(--r-md) !important;
+    font-family: var(--font-body) !important;
+    font-size: {round(base_font * 0.94, 1)}px !important;
+    -webkit-font-smoothing: antialiased !important;
+    transition: border-color var(--t-fast), box-shadow var(--t-fast) !important;
+    padding: 0.45rem 0.8rem !important;
+}}
+.stTextInput input:focus, .stTextArea textarea:focus, .stNumberInput input:focus {{
+    border-color: var(--la-accent) !important;
+    box-shadow: 0 0 0 3px {t['accent']}25 !important;
+    outline: none !important;
+}}
+.stTextInput > label, .stTextArea > label, .stSelectbox > label,
+.stNumberInput > label, .stMultiSelect > label, .stDateInput > label,
+.stSlider > label, .stFileUploader > label {{
+    color: var(--la-text) !important;
+    font-weight: 500 !important;
+    font-size: 0.86rem !important;
+    letter-spacing: 0.01em !important;
+    -webkit-font-smoothing: antialiased !important;
+}}
+.stTextInput input::placeholder, .stTextArea textarea::placeholder {{
+    color: {placeholder_col} !important;
+    opacity: 1 !important;
+    font-style: italic !important;
+}}
+.stSelectbox div[data-baseweb="select"] *,
+.stMultiSelect div[data-baseweb="select"] * {{
+    background-color: var(--la-input) !important;
+    color: var(--la-text) !important;
+    border-color: var(--la-border) !important;
+    border-radius: var(--r-md) !important;
+    font-family: var(--font-body) !important;
+    -webkit-font-smoothing: antialiased !important;
+}}
+
+/* ── 10. File uploader ──────────────────────────────────────────────────────── */
+[data-testid="stFileUploader"] section,
+[data-testid="stFileUploader"] section p,
+[data-testid="stFileUploader"] section span,
+[data-testid="stFileDropzoneInstructions"],
+[data-testid="stFileDropzoneInstructions"] span,
+[data-testid="stFileDropzoneInstructions"] small {{
+    color: var(--la-text) !important;
+    -webkit-font-smoothing: antialiased !important;
+}}
+[data-testid="stFileUploader"] small,
+[data-testid="stFileUploader"] .stCaption {{
+    color: var(--la-text-2) !important; font-size: 0.8rem !important;
+}}
+
+/* ── 11. Stat cards — metric display ───────────────────────────────────────── */
+.stat-card {{
+    background: var(--la-card);
+    border: 1px solid var(--la-border);
+    border-radius: var(--r-lg);
+    padding: 1.2rem 1rem 1.1rem;
+    text-align: center;
+    box-shadow: var(--card-shadow);
+    transition: box-shadow var(--t-base), transform var(--t-base);
+    position: relative; overflow: hidden;
+}}
+.stat-card::after {{
+    content: '';
+    position: absolute; top: 0; left: 10%; right: 10%; height: 2px;
+    background: linear-gradient(90deg, transparent, {t['accent']}88, transparent);
+    border-radius: 0 0 2px 2px;
+}}
+.stat-card .stat-value {{
+    font-size: 1.95rem !important; font-weight: 800 !important;
+    color: var(--la-accent) !important; line-height: 1 !important;
+    letter-spacing: -0.03em !important;
+    -webkit-font-smoothing: antialiased !important;
+    font-family: var(--font-body) !important;
+}}
+.stat-card .stat-label {{
+    font-size: 0.72rem !important; font-weight: 600 !important;
+    color: var(--la-text-2) !important; margin-top: 0.45rem !important;
+    text-transform: uppercase !important; letter-spacing: 0.08em !important;
+    -webkit-font-smoothing: antialiased !important;
+}}
+
+/* ── 12. Custom cards ───────────────────────────────────────────────────────── */
+.custom-card {{
+    background: var(--la-card);
+    border: 1px solid var(--la-border);
+    border-radius: var(--r-lg);
+    padding: 1.1rem 1.35rem;
+    margin-bottom: 0.7rem;
+    box-shadow: var(--card-shadow);
+    transition: box-shadow var(--t-base), border-color var(--t-base), transform var(--t-base);
+    position: relative;
+}}
+.custom-card::before {{
+    content: '';
+    position: absolute; left: 0; top: 20%; bottom: 20%;
+    width: 3px; border-radius: 0 2px 2px 0;
+    background: var(--la-accent); opacity: 0.8;
+}}
+.custom-card:hover {{
+    box-shadow: var(--card-hover-shadow) !important;
+    border-color: {t['accent']}44 !important;
+    transform: translateY(-1px);
+}}
+.custom-card h4 {{
+    margin: 0 0 0.3rem 0 !important; color: var(--la-text) !important;
+    font-size: 0.93rem !important; font-weight: 600 !important;
+    letter-spacing: -0.01em !important; -webkit-font-smoothing: antialiased !important;
+}}
+.custom-card p, .custom-card span {{ color: var(--la-text) !important; }}
+
+/* ── 13. History / tool / login cards ──────────────────────────────────────── */
+.history-item {{
+    background: var(--la-card); border: 1px solid var(--la-border);
+    border-radius: var(--r-md); padding: 0.7rem 1rem;
+    margin-bottom: 0.4rem; cursor: pointer;
+    transition: border-color var(--t-base), background var(--t-base);
+}}
+.history-item:hover {{
+    border-color: {t['accent']}66 !important;
+    background: var(--la-bg-2) !important;
+}}
+.tool-card {{
+    background: var(--la-card); border: 1px solid var(--la-border);
+    border-radius: var(--r-md); padding: 0.9rem 1.1rem; margin-bottom: 0.5rem;
+}}
+.login-card {{
+    background: var(--la-card); border: 1px solid var(--la-border);
+    border-top: 3px solid var(--la-accent);
+    border-radius: var(--r-xl); padding: 2.2rem 2.4rem;
+    box-shadow: var(--card-shadow);
+}}
+
+/* ── 14. AI response box ────────────────────────────────────────────────────── */
+.response-box {{
+    background: var(--la-card);
+    border: 1px solid var(--la-border);
+    border-radius: var(--r-lg);
+    padding: 1.8rem 2rem;
+    line-height: 1.78 !important;
+    font-size: {round(base_font * 0.935, 1)}px !important;
+    font-family: var(--font-body) !important;
+    white-space: pre-wrap;
+    color: var(--la-text) !important;
+    -webkit-font-smoothing: antialiased !important;
+    box-shadow: var(--card-shadow);
+    position: relative;
+}}
+.response-box::before {{
+    content: '';
+    position: absolute; top: 0; left: 0; right: 0; height: 2px;
+    background: linear-gradient(90deg, var(--la-accent), var(--la-accent-2));
+    border-radius: var(--r-lg) var(--r-lg) 0 0;
+}}
+
+/* ── 15. Disclaimer banner ──────────────────────────────────────────────────── */
+.disclaimer {{
+    background: {disclaimer_bg};
+    border-left: 3px solid {t['warning']};
+    border-radius: 0 var(--r-md) var(--r-md) 0;
+    padding: 0.85rem 1.1rem;
+    margin-top: 1rem;
+    font-size: 0.83rem !important;
+    color: {disclaimer_tx} !important;
+    line-height: 1.55 !important;
+    -webkit-font-smoothing: antialiased !important;
+}}
+
+/* ── 16. Badges — compact, sharp, readable ──────────────────────────────────── */
+.badge {{
+    display: inline-flex; align-items: center;
+    padding: 0.2rem 0.6rem;
+    border-radius: var(--r-sm);
+    font-size: 0.71rem !important;
+    font-weight: 600 !important;
+    letter-spacing: 0.04em !important;
+    text-transform: uppercase !important;
+    -webkit-font-smoothing: antialiased !important;
+    font-family: var(--font-body) !important;
+    white-space: nowrap;
+}}
+.badge-ok   {{ background: {badge_ok_bg};   color: {badge_ok_tx}  !important; }}
+.badge-warn {{ background: {badge_warn_bg}; color: {badge_warn_tx} !important; }}
+.badge-err  {{ background: {badge_err_bg};  color: {badge_err_tx}  !important; }}
+.badge-info {{ background: {badge_inf_bg};  color: {badge_inf_tx}  !important; }}
+
+/* ── 17. Tabs — refined indicator style ─────────────────────────────────────── */
 div[data-testid="stTabs"] button {{
-    font-weight: 600 !important; font-size: 0.88rem !important;
-    border-radius: 6px 6px 0 0 !important;
-    background-color: var(--la-bg-secondary) !important;
-    color: var(--la-text-secondary) !important;
+    font-family: var(--font-body) !important;
+    font-weight: 500 !important;
+    font-size: 0.86rem !important;
+    color: var(--la-text-2) !important;
+    background: transparent !important;
+    border: none !important;
+    border-bottom: 2px solid transparent !important;
+    border-radius: 0 !important;
+    padding: 0.55rem 0.9rem !important;
+    transition: color var(--t-base), border-color var(--t-base) !important;
+    -webkit-font-smoothing: antialiased !important;
+    letter-spacing: 0.005em !important;
+}}
+div[data-testid="stTabs"] button:hover {{
+    color: var(--la-accent) !important;
+    background: {t['accent']}0d !important;
+    border-radius: var(--r-sm) var(--r-sm) 0 0 !important;
 }}
 div[data-testid="stTabs"] button[aria-selected="true"] {{
-    background-color: var(--la-card-bg) !important;
     color: var(--la-accent) !important;
+    font-weight: 600 !important;
+    background: transparent !important;
     border-bottom: 2px solid var(--la-accent) !important;
 }}
 
-/* ── Expanders ──────────────────────────────────────────────────────────── */
-.streamlit-expanderHeader {{
-    background-color: var(--la-bg-secondary) !important;
+/* ── 18. Expanders ──────────────────────────────────────────────────────────── */
+.streamlit-expanderHeader, [data-testid="stExpander"] summary {{
+    background: var(--la-bg-2) !important;
     color: var(--la-text) !important;
-    border-radius: 8px !important;
+    border-radius: var(--r-md) !important;
     border: 1px solid var(--la-border) !important;
+    font-weight: 500 !important;
+    transition: background var(--t-base), border-color var(--t-base) !important;
+    -webkit-font-smoothing: antialiased !important;
 }}
-.streamlit-expanderContent {{
-    background-color: var(--la-card-bg) !important;
+.streamlit-expanderHeader:hover, [data-testid="stExpander"] summary:hover {{
+    background: var(--la-card) !important;
+    border-color: {t['accent']}55 !important;
+}}
+.streamlit-expanderContent, [data-testid="stExpander"] details {{
+    background: var(--la-card) !important;
     border: 1px solid var(--la-border) !important;
-    border-top: none !important; border-radius: 0 0 8px 8px !important;
-}}
-[data-testid="stExpander"] summary {{
-    color: var(--la-text) !important;
-}}
-[data-testid="stExpander"] details {{
-    background: var(--la-bg-secondary) !important;
-    border: 1px solid var(--la-border) !important;
-    border-radius: 8px !important;
+    border-top: none !important;
+    border-radius: 0 0 var(--r-md) var(--r-md) !important;
 }}
 
-/* ── Metrics ────────────────────────────────────────────────────────────── */
+/* ── 19. Metrics ────────────────────────────────────────────────────────────── */
 [data-testid="stMetric"] {{
-    background-color: var(--la-card-bg) !important;
+    background: var(--la-card) !important;
     border: 1px solid var(--la-border) !important;
-    border-radius: 12px !important; padding: 12px 16px !important;
+    border-radius: var(--r-lg) !important;
+    padding: 0.9rem 1.1rem !important;
+    box-shadow: var(--card-shadow) !important;
+    transition: box-shadow var(--t-base) !important;
 }}
 [data-testid="stMetricLabel"] p,
 div[data-testid="metric-container"] label {{
-    color: var(--la-text-secondary) !important;
-    font-size: 0.78rem !important; text-transform: uppercase; letter-spacing: 0.04em;
+    color: var(--la-text-2) !important;
+    font-size: 0.74rem !important;
+    font-weight: 600 !important;
+    text-transform: uppercase !important;
+    letter-spacing: 0.07em !important;
+    -webkit-font-smoothing: antialiased !important;
 }}
 [data-testid="stMetricValue"],
 div[data-testid="metric-container"] div[data-testid="stMetricValue"] {{
-    color: var(--la-accent) !important; font-weight: 700 !important;
+    color: var(--la-accent) !important;
+    font-weight: 700 !important;
+    letter-spacing: -0.02em !important;
+    -webkit-font-smoothing: antialiased !important;
 }}
-[data-testid="stMetricDelta"] {{ color: var(--la-positive) !important; }}
+[data-testid="stMetricDelta"] {{ color: var(--la-pos) !important; }}
 
-/* ── Radio & Checkbox ───────────────────────────────────────────────────── */
-.stRadio > div > label, .stCheckbox > label {{
-    color: var(--la-text) !important;
-}}
+/* ── 20. Radio & Checkbox ───────────────────────────────────────────────────── */
+.stRadio > div > label, .stCheckbox > label,
 .stRadio [data-testid="stMarkdownContainer"] p,
 .stCheckbox [data-testid="stMarkdownContainer"] p {{
     color: var(--la-text) !important;
+    -webkit-font-smoothing: antialiased !important;
 }}
 
-/* ── Select / Dropdown ──────────────────────────────────────────────────── */
-[data-baseweb="menu"],
-[data-baseweb="menu"] li,
+/* ── 21. Dropdown menus ─────────────────────────────────────────────────────── */
+[data-baseweb="menu"], [data-baseweb="menu"] li,
 [data-baseweb="popover"] li {{
-    background-color: var(--la-card-bg) !important;
+    background-color: var(--la-card) !important;
     color: var(--la-text) !important;
+    font-family: var(--font-body) !important;
+    -webkit-font-smoothing: antialiased !important;
 }}
-[data-baseweb="menu"] li:hover,
-[data-baseweb="popover"] li:hover {{
-    background-color: var(--la-bg-secondary) !important;
+[data-baseweb="menu"] li:hover, [data-baseweb="popover"] li:hover {{
+    background-color: {t['accent']}18 !important;
+    color: var(--la-accent) !important;
 }}
 
-/* ── Progress bars ──────────────────────────────────────────────────────── */
+/* ── 22. Progress bars ──────────────────────────────────────────────────────── */
 .stProgress > div > div {{ background-color: var(--la-accent) !important; }}
-.stProgress             {{ background-color: var(--la-bg-secondary) !important; }}
+.stProgress             {{ background-color: var(--la-bg-2)    !important;
+                           border-radius: var(--r-pill) !important; }}
 
-/* ── Chat messages ──────────────────────────────────────────────────────── */
+/* ── 23. Chat messages ──────────────────────────────────────────────────────── */
 [data-testid="stChatMessage"] {{
-    background-color: var(--la-card-bg) !important;
+    background: var(--la-card) !important;
     border: 1px solid var(--la-border) !important;
-    border-radius: 12px !important; margin-bottom: 8px !important;
+    border-radius: var(--r-lg) !important;
+    margin-bottom: 0.6rem !important;
+    -webkit-font-smoothing: antialiased !important;
 }}
-[data-testid="stChatMessage"] p {{
-    color: var(--la-text) !important;
-}}
+[data-testid="stChatMessage"] p {{ color: var(--la-text) !important; }}
 
-/* ── Dataframes / tables ────────────────────────────────────────────────── */
+/* ── 24. Dataframes / tables ────────────────────────────────────────────────── */
 .stDataFrame {{
-    border: 1px solid var(--la-border) !important; border-radius: 8px !important;
+    border: 1px solid var(--la-border) !important;
+    border-radius: var(--r-md) !important;
+    overflow: hidden !important;
 }}
 .stDataFrame th {{
-    background-color: var(--la-bg-secondary) !important;
+    background: var(--la-bg-2) !important;
     color: var(--la-text) !important;
+    font-weight: 600 !important;
+    font-size: 0.82rem !important;
+    letter-spacing: 0.03em !important;
+    -webkit-font-smoothing: antialiased !important;
 }}
 .stDataFrame td {{
     color: var(--la-text) !important;
+    -webkit-font-smoothing: antialiased !important;
 }}
 
-/* ── Alerts & notifications ─────────────────────────────────────────────── */
-[data-testid="stAlert"] p,
-[data-testid="stInfo"] p,
-[data-testid="stSuccess"] p,
-[data-testid="stWarning"] p,
+/* ── 25. Alerts ─────────────────────────────────────────────────────────────── */
+[data-testid="stAlert"] p, [data-testid="stInfo"] p,
+[data-testid="stSuccess"] p, [data-testid="stWarning"] p,
 [data-testid="stError"] p {{
     color: inherit !important;
+    -webkit-font-smoothing: antialiased !important;
 }}
 
-/* ── Scrollbar ──────────────────────────────────────────────────────────── */
-::-webkit-scrollbar       {{ width: 6px; height: 6px; }}
-::-webkit-scrollbar-track {{ background: var(--la-bg-secondary); }}
+/* ── 26. Scrollbar — thin, elegant ──────────────────────────────────────────── */
+::-webkit-scrollbar {{ width: 5px; height: 5px; }}
+::-webkit-scrollbar-track {{ background: transparent; }}
 ::-webkit-scrollbar-thumb {{
-    background: {t['border']}; border-radius: 3px; transition: background 0.2s;
+    background: {t['border']};
+    border-radius: var(--r-pill);
+    transition: background var(--t-base);
 }}
 ::-webkit-scrollbar-thumb:hover {{ background: {t['accent']}88; }}
 
-/* ── Text selection ─────────────────────────────────────────────────────── */
-::selection {{ background: {t['accent']}44; color: var(--la-text); }}
+/* ── 27. Text selection ──────────────────────────────────────────────────────── */
+::selection {{ background: {t['accent']}30; color: var(--la-text); }}
 
-/* ── Reduced-motion ─────────────────────────────────────────────────────── */
+/* ── 28. Reduce-motion media query ──────────────────────────────────────────── */
 @media (prefers-reduced-motion: reduce) {{
     *, *::before, *::after {{
-        animation-duration: 0s !important; transition-duration: 0s !important;
+        animation-duration: 0.01ms !important;
+        transition-duration: 0.01ms !important;
     }}
 }}
 
-/* ── Mobile / small-screen responsiveness ────────────────────────────────── */
-/* Targets phones and small tablets (≤768px) */
+/* ── 29. Mobile responsive ───────────────────────────────────────────────────── */
 @media (max-width: 768px) {{
-
-    /* Shrink base font slightly on small screens */
-    .stApp {{
-        font-size: {round(base_font * 0.93, 1)}px !important;
-    }}
-
-    /* Hero & page headers — smaller padding and font */
-    .hero {{
-        padding: 1.4rem 1.2rem !important;
-        border-radius: 8px !important;
-    }}
-    .hero h1 {{
-        font-size: 1.45rem !important;
-    }}
-    .hero p {{
-        font-size: 0.92rem !important;
-    }}
-    .page-header {{
-        padding: 1rem 1.2rem !important;
-        border-radius: 8px !important;
-    }}
-    .page-header h2 {{
-        font-size: 1.15rem !important;
-    }}
-
-    /* Stat cards — allow wrapping into 2 columns */
-    .stat-card {{
-        padding: 0.85rem 0.6rem !important;
-    }}
-    .stat-card .stat-value {{
-        font-size: 1.4rem !important;
-    }}
-
-    /* Custom cards — full width, reduced padding */
-    .custom-card, .tool-card, .history-item {{
-        padding: 0.75rem 0.9rem !important;
-        margin-bottom: 0.5rem !important;
-    }}
-
-    /* Response box — less side padding on mobile */
-    .response-box {{
-        padding: 1rem 1rem !important;
-        font-size: 0.88rem !important;
-    }}
-
-    /* Buttons — full width on mobile so they're easy to tap */
-    .stButton > button {{
-        width: 100% !important;
-        min-height: 2.4rem !important;
-        font-size: 0.9rem !important;
-    }}
-
-    /* Tabs — smaller text so all tabs fit */
-    div[data-testid="stTabs"] button {{
-        font-size: 0.75rem !important;
-        padding: 0.35rem 0.5rem !important;
-    }}
-
-    /* File uploader — compact on mobile */
-    [data-testid="stFileUploader"] section {{
-        padding: 0.6rem !important;
-    }}
-
-    /* Metric cards */
-    [data-testid="stMetric"] {{
-        padding: 8px 10px !important;
-    }}
-
-    /* Login card */
-    .login-card {{
-        padding: 1.2rem 1rem !important;
-        border-radius: 8px !important;
-    }}
+    .stApp {{ font-size: {round(base_font * 0.92, 1)}px !important; }}
+    .hero {{ padding: 1.4rem 1.3rem !important; border-radius: var(--r-lg) !important; }}
+    .hero h1 {{ font-size: 1.4rem !important; }}
+    .hero p  {{ font-size: 0.88rem !important; }}
+    .page-header {{ padding: 1rem 1.2rem !important; }}
+    .page-header h2 {{ font-size: 1.1rem !important; }}
+    .stat-card .stat-value {{ font-size: 1.45rem !important; }}
+    .custom-card {{ padding: 0.75rem 0.9rem !important; }}
+    .response-box {{ padding: 1rem !important; font-size: 0.88rem !important; }}
+    .stButton > button {{ width: 100% !important; min-height: 2.4rem !important; }}
+    div[data-testid="stTabs"] button {{ font-size: 0.72rem !important; padding: 0.35rem 0.5rem !important; }}
+    .login-card {{ padding: 1.3rem 1rem !important; }}
+    [data-testid="stMetric"] {{ padding: 0.7rem 0.9rem !important; }}
 }}
-
-/* Slightly larger phones (portrait) */
 @media (max-width: 480px) {{
-    .hero h1 {{
-        font-size: 1.2rem !important;
-    }}
-    .stat-card .stat-value {{
-        font-size: 1.15rem !important;
-    }}
-    .badge {{
-        font-size: 0.65rem !important;
-        padding: 0.12rem 0.45rem !important;
-    }}
+    .hero h1 {{ font-size: 1.15rem !important; }}
+    .stat-card .stat-value {{ font-size: 1.15rem !important; }}
+    .badge {{ font-size: 0.64rem !important; }}
 }}
 </style>"""
+
 
 # ═══════════════════════════════════════════════════════
 # EXPORT FUNCTIONS (WITH FIRM BRANDING)
@@ -2883,21 +3006,35 @@ def render_sidebar():
         cap_col = "#a0bcd8" if corp else "#64748b"
         div_col = "#2d4a6e" if corp else "#e2e8f0"
         st.markdown(f"""
-<div style="padding:1rem 0.4rem 0.8rem 0.4rem;border-bottom:1px solid {div_col};">
-  <div style="font-size:1.05rem;font-weight:800;color:{hdr_col};letter-spacing:-0.01em;">⚖️ {esc(name_display)}</div>
-  <div style="font-size:0.74rem;margin-top:0.15rem;color:{cap_col};">{esc(tag_display)}</div>
+<div style="padding:1.1rem 0.5rem 0.9rem;border-bottom:1px solid {div_col};">
+  <div style="display:flex;align-items:center;gap:0.55rem;">
+    <span style="font-size:1.3rem;line-height:1;">⚖️</span>
+    <div>
+      <div style="font-size:0.97rem;font-weight:800;color:{hdr_col};letter-spacing:-0.02em;
+                  -webkit-font-smoothing:antialiased;">{esc(name_display)}</div>
+      <div style="font-size:0.68rem;margin-top:0.05rem;color:{cap_col};
+                  letter-spacing:0.04em;text-transform:uppercase;-webkit-font-smoothing:antialiased;">{esc(tag_display)}</div>
+    </div>
+  </div>
 </div>""", unsafe_allow_html=True)
         uname = st.session_state.get("current_username","")
         urole = st.session_state.get("current_user_role","")
         if uname:
-            role_icon = "🛡️ Admin" if urole=="admin" else "👤 User"
-            bg_c = "#ffffff10" if corp else "#22c55e18"
-            bd_c = "#ffffff25" if corp else "#22c55e55"
-            tx_c = "#c9a84c"   if corp else "#059669"
+            role_icon = "Admin" if urole=="admin" else "User"
+            role_dot = "#c9a84c" if corp else "#22c55e"
             st.markdown(f"""
-<div style="margin:0.8rem 0 0.4rem 0;padding:0.6rem 0.8rem;background:{bg_c};border:1px solid {bd_c};border-radius:8px;">
-  <div style="font-weight:700;font-size:0.9rem;color:{tx_c};">@{esc(uname)}</div>
-  <div style="font-size:0.75rem;opacity:0.75;margin-top:0.1rem;">{role_icon}</div>
+<div style="margin:0.75rem 0 0.4rem;padding:0.6rem 0.8rem;
+  background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.10);
+  border-radius:10px;display:flex;align-items:center;gap:0.55rem;">
+  <div style="width:8px;height:8px;border-radius:50%;
+    background:{role_dot};flex-shrink:0;box-shadow:0 0 6px {role_dot}88;"></div>
+  <div>
+    <div style="font-weight:700;font-size:0.88rem;color:{role_dot};
+                -webkit-font-smoothing:antialiased;letter-spacing:-0.01em;">@{esc(uname)}</div>
+    <div style="font-size:0.68rem;color:rgba(255,255,255,0.45);
+                -webkit-font-smoothing:antialiased;text-transform:uppercase;
+                letter-spacing:0.06em;margin-top:0.05rem;">{role_icon}</div>
+  </div>
 </div>""", unsafe_allow_html=True)
             if st.button("🚪 Sign Out", key="sidebar_logout_btn", use_container_width=True):
                 do_logout()
@@ -3030,16 +3167,23 @@ def render_home():
     # Stats row
     cost_summary = get_db().get_cost_summary()
     c1, c2, c3, c4, c5 = st.columns(5)
-    with c1:
-        st.markdown(f'<div class="stat-card"><div class="stat-value">{len(st.session_state.cases)}</div><div class="stat-label">Total Cases</div></div>', unsafe_allow_html=True)
-    with c2:
-        st.markdown(f'<div class="stat-card"><div class="stat-value">{len(get_active_cases())}</div><div class="stat-label">Active Cases</div></div>', unsafe_allow_html=True)
-    with c3:
-        st.markdown(f'<div class="stat-card"><div class="stat-value">{len(st.session_state.clients)}</div><div class="stat-label">Clients</div></div>', unsafe_allow_html=True)
-    with c4:
-        st.markdown(f'<div class="stat-card"><div class="stat-value">{total_hours():.1f}h</div><div class="stat-label">Billable Hours</div></div>', unsafe_allow_html=True)
-    with c5:
-        st.markdown(f'<div class="stat-card"><div class="stat-value">{len(st.session_state.chat_history)}</div><div class="stat-label">AI Sessions</div></div>', unsafe_allow_html=True)
+    _cases_total  = len(st.session_state.cases)
+    _cases_active = len(get_active_cases())
+    _clients_n    = len(st.session_state.clients)
+    _hours        = f"{total_hours():.1f}h"
+    _sessions     = len(st.session_state.chat_history)
+    for col, val, lbl in [
+        (c1, _cases_total,  "Total Cases"),
+        (c2, _cases_active, "Active Cases"),
+        (c3, _clients_n,    "Clients"),
+        (c4, _hours,        "Billable Hours"),
+        (c5, _sessions,     "AI Sessions"),
+    ]:
+        with col:
+            st.markdown(f"""<div class="stat-card">
+                <div class="stat-value">{val}</div>
+                <div class="stat-label">{lbl}</div>
+            </div>""", unsafe_allow_html=True)
 
     st.markdown("")
 
