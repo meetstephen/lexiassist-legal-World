@@ -9137,12 +9137,8 @@ def main():
         f"{user_text} · ⚠️ AI-generated information — not legal advice — verify all citations independently"
     )
 
-    # ── Keep-Alive Ping (st.iframe replaces deprecated components.v1.html) ────
-    st.iframe(
-        src="about:blank",
-        height=0,
-        scrolling=False,
-    )
+    # ── Keep-Alive Ping ──────────────────────────────────────────────────────────
+    st.iframe(src="about:blank", height=0)
     # ────────────────────────────────────────────────────────────────────────────
 
 
