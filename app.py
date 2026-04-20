@@ -1382,6 +1382,24 @@ section[data-testid="stSidebar"] .stButton>button{{
 section[data-testid="stSidebar"] .stButton>button:hover{{
   background:{acc}22!important;border-color:{acc}55!important;}}
 
+/* ── Sidebar collapse/expand toggle arrow ── */
+[data-testid="stSidebarCollapsedControl"],
+[data-testid="collapsedControl"]{{
+  background:{sidebar_bg}!important;border-right:1px solid {sb_line}!important;
+  display:flex!important;visibility:visible!important;opacity:1!important;}}
+[data-testid="stSidebarCollapsedControl"] button,
+[data-testid="collapsedControl"] button{{
+  background:{sb_hover_bg}!important;border:1px solid {sb_line}!important;
+  border-radius:var(--r-md)!important;color:{sb_text}!important;
+  visibility:visible!important;opacity:1!important;}}
+[data-testid="stSidebarCollapsedControl"] svg,
+[data-testid="collapsedControl"] svg,
+section[data-testid="stSidebar"] [data-testid="stBaseButton-header"] svg,
+section[data-testid="stSidebar"] button[kind="header"] svg{{
+  fill:{sb_text}!important;color:{sb_text}!important;
+  background:transparent!important;visibility:visible!important;
+  opacity:1!important;display:block!important;}}
+
 /* ── Buttons ── */
 .stButton>button{{font-family:var(--font)!important;
   -webkit-font-smoothing:antialiased!important;border-radius:var(--r-md)!important;
@@ -1443,21 +1461,42 @@ section[data-testid="stSidebar"] .stButton>button:hover{{
 section[data-testid="stSidebar"] .stTextInput input::placeholder,
 section[data-testid="stSidebar"] .stTextArea textarea::placeholder{{
   color:{ph_col}!important;opacity:1!important;font-style:italic!important;}}
-.stSelectbox div[data-baseweb="select"] *,
-.stMultiSelect div[data-baseweb="select"] *{{
-  background-color:var(--la-input)!important;color:var(--la-text)!important;
-  border-color:var(--la-border)!important;border-radius:var(--r-md)!important;
+.stSelectbox div[data-baseweb="select"],
+.stMultiSelect div[data-baseweb="select"]{{
+  background-color:var(--la-input)!important;
+  border-color:var(--la-border)!important;border-radius:var(--r-md)!important;}}
+.stSelectbox div[data-baseweb="select"] input,
+.stMultiSelect div[data-baseweb="select"] input,
+.stSelectbox div[data-baseweb="select"] [data-baseweb="tag"],
+.stMultiSelect div[data-baseweb="select"] [data-baseweb="tag"],
+.stSelectbox div[data-baseweb="select"] [class*="ValueContainer"],
+.stMultiSelect div[data-baseweb="select"] [class*="ValueContainer"]{{
+  color:var(--la-text)!important;background-color:transparent!important;
   font-family:var(--font)!important;-webkit-font-smoothing:antialiased!important;}}
-
+/* ── Restore dropdown arrow/chevron SVG icons ── */
+.stSelectbox div[data-baseweb="select"] svg,
+.stMultiSelect div[data-baseweb="select"] svg{{
+  fill:var(--la-text)!important;color:var(--la-text)!important;
+  background-color:transparent!important;display:block!important;
+  visibility:visible!important;opacity:1!important;}}
 /* ── File uploader ── */
-[data-testid="stFileUploader"] section,
+[data-testid="stFileUploader"] section{{
+  background-color:var(--la-input)!important;
+  border:1.5px dashed var(--la-border)!important;
+  border-radius:var(--r-md)!important;}}
 [data-testid="stFileUploader"] section p,
 [data-testid="stFileUploader"] section span,
+[data-testid="stFileUploader"] section div,
 [data-testid="stFileDropzoneInstructions"],
-[data-testid="stFileDropzoneInstructions"] span,
-[data-testid="stFileDropzoneInstructions"] small{{
-  color:var(--la-text)!important;-webkit-font-smoothing:antialiased!important;}}
-[data-testid="stFileUploader"] small,[data-testid="stFileUploader"] .stCaption{{
+[data-testid="stFileDropzoneInstructions"] *{{
+  color:var(--la-text)!important;background-color:transparent!important;
+  -webkit-font-smoothing:antialiased!important;}}
+[data-testid="stFileUploader"] svg{{
+  fill:var(--la-text2)!important;color:var(--la-text2)!important;
+  background:transparent!important;}}
+[data-testid="stFileUploader"] small,
+[data-testid="stFileUploader"] .stCaption,
+[data-testid="stFileUploader"] .stCaption p{{
   color:var(--la-text2)!important;font-size:.8rem!important;}}
 
 /* ── Stat cards ── */
@@ -1642,23 +1681,27 @@ div[data-testid="metric-container"] div[data-testid="stMetricValue"]{{
   .badge{{font-size:.64rem!important;}}}}
 
 /* ── Streamlit 1.38+ structural fixes ── */
-/* Fix text overlap: normalize gap between stacked element containers */
-div[data-testid="stVerticalBlock"]>div{{gap:0!important;}}
-div[data-testid="stVerticalBlockBorderWrapper"]{{gap:0!important;}}
-/* Fix button full-width: use_container_width=True targets */
-div[data-testid="stButton"],
-div[data-testid="stDownloadButton"],
-div[data-testid="stFormSubmitButton"]{{width:100%!important;}}
-div[data-testid="stButton"]>button,
-div[data-testid="stDownloadButton"]>button,
-div[data-testid="stFormSubmitButton"]>button{{width:100%!important;}}
-/* Fix column gap (changed in Streamlit 1.38) */
-div[data-testid="stHorizontalBlock"]{{gap:.75rem!important;}}
-/* Normalize element container top-margin to prevent overlap */
-div[data-testid="element-container"]{{margin-top:0!important;}}
-/* Stat-card text overlap inside st.columns */
+/* Fix column gap and alignment */
+div[data-testid="stHorizontalBlock"]{{
+  gap:.75rem!important;align-items:flex-start!important;}}
+/* Prevent double-stacked label/widget overlap — use small gap, NOT zero */
+div[data-testid="stVerticalBlock"]>div[data-testid="element-container"]{{
+  margin-top:.15rem!important;margin-bottom:.15rem!important;}}
+/* Stat-card markdown inside columns */
 div[data-testid="stColumn"] div[data-testid="stMarkdownContainer"]{{
-  margin-bottom:0!important;line-height:normal!important;}}
+  margin-bottom:0!important;}}
+/* Ensure button text is always on one line and not clipped */
+.stButton>button,
+.stDownloadButton>button,
+.stFormSubmitButton>button{{
+  white-space:nowrap!important;overflow:visible!important;
+  text-overflow:clip!important;line-height:1.4!important;
+  padding:.45rem 1rem!important;min-height:2.2rem!important;}}
+/* Accessibility / settings widgets: ensure label and control don't collide */
+.stSlider,[data-testid="stWidgetLabel"]{{
+  margin-bottom:.3rem!important;display:block!important;}}
+[data-testid="stWidgetLabel"] p{{
+  line-height:1.4!important;margin-bottom:.2rem!important;}}
 /* Hide zero-height keep-alive iframe cleanly */
 iframe[height="0"],iframe[style*="height: 0"]{{
   display:none!important;height:0!important;min-height:0!important;
