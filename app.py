@@ -1122,11 +1122,48 @@ THEMES = {
         "warning":          "#FFBE0B",
         "sidebar_bg":       "#15100A",
         "input_bg":         "#30221A",
-        "header_gradient":  "linear-gradient(135deg, #15100A, #6B3A28)",
+       "header_gradient":  "linear-gradient(135deg, #15100A, #6B3A28)",
+    },
+    # ── NEW THEMES (from MindMirror theme engine) ──────────────────────
+    "🌸 Cherry Blossom": {
+        "display_name": "🌸 Cherry Blossom",
+        "description": "Soft pinks and warm whites — gentle and warm.",
+        "bg":               "#1A1215",
+        "bg_secondary":     "#221A1E",
+        "card_bg":          "#2A1F24",
+        "border":           "#5C3A47",
+        "text":             "#FFE4EC",
+        "text_secondary":   "#C9929F",
+        "accent":           "#FF8FAB",
+        "accent_secondary": "#FFB3C6",
+        "positive":         "#A8E6CF",
+        "negative":         "#FF6B6B",
+        "warning":          "#FFE66D",
+        "sidebar_bg":       "#150E12",
+        "input_bg":         "#2E2228",
+        "header_gradient":  "linear-gradient(135deg, #150E12, #5C3A47)",
+    },
+    "🌲 Forest": {
+        "display_name": "🌲 Forest",
+        "description": "Earthy greens and browns — grounded and natural.",
+        "bg":               "#0E1A0E",
+        "bg_secondary":     "#142014",
+        "card_bg":          "#1A2B1A",
+        "border":           "#2E5E2E",
+        "text":             "#D4E8D4",
+        "text_secondary":   "#88AA88",
+        "accent":           "#4CAF50",
+        "accent_secondary": "#81C784",
+        "positive":         "#66BB6A",
+        "negative":         "#EF5350",
+        "warning":          "#FFC107",
+        "sidebar_bg":       "#0B140B",
+        "input_bg":         "#1E301E",
+        "header_gradient":  "linear-gradient(135deg, #0B140B, #2E5E2E)",
     },
 }
 
-THEME_NAMES = list(THEMES.keys())
+THEME_NAMES = list(THEMES.keys()) 
 
 
 def get_theme(name: str) -> dict:
@@ -1147,6 +1184,18 @@ def get_plotly_colors(name: str) -> dict:
             "#FF6B6B", "#48DBFB", "#FECA57", "#FF9FF3",
         ],
     }
+
+
+def get_theme_recommendation(avg_sentiment: float):
+    """Suggest themes by mood/sentiment score. avg_sentiment in range [-1, 1]."""
+    if avg_sentiment > 0.3:
+        return ["🌅 Sunset", "🌸 Cherry Blossom", "🔥 Ember"]
+    elif avg_sentiment > 0.0:
+        return ["🌊 Deep Ocean", "☁️ Cloud", "🌲 Forest"]
+    elif avg_sentiment > -0.3:
+        return ["💜 Lavender", "🌙 Midnight", "🌊 Deep Ocean"]
+    else:
+        return ["🌙 Midnight", "💜 Lavender", "🌲 Forest"]
 
 
 def get_theme_css(
