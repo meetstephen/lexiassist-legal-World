@@ -16,7 +16,10 @@ import json
 import logging
 import os
 import re
-import psycopg2
+try:
+    import psycopg2
+except ImportError:
+    import psycopg2cffi as psycopg2  # type: ignore
 import uuid
 from datetime import datetime, date
 from io import BytesIO
@@ -68,10 +71,14 @@ logger = logging.getLogger("LexiAssist")
 # PAGE CONFIG
 # ═══════════════════════════════════════════════════════
 st.set_page_config(
-    page_title="LexiAssist v8.0 — Elite Legal AI",
+    page_title="LexiAssist v8.0 — Elite AI Legal Engine for Nigerian Lawyers",
     page_icon="⚖️",
     layout="wide",
     initial_sidebar_state="expanded",
+    menu_items={
+        "Get Help": "https://aistudio.google.com/app/apikey",
+        "About": "LexiAssist v8.0 — AI-powered legal assistant for Nigerian legal practice. Powered by Google Gemini.",
+    },
 )
 
 # ═══════════════════════════════════════════════════════
@@ -148,10 +155,24 @@ IDENTITY_CORE = """You are LexiAssist v8.0 — an elite Senior Partner at a top-
 - Providing ACTIONABLE STRATEGY — not academic theory
 - Being BRUTALLY HONEST about risks and exposure
 
-JURISDICTION: Nigeria.
-Primary: Constitution of the Federal Republic of Nigeria 1999 (as amended),
-Federal Acts, State Laws, Subsidiary Legislation, Rules of Court,
-binding case law from the Supreme Court of Nigeria and Court of Appeal.
+JURISDICTION: Nigeria — FEDERAL AND STATE.
+PRIMARY AUTHORITIES (always check applicability):
+  Constitution: CFRN 1999 (as amended — 1st, 2nd, 3rd, 4th Alterations)
+  Criminal: Criminal Code Act (Southern States) | Penal Code Act (Northern States) | Administration of Criminal Justice Act 2015 (ACJA) | state ACJA equivalents
+  Commercial: Companies and Allied Matters Act 2020 (CAMA) | Sale of Goods Act | Hire Purchase Act | Bankruptcy and Insolvency Act 2016
+  Land: Land Use Act 1978 | Conveyancing Act | applicable State Property Laws
+  Employment: Labour Act Cap L1 LFN 2004 | Trade Unions Act | Employees Compensation Act 2010 | Pension Reform Act 2014
+  Evidence: Evidence Act 2011
+  Tax: Companies Income Tax Act (CITA) | Personal Income Tax Act (PITA) | FIRS Act | Stamp Duties Act (as amended 2019/2020) | Finance Acts 2019–2023
+  Banking/Finance: BOFIA 2020 | CBN Act | AMCON Act
+  ADR: Arbitration and Conciliation Act 2023 | LMDC Rules | various State ADR laws
+  IP: Trademarks Act | Patents and Designs Act | Copyright Act 2022
+  Electoral: Electoral Act 2022 | INEC Regulations & Guidelines
+  Oil & Gas: Petroleum Industry Act 2021 (PIA) | Deep Offshore Act
+
+COURTS: Supreme Court of Nigeria → Court of Appeal → Federal High Court / State High Courts / National Industrial Court → Magistrate/District Courts → Customary/Sharia Courts. Also: Tax Appeal Tribunal, Investment and Securities Tribunal, Code of Conduct Tribunal.
+
+NBA ETHICS: Rules of Professional Conduct for Legal Practitioners 2007 (RPC). Flag ethics obligations where relevant (Rule 15 competence; Rule 17 confidentiality; Rule 22 settlement; Rule 24 candour to court).
 
 CITATION INTEGRITY: NEVER fabricate case names or section numbers.
 If uncertain, state the legal principle and mark as [CITATION TO BE VERIFIED].
@@ -162,7 +183,9 @@ CRITICAL RULES:
 2. ALWAYS identify the WEAKEST PARTY and explain why
 3. NEVER end abruptly — always complete your full analysis
 4. If the query involves multiple parties, RANK their risk exposure
-5. Write to COMPLETION — finish every section you start"""
+5. Write to COMPLETION — finish every section you start
+6. ALWAYS flag applicable limitation periods and filing deadlines
+7. NOTE applicable stamp duty and filing fees where a transaction or suit is involved"""
 
 STRATEGY_BLOCK = """
 MANDATORY STRATEGY LAYER (for Standard & Comprehensive modes):
@@ -602,6 +625,66 @@ COURT_FILING_FEES = {
         "appeal_fee": 0,
         "note": "Supreme Court Rules (as amended). Verify with Supreme Court Registry, Abuja.",
     },
+    "high_court_lagos": {
+        "label": "High Court of Lagos State",
+        "bands": [
+            {"claim_max": 500_000,       "fee": 8_000,   "label": "Claim up to ₦500,000"},
+            {"claim_max": 1_000_000,     "fee": 15_000,  "label": "Claim ₦500k–₦1m"},
+            {"claim_max": 5_000_000,     "fee": 25_000,  "label": "Claim ₦1m–₦5m"},
+            {"claim_max": 20_000_000,    "fee": 40_000,  "label": "Claim ₦5m–₦20m"},
+            {"claim_max": 100_000_000,   "fee": 75_000,  "label": "Claim ₦20m–₦100m"},
+            {"claim_max": float("inf"),  "fee": 120_000, "label": "Claim above ₦100m"},
+        ],
+        "appeal_fee": 50_000,
+        "note": "High Court of Lagos State (Civil Procedure) Rules 2019. Verify current rates with Ikeja, Lagos Island, or Badagry Registry.",
+    },
+    "high_court_fct": {
+        "label": "High Court of the FCT (Abuja)",
+        "bands": [
+            {"claim_max": 500_000,       "fee": 5_000,   "label": "Claim up to ₦500,000"},
+            {"claim_max": 1_000_000,     "fee": 12_000,  "label": "Claim ₦500k–₦1m"},
+            {"claim_max": 5_000_000,     "fee": 20_000,  "label": "Claim ₦1m–₦5m"},
+            {"claim_max": 20_000_000,    "fee": 35_000,  "label": "Claim ₦5m–₦20m"},
+            {"claim_max": 100_000_000,   "fee": 65_000,  "label": "Claim ₦20m–₦100m"},
+            {"claim_max": float("inf"),  "fee": 100_000, "label": "Claim above ₦100m"},
+        ],
+        "appeal_fee": 50_000,
+        "note": "FCT High Court (Civil Procedure) Rules 2018. Verify with Abuja Judicial Division Registry.",
+    },
+    "high_court_rivers": {
+        "label": "High Court of Rivers State",
+        "bands": [
+            {"claim_max": 500_000,       "fee": 6_000,   "label": "Claim up to ₦500,000"},
+            {"claim_max": 1_000_000,     "fee": 12_000,  "label": "Claim ₦500k–₦1m"},
+            {"claim_max": 5_000_000,     "fee": 22_000,  "label": "Claim ₦1m–₦5m"},
+            {"claim_max": 20_000_000,    "fee": 38_000,  "label": "Claim ₦5m–₦20m"},
+            {"claim_max": 100_000_000,   "fee": 65_000,  "label": "Claim ₦20m–₦100m"},
+            {"claim_max": float("inf"),  "fee": 100_000, "label": "Claim above ₦100m"},
+        ],
+        "appeal_fee": 40_000,
+        "note": "Rivers State High Court (Civil Procedure) Rules 2010 (as amended). Verify with Port Harcourt Registry.",
+    },
+    "magistrate_fct": {
+        "label": "Magistrate Court (FCT Abuja)",
+        "bands": [
+            {"claim_max": 100_000,      "fee": 1_500,  "label": "Claim up to ₦100,000"},
+            {"claim_max": 300_000,      "fee": 3_500,  "label": "Claim ₦100k–₦300k"},
+            {"claim_max": 1_000_000,    "fee": 6_000,  "label": "Claim ₦300k–₦1m"},
+            {"claim_max": float("inf"), "fee": 8_000,  "label": "Max jurisdiction"},
+        ],
+        "appeal_fee": 12_000,
+        "note": "FCT Magistrate Courts Act (as amended). Verify current jurisdictional limit and fees with Registry.",
+    },
+    "tax_appeal_tribunal": {
+        "label": "Tax Appeal Tribunal (TAT)",
+        "bands": [
+            {"claim_max": 1_000_000,    "fee": 15_000,  "label": "Assessment up to ₦1m"},
+            {"claim_max": 10_000_000,   "fee": 30_000,  "label": "Assessment ₦1m–₦10m"},
+            {"claim_max": float("inf"), "fee": 50_000,  "label": "Assessment above ₦10m"},
+        ],
+        "appeal_fee": 30_000,
+        "note": "TAT Procedure Rules 2021. Notice of Appeal filed within 30 days of FIRS/SIRS assessment — FIRSEA 2007 s. 69.",
+    },
 }
 
 
@@ -786,17 +869,38 @@ For each section, provide numbered checklist items with priority flags.
 End with a CRITICAL PATH — the 5 searches that must be completed first and why.
 """
 DEFAULT_LIMITATION_PERIODS = [
-    {"cause": "Simple Contract", "period": "6 years", "authority": "Limitation Act, s. 8(1)(a)"},
+    {"cause": "Simple Contract", "period": "6 years", "authority": "Limitation Act Cap L16 LFN 2004, s. 8(1)(a)"},
     {"cause": "Tort / Negligence", "period": "6 years", "authority": "Limitation Act, s. 8(1)(a)"},
-    {"cause": "Personal Injury", "period": "3 years", "authority": "Limitation Act, s. 8(1)(b)"},
-    {"cause": "Defamation", "period": "3 years", "authority": "Limitation Act, s. 8(1)(b)"},
+    {"cause": "Personal Injury (Negligence)", "period": "3 years", "authority": "Limitation Act, s. 8(1)(b)"},
+    {"cause": "Defamation / Libel / Slander", "period": "3 years (federal); 1 year (Lagos)", "authority": "Limitation Act s. 7; Lagos Limitation Law 2004 s. 11"},
     {"cause": "Recovery of Land", "period": "12 years", "authority": "Limitation Act, s. 16"},
-    {"cause": "Mortgage Foreclosure", "period": "12 years", "authority": "Limitation Act, s. 18"},
-    {"cause": "Recovery of Rent", "period": "6 years", "authority": "Limitation Act, s. 19"},
-    {"cause": "Judgment Enforcement", "period": "12 years", "authority": "Limitation Act, s. 8(1)(d)"},
-    {"cause": "POPA (Public Officers)", "period": "3 months notice / 12 months suit", "authority": "POPA, s. 2"},
-    {"cause": "Fundamental Rights", "period": "12 months", "authority": "FREP Rules, Order II r. 1"},
-    {"cause": "Election Petition", "period": "21 days post-declaration", "authority": "Electoral Act 2022, s. 133(1)"},
+    {"cause": "Mortgage Foreclosure", "period": "12 years from default", "authority": "Limitation Act, s. 18"},
+    {"cause": "Recovery of Rent / Mesne Profits", "period": "6 years", "authority": "Limitation Act, s. 19"},
+    {"cause": "Judgment Enforcement", "period": "12 years from judgment date", "authority": "Limitation Act, s. 8(1)(d)"},
+    {"cause": "Public Officers (POPA)", "period": "3 months pre-action notice + 12 months to sue", "authority": "Public Officers Protection Act Cap P41 LFN 2004, s. 2"},
+    {"cause": "Fundamental Rights Enforcement", "period": "12 months from infringement", "authority": "Fundamental Rights (Enforcement Procedure) Rules 2009, Order II r. 1"},
+    {"cause": "Election Petition (Governorship / NASS)", "period": "21 days from declaration of result", "authority": "Electoral Act 2022, s. 133(1)"},
+    {"cause": "Election Petition (Presidential)", "period": "21 days from declaration of result", "authority": "Electoral Act 2022, s. 133(1)"},
+    {"cause": "Labour / Employment (NIC)", "period": "No fixed limit — laches & acquiescence apply", "authority": "NIC Act 2006; NIC (CPR) Rules 2017"},
+    {"cause": "Wrongful Termination / Breach of Contract of Employment", "period": "6 years (contract)", "authority": "Limitation Act s. 8(1)(a); NIC jurisdiction"},
+    {"cause": "Pension Claim (PenCom / Trustee)", "period": "5 years from accrual", "authority": "Pension Reform Act 2014, s. 72"},
+    {"cause": "Tax Assessment Appeal (FIRS)", "period": "30 days from service of notice of assessment", "authority": "FIRSEA 2007, s. 69; TAT Procedure Rules 2021"},
+    {"cause": "Tax Assessment Appeal (State IRS)", "period": "30 days (varies by state law)", "authority": "State Revenue Service laws (e.g. LIRS Law 2015)"},
+    {"cause": "Consumer Protection (FCCPC)", "period": "3 years from cause arising", "authority": "FCCPA 2018, s. 17"},
+    {"cause": "Insurance Claim (non-life)", "period": "12 months from loss (per policy); 6 years max", "authority": "Insurance Act 2003, s. 78; policy conditions"},
+    {"cause": "Life Assurance Claim", "period": "No statutory bar in most policies; 6 years general", "authority": "Insurance Act 2003; Limitation Act s. 8"},
+    {"cause": "Company Derivative Action (CAMA 2020)", "period": "No fixed limit — promptness required", "authority": "CAMA 2020, ss. 339–344"},
+    {"cause": "Winding-Up Petition (CAMA 2020)", "period": "Debt must be subsisting; no limitation on petition", "authority": "CAMA 2020, ss. 571–572 (21-day statutory demand first)"},
+    {"cause": "Bankers Recovery (Proof of Debt)", "period": "6 years from default", "authority": "BOFIA 2020; Limitation Act s. 8"},
+    {"cause": "Mortgage / Debenture Enforcement", "period": "12 years (action on covenant); 12 years (possession)", "authority": "Limitation Act ss. 16, 18"},
+    {"cause": "Admiralty / Maritime Claim (arrest)", "period": "Prompt action required — 2 years for damage claims (LLMC)", "authority": "Admiralty Jurisdiction Act 1991; LLMC Convention"},
+    {"cause": "Intellectual Property Infringement", "period": "6 years from infringement", "authority": "Limitation Act s. 8(1)(a); Trade Marks Act; Copyright Act 2022"},
+    {"cause": "Fraudulent Misrepresentation", "period": "6 years from discovery of fraud", "authority": "Limitation Act s. 26(1) — time runs from discovery"},
+    {"cause": "Land Acquisition / Compulsory Acquisition (State)", "period": "12 months from notice of acquisition", "authority": "Land Use Act 1978, s. 29; applicable State law"},
+    {"cause": "EFCC / ICPC Forfeiture Proceedings", "period": "No limitation — proceeds of crime, not time-barred", "authority": "EFCCA 2004 s. 28; ICPCA 2000 s. 47"},
+    {"cause": "Tenancy / Recovery of Premises", "period": "6 years for rent arrears; state recovery law for possession", "authority": "Applicable State Tenancy Law (e.g. Lagos Tenancy Law 2011)"},
+    {"cause": "Breach of Trust (Trustee Act)", "period": "6 years; no limit for fraudulent breach", "authority": "Limitation Act s. 21; Trustees Act Cap T22 LFN 2004"},
+    {"cause": "Chieftaincy / Customary Law Title", "period": "No fixed limit — laches applies; urgent notice required", "authority": "State Chieftaincy Laws; customary law principles"},
 ]
 
 COURT_HIERARCHY = [
@@ -810,31 +914,66 @@ COURT_HIERARCHY = [
 ]
 
 DEFAULT_LEGAL_MAXIMS = [
-    {"maxim": "Audi alteram partem", "meaning": "Hear the other side — natural justice"},
-    {"maxim": "Nemo judex in causa sua", "meaning": "No one should judge their own cause"},
-    {"maxim": "Stare decisis", "meaning": "Stand by decided cases — binding precedent"},
-    {"maxim": "Ubi jus ibi remedium", "meaning": "Where there is a right, there is a remedy"},
-    {"maxim": "Volenti non fit injuria", "meaning": "No injury to one who consents"},
-    {"maxim": "Pacta sunt servanda", "meaning": "Agreements must be honoured"},
-    {"maxim": "Nemo dat quod non habet", "meaning": "No one gives what they don't have"},
-    {"maxim": "Res judicata", "meaning": "A decided matter cannot be re-litigated"},
-    {"maxim": "Actus non facit reum nisi mens sit rea", "meaning": "No guilt without guilty mind"},
-    {"maxim": "Ignorantia legis neminem excusat", "meaning": "Ignorance of law excuses no one"},
-    {"maxim": "Qui facit per alium facit per se", "meaning": "He who acts through another acts himself"},
-    {"maxim": "Generalia specialibus non derogant", "meaning": "General provisions don't override specific ones"},
+    {"maxim": "Audi alteram partem", "meaning": "Hear the other side — a pillar of natural justice; no condemnation unheard"},
+    {"maxim": "Nemo judex in causa sua", "meaning": "No one should be a judge in their own cause — the rule against bias"},
+    {"maxim": "Stare decisis et non quieta movere", "meaning": "Stand by decided cases and do not disturb settled matters — binding precedent"},
+    {"maxim": "Ubi jus ibi remedium", "meaning": "Where there is a right, there is a remedy — no right without a corresponding action"},
+    {"maxim": "Volenti non fit injuria", "meaning": "No injury is done to one who consents — defence to negligence"},
+    {"maxim": "Pacta sunt servanda", "meaning": "Agreements must be kept — fundamental to contract law"},
+    {"maxim": "Nemo dat quod non habet", "meaning": "One cannot give what one does not have — root of title and property law"},
+    {"maxim": "Res judicata pro veritate accipitur", "meaning": "A decided matter is accepted as truth — estoppel per rem judicatam"},
+    {"maxim": "Actus non facit reum nisi mens sit rea", "meaning": "An act does not make a person guilty unless the mind is also guilty — criminal law"},
+    {"maxim": "Ignorantia juris non excusat", "meaning": "Ignorance of the law excuses no one — universal legal responsibility"},
+    {"maxim": "Qui facit per alium facit per se", "meaning": "He who acts through another acts himself — agency and vicarious liability"},
+    {"maxim": "Generalia specialibus non derogant", "meaning": "General provisions do not derogate from special ones — statutory interpretation"},
+    {"maxim": "Ex turpi causa non oritur actio", "meaning": "No action arises from a base cause — illegality as a defence"},
+    {"maxim": "Delegatus non potest delegare", "meaning": "A delegate cannot further delegate — limits on sub-delegation of power"},
+    {"maxim": "Suppressio veri suggestio falsi", "meaning": "Suppression of truth is equivalent to a suggestion of falsehood — equity and fraud"},
+    {"maxim": "Damnum sine injuria", "meaning": "Damage without legal injury — no actionable wrong despite loss"},
+    {"maxim": "Injuria sine damno", "meaning": "Legal injury without actual damage — actionable without proof of loss (e.g. trespass)"},
+    {"maxim": "In pari delicto potior est conditio defendentis", "meaning": "Where both parties are equally at fault, the defendant's position is the stronger"},
+    {"maxim": "Falsus in uno, falsus in omnibus", "meaning": "False in one thing, false in everything — goes to witness credibility"},
+    {"maxim": "Fraus omnia corrumpit", "meaning": "Fraud vitiates everything — equitable maxim applied in Nigerian courts"},
+    {"maxim": "Expressio unius est exclusio alterius", "meaning": "Express mention of one thing excludes others — statutory interpretation"},
+    {"maxim": "Ejusdem generis", "meaning": "Of the same kind — general words following specific words take colour from the specific"},
+    {"maxim": "Ut res magis valeat quam pereat", "meaning": "Prefer the construction that gives effect to the provision rather than destroys it"},
+    {"maxim": "Lex posterior derogat priori", "meaning": "A later law repeals an earlier inconsistent law"},
+    {"maxim": "In dubio pro reo", "meaning": "In doubt, for the accused — the criminal law presumption of innocence"},
+    {"maxim": "Qui prior est tempore potior est jure", "meaning": "He who is earlier in time is stronger in law — priority of interests"},
+    {"maxim": "Consensus ad idem", "meaning": "Meeting of minds — essential element of a valid contract in Nigerian law"},
+    {"maxim": "Non est factum", "meaning": "It is not my deed — defence against a deed fundamentally different from what was intended"},
+    {"maxim": "Caveat emptor", "meaning": "Let the buyer beware — buyer takes property as found (qualified by disclosure duties)"},
+    {"maxim": "Lex loci contractus", "meaning": "The law of the place where a contract is made — choice of law in contracts"},
+    {"maxim": "Interest reipublicae ut sit finis litium", "meaning": "It is in the public interest that litigation should have an end — finality of judgments"},
 ]
 
 DEFAULT_TEMPLATES = [
     {"id": "builtin_1", "name": "Employment Contract", "cat": "Corporate", "builtin": True,
-     "content": "EMPLOYMENT CONTRACT\n\nMade on [DATE] between:\n\n1. [EMPLOYER NAME] (\"Employer\")\n   RC: [NUMBER]\n\n2. [EMPLOYEE NAME] (\"Employee\")\n\nTERMS:\n1. Position: [TITLE]\n2. Start: [DATE]\n3. Probation: [MONTHS]\n4. Salary: N[AMOUNT]/month\n5. Hours: [X] hrs/week\n6. Leave: [X] days/year\n7. Termination: [NOTICE] written notice\n8. Governing Law: Labour Act of Nigeria\n\nSigned:\n_______ (Employer)\n_______ (Employee)"},
+     "content": "EMPLOYMENT CONTRACT\n\nThis Employment Contract is made on [DATE] between:\n\n1. [EMPLOYER NAME] (\"Employer\"), RC No: [NUMBER], of [ADDRESS]\n\n2. [EMPLOYEE FULL NAME] (\"Employee\"), of [ADDRESS]\n\nTERMS AND CONDITIONS:\n1. POSITION: The Employee is employed as [JOB TITLE] in the [DEPARTMENT] department.\n2. COMMENCEMENT: Employment commences on [START DATE].\n3. PROBATION: Subject to a probationary period of [MONTHS] months, during which either party may terminate on 2 weeks' written notice.\n4. SALARY: ₦[AMOUNT] per month (gross), payable on the [X]th of each month.\n5. WORKING HOURS: [X] hours per week, [DAYS]. Overtime as agreed in writing.\n6. ANNUAL LEAVE: [X] working days per year, taken by mutual arrangement.\n7. PENSION: The Employer shall enrol the Employee under the Contributory Pension Scheme in accordance with the Pension Reform Act 2014. Employer contribution: 10%. Employee contribution: 8%.\n8. TAXES: PAYE tax shall be deducted at source per the Personal Income Tax Act.\n9. TERMINATION: Either party may terminate on [NOTICE PERIOD] written notice after confirmation. Summary dismissal for gross misconduct per the Labour Act.\n10. CONFIDENTIALITY: The Employee shall not disclose trade secrets or confidential information during or after employment.\n11. RESTRICTIVE COVENANT: [INCLUDE / DELETE AS APPROPRIATE — specify scope, duration, geography]\n12. GOVERNING LAW: This Contract is governed by the Labour Act Cap L1 LFN 2004 and the laws of the Federal Republic of Nigeria.\n\nSIGNED:\n_________________________ (for the Employer)\n_________________________ (Employee)\nDate: ___________________\nWitness: ________________"},
     {"id": "builtin_2", "name": "Tenancy Agreement", "cat": "Property", "builtin": True,
-     "content": "TENANCY AGREEMENT\n\nMade on [DATE] BETWEEN:\n[LANDLORD] of [ADDRESS] (\"Landlord\")\nAND\n[TENANT] of [ADDRESS] (\"Tenant\")\n\n1. Premises: [ADDRESS]\n2. Term: [DURATION] from [START]\n3. Rent: N[AMOUNT] per [PERIOD]\n4. Deposit: N[AMOUNT]\n5. Use: [Residential/Commercial]\n6. Governing Law: Applicable State Tenancy Law\n\nSigned:\n_______ _______"},
+     "content": "TENANCY AGREEMENT\n\nThis Tenancy Agreement is made on [DATE] BETWEEN:\n[LANDLORD FULL NAME] of [ADDRESS] (\"Landlord\")\nAND\n[TENANT FULL NAME] of [ADDRESS] (\"Tenant\")\n\n1. PREMISES: The property at [FULL ADDRESS] (\"the Premises\").\n2. TERM: [DURATION] commencing [START DATE] and ending [END DATE].\n3. RENT: ₦[AMOUNT] per [PERIOD], payable [in advance / monthly / quarterly].\n4. DEPOSIT: ₦[AMOUNT] refundable security deposit, held against damage and breach.\n5. USE: [Residential / Commercial] purposes only. No subletting without Landlord's written consent.\n6. REPAIRS: Landlord responsible for structural repairs. Tenant responsible for minor/day-to-day maintenance.\n7. TERMINATION: [X] months' written notice by either party.\n8. STAMP DUTY: This agreement shall be duly stamped per the Stamp Duties Act.\n9. GOVERNING LAW: [Applicable State Tenancy Law, e.g. Lagos Tenancy Law 2011 / Rivers State Tenancy Law]\n\nSIGNED:\n_______________________ (Landlord)\n_______________________ (Tenant)\n\nWitness to Landlord:\nName: _________________ Signature: _____________\n\nWitness to Tenant:\nName: _________________ Signature: _____________\n\n⚠️ STAMP DUTY NOTE: Tenancy < 7 years: 0.78% × annual rent × years. Tenancy 7–21 years: 3% of annual rent."},
     {"id": "builtin_3", "name": "Power of Attorney", "cat": "Litigation", "builtin": True,
      "content": "GENERAL POWER OF ATTORNEY\n\nI, [GRANTOR], of [ADDRESS], appoint [ATTORNEY] of [ADDRESS] as my Attorney.\n\nPOWERS:\n1. Recover debts and execute settlements\n2. Manage real and personal property\n3. Appear before any court or tribunal\n\nIRREVOCABLE for [PERIOD].\n\nDated: [DATE]\nSigned: _______\nWitness: _______"},
     {"id": "builtin_4", "name": "Written Address (Skeleton)", "cat": "Litigation", "builtin": True,
      "content": "IN THE [COURT NAME]\nSUIT NO: [NUMBER]\n\nBETWEEN:\n[CLAIMANT] ............ Claimant\nAND\n[DEFENDANT] ........... Defendant\n\nWRITTEN ADDRESS OF THE [PARTY]\n\n1.0 INTRODUCTION\n2.0 BRIEF FACTS\n3.0 ISSUES FOR DETERMINATION\n4.0 ARGUMENTS\n   4.1 Issue One\n   4.2 Issue Two\n5.0 CONCLUSION\n\nDated: [DATE]\nCounsel: _______"},
     {"id": "builtin_5", "name": "Demand Letter", "cat": "Commercial", "builtin": True,
-     "content": "OUR REF: [REF]\nDATE: [DATE]\n\n[RECIPIENT NAME]\n[ADDRESS]\n\nDear Sir/Madam,\n\nRE: DEMAND FOR PAYMENT OF N[AMOUNT]\n\nWe are Solicitors to [CLIENT NAME] on whose instructions we write.\n\nOur client instructs us that [FACTS].\n\nDEMAND: Pay N[AMOUNT] within [DAYS] days.\n\nFailing which, we have firm instructions to commence legal proceedings without further notice.\n\nYours faithfully,\n[FIRM NAME]"},
+     "content": "OUR REF: [REF]\nDATE: [DATE]\n\n[RECIPIENT NAME]\n[ADDRESS]\n\nDear Sir/Madam,\n\nRE: DEMAND FOR PAYMENT OF ₦[AMOUNT]\n\nWe are Solicitors and Advocates to [CLIENT NAME] on whose instructions we write this letter.\n\nOur client instructs us that [STATE FACTS OF THE DEBT / OBLIGATION].\n\nDespite repeated demands, you have failed, refused and/or neglected to discharge the above obligation.\n\nWe are therefore instructed and do hereby DEMAND that you pay the sum of ₦[AMOUNT] ([AMOUNT IN WORDS] NAIRA) to our client within [DAYS] days of the date of this letter.\n\nFailing compliance, we have firm instructions to institute legal proceedings against you in the appropriate court to recover the said sum, together with interest, costs and all further reliefs available in law, without any further notice to you.\n\nGOVERNING LAW: This demand is made under the laws of the Federal Republic of Nigeria.\n\nYours faithfully,\n[FIRM NAME]\n[ADDRESS] | [PHONE] | [EMAIL]"},
+    {"id": "builtin_5b", "name": "Statutory Demand (CAMA 2020)", "cat": "Corporate", "builtin": True,
+     "content": "STATUTORY DEMAND NOTICE\n(Pursuant to Section 572, Companies and Allied Matters Act 2020)\n\nDATE: [DATE]\n\nTO: THE DIRECTORS OF\n[COMPANY NAME] (RC No: [NUMBER])\n[REGISTERED ADDRESS]\n\nDear Sirs,\n\nRE: STATUTORY DEMAND FOR PAYMENT OF ₦[AMOUNT]\n\nWe act as Solicitors for [CREDITOR NAME] ('the Creditor') and write on their instructions.\n\n1. The Creditor is owed the sum of ₦[AMOUNT] ([AMOUNT IN WORDS]) by your company, being [DESCRIPTION OF DEBT — invoice nos./contract reference/loan], which sum is due and payable and has remained unpaid since [DATE].\n\n2. TAKE NOTICE that pursuant to Section 572(1)(a) of the Companies and Allied Matters Act 2020, if the above sum is not paid within TWENTY-ONE (21) DAYS from the date of service of this demand, your company shall be deemed to be unable to pay its debts, and the Creditor shall be at liberty to present a winding-up petition against your company at the Federal High Court without further notice.\n\n3. Payment should be made to:\nAccount Name: [ACCOUNT NAME]\nBank: [BANK NAME]\nAccount Number: [ACCOUNT NO.]\nSort Code: [IF APPLICABLE]\n\n4. Upon receipt of full payment, this demand shall be withdrawn.\n\nYou are strongly advised to take independent legal advice on this letter immediately.\n\nYours faithfully,\n[FIRM NAME]\nSolicitors for the Creditor\n[ADDRESS] | [PHONE] | [EMAIL]"},
+    {"id": "builtin_5c", "name": "Retainer Agreement", "cat": "Commercial", "builtin": True,
+     "content": "LEGAL RETAINER AGREEMENT\n\nThis Retainer Agreement is made on [DATE] between:\n\n[FIRM NAME] ('the Firm')\nof [FIRM ADDRESS]\nRC/BN: [IF APPLICABLE]\n\nAND\n\n[CLIENT NAME] ('the Client')\nof [CLIENT ADDRESS]\n\n1. SCOPE OF SERVICES\n   The Firm is retained to provide the following legal services:\n   [Describe scope — e.g. general corporate advisory / employment law / all commercial matters / specific matter]\n\n2. RETAINER FEE\n   (a) Monthly retainer: ₦[AMOUNT] payable on or before the [X]th of each month.\n   (b) Included: up to [X] hours of advisory and correspondence per month.\n   (c) Excess hours: billed at ₦[RATE]/hour.\n   (d) Litigation: separate engagement letter required.\n\n3. DISBURSEMENTS\n   All filing fees, stamp duties, process fees, travel and photocopying costs shall be invoiced separately.\n\n4. BILLING\n   Invoices shall be rendered [monthly/quarterly] and are payable within 14 days.\n\n5. CONFIDENTIALITY\n   The Firm shall maintain strict client confidentiality pursuant to Rule 17 of the Rules of Professional Conduct for Legal Practitioners 2007.\n\n6. CONFLICT OF INTEREST\n   The Firm shall promptly disclose any conflict and seek the Client's consent or withdraw as required by the RPC.\n\n7. TERMINATION\n   Either party may terminate on 30 days' written notice. Outstanding fees shall remain due.\n\n8. GOVERNING LAW\n   This Agreement is governed by the laws of the Federal Republic of Nigeria.\n\n   SIGNED:\n   ___________________________ (Authorised Signatory for the Firm)\n   ___________________________ (Client / Authorised Representative)\n   Date: ___________________"},
+    {"id": "builtin_6", "name": "Deed of Assignment (Land)", "cat": "Property", "builtin": True,
+     "content": "DEED OF ASSIGNMENT\n\nDATE: [DATE]\n\nPARTIES:\n1. [ASSIGNOR NAME] of [ADDRESS] (\"Assignor\")\n2. [ASSIGNEE NAME] of [ADDRESS] (\"Assignee\")\n\nRECITALS:\nA. The Assignor is the beneficial owner of the property described in the Schedule.\nB. The Assignor has agreed to assign all right, title and interest in the said property to the Assignee for the consideration stated herein.\n\nNOW THIS DEED WITNESSES:\n1. CONSIDERATION: The Assignee has paid the Assignor the sum of ₦[AMOUNT] (the receipt of which the Assignor hereby acknowledges).\n2. ASSIGNMENT: The Assignor hereby assigns unto the Assignee ALL THAT piece of land known as [DESCRIPTION], covered by [C of O/Deed/Survey Plan No.], situated at [ADDRESS], TOGETHER with all buildings, fixtures and appurtenances.\n3. COVENANT FOR TITLE: The Assignor covenants with the Assignee that the Assignor has the right to assign the property free from encumbrances.\n4. INDEMNITY: The Assignor shall indemnify the Assignee against any claim arising from prior ownership.\n\nTHE SCHEDULE\nAll that piece of land situate at [FULL ADDRESS], measuring approximately [SIZE] and more particularly delineated on Survey Plan No. [NUMBER] prepared by [SURVEYOR].\n\nIN WITNESS WHEREOF the parties have executed this Deed as of the date first written above.\n\nSigned, sealed and delivered\nby the said ASSIGNOR: _____________\nin the presence of:\nName: _____________ Signature: _____________\nAddress: _____________\nOccupation: _____________\n\nSigned, sealed and delivered\nby the said ASSIGNEE: _____________\nin the presence of:\nName: _____________ Signature: _____________\nAddress: _____________\nOccupation: _____________"},
+    {"id": "builtin_7", "name": "Affidavit (General)", "cat": "Litigation", "builtin": True,
+     "content": "IN THE [HIGH COURT OF [STATE] STATE / FEDERAL HIGH COURT]\n[JUDICIAL DIVISION]\nSUIT NO: [NUMBER]\n\nIN THE MATTER OF: [SUBJECT]\n\nAFFIDAVIT\n\nI, [FULL NAME], [Occupation], of [Full Address], do hereby make oath and state as follows:\n\n1. That I am the [Applicant/Respondent/Claimant/Defendant] in this matter and I am conversant with the facts deposed to herein.\n\n2. That [STATE FACTS IN NUMBERED PARAGRAPHS — each paragraph to contain one fact]\n\n3. That [CONTINUE FACTS...]\n\n4. That I depose to this Affidavit in good faith believing the contents to be true and correct to the best of my knowledge and belief.\n\nDEPONENT: _____________\n\nSWORN TO at [PLACE] this [DATE]\nBEFORE ME: _____________\n[Commissioner for Oaths / Notary Public]\n\n⚠️ STAMP DUTY: ₦200 flat — Stamp Duties Act"},
+    {"id": "builtin_8", "name": "Memorandum of Appearance", "cat": "Litigation", "builtin": True,
+     "content": "IN THE [COURT NAME]\n[JUDICIAL DIVISION]\nSUIT NO: [NUMBER]\n\nBETWEEN:\n[CLAIMANT/PLAINTIFF]                           ...  Claimant/Plaintiff\n                                AND\n[DEFENDANT]                                    ...  Defendant\n\nMEMORANDUM OF APPEARANCE\n\nTake notice that [LAW FIRM NAME] of [ADDRESS], solicitors for the Defendant, hereby enter appearance on behalf of the Defendant in this suit.\n\nConditions of Appearance: [UNCONDITIONAL / CONDITIONAL — state conditions if any]\n\nDated this [DATE]\n\n[LAW FIRM NAME]\n[ADDRESS]\n[PHONE]\n[EMAIL]\nSolicitors for the Defendant\n\nTO:\n[CLAIMANT'S SOLICITORS / CLAIMANT]\n[ADDRESS]"},
+    {"id": "builtin_9", "name": "Undertaking as to Damages", "cat": "Litigation", "builtin": True,
+     "content": "IN THE [COURT NAME]\nSUIT NO: [NUMBER]\n\nBETWEEN:\n[APPLICANT]          ...  Applicant\n         AND\n[RESPONDENT]         ...  Respondent\n\nUNDERTAKING AS TO DAMAGES\n\nI/We, [APPLICANT/SOLICITOR NAME], of [ADDRESS], hereby undertake to the Court that:\n\n1. If the Court grants an interlocutory injunction/Mareva order in this matter and it shall later appear that the Respondent has suffered loss by reason of the order, and the Court is of opinion that the Applicant ought to pay compensation to the Respondent, I/We will comply with any order the Court may make.\n\n2. This undertaking is given in consideration of the Court granting the relief sought in this application.\n\n3. I/We confirm the Applicant has assets within the jurisdiction sufficient to meet any award of compensation that may be ordered.\n\nDated: [DATE]\n\nSigned: _____________\n[Applicant / Applicant's Solicitor]\n\n[FILE BEFORE SERVICE OF ORDER — mandatory for interlocutory injunctions per Kotoye v CBN [1989] NWLR]"},
+    {"id": "builtin_10", "name": "Pre-Action Protocol Notice (Lagos)", "cat": "Litigation", "builtin": True,
+     "content": "OUR REF: [REF]\nDATE: [DATE]\n\n[DEFENDANT / RESPONDENT NAME]\n[ADDRESS]\n\nDear Sir/Madam,\n\nPRE-ACTION NOTICE — [SUBJECT MATTER]\n[Pursuant to Order 13 Rule 14, High Court of Lagos State (Civil Procedure) Rules 2019]\n\nWe are Solicitors and Advocates to [CLIENT NAME] and write on their instructions.\n\n1. FACTS: [State brief facts of the claim]\n\n2. CLAIM: Our client's claim against you is for: ₦[AMOUNT] / [other relief], arising from [brief basis].\n\n3. DOCUMENTS RELIED UPON: [List key documents]\n\n4. INVITATION TO SETTLE: Pursuant to the Pre-Action Protocol, we invite you to settle this matter within 30 days of the date of this letter, failing which our client shall proceed to institute legal proceedings in the appropriate court without further notice to you.\n\n5. RESPONSE: Kindly respond to this notice within 30 days, indicating whether you accept or dispute the claim, and if disputed, the grounds thereof.\n\nYours faithfully,\n[LAW FIRM NAME]\n[ADDRESS] | [PHONE] | [EMAIL]\nSolicitors to [CLIENT NAME]\n\n⚠️ Note: Failure to respond to a Pre-Action Protocol Notice may result in adverse costs orders — Order 13 Rule 14, Lagos HCCPR 2019."},
+    {"id": "builtin_11", "name": "Notice of Appeal (Court of Appeal)", "cat": "Litigation", "builtin": True,
+     "content": "IN THE COURT OF APPEAL\n[DIVISION] DIVISION\nAPPEAL NO: CA/[DIV]/[NUMBER]/[YEAR]\n\nBETWEEN:\n[APPELLANT]                ...  Appellant\n         AND\n[RESPONDENT]               ...  Respondent\n\nNOTICE OF APPEAL\n\nTAKE NOTICE that [APPELLANT], being dissatisfied with the decision of [LOWER COURT] delivered on [DATE] in Suit No. [NUMBER], hereby appeals to the Court of Appeal upon the following grounds:\n\nGROUNDS OF APPEAL:\n1. The learned trial Judge erred in law in [STATE GROUND] in that:\n   (a) [PARTICULARS]\n   (b) [PARTICULARS]\n\n2. The decision is against the weight of evidence in that:\n   (a) [PARTICULARS]\n\n3. [ADD FURTHER GROUNDS AS NECESSARY]\n\nRELIEF SOUGHT:\nThe Appellant prays this Honourable Court to:\n(a) Allow this appeal;\n(b) Set aside the decision of the lower court;\n(c) [STATE SPECIFIC RELIEF — substituted judgment / retrial / etc.]\n(d) Award costs in favour of the Appellant.\n\nDated this [DATE]\n\n[LAW FIRM NAME]\n[ADDRESS]\nSolicitors for the Appellant\n\nTO: The Registrar, Court of Appeal, [Division]\nTO: [RESPONDENT'S SOLICITORS]\n\n⚠️ Filing Deadline: 3 months from date of judgment — Section 25(2) Court of Appeal Act.\n⚠️ Filing Fee: ₦100,000 (verify with Registry before filing)."},
 ]
 
 # ═══════════════════════════════════════════════════════
@@ -1719,14 +1858,32 @@ def export_docx(text: str, title: str = "LexiAssist Analysis",
 
 def export_txt(text: str, title: str = "LexiAssist Analysis") -> str:
     firm   = get_firm_name()
-    header = f"{'='*60}\n{title}\n{firm}\nGenerated: {datetime.now():%d %B %Y at %H:%M}\n{'='*60}\n\n"
+    profile = st.session_state.get("profile", {})
+    lawyer = profile.get("lawyer_name", "")
+    nba_no = profile.get("nba_enroll", "")
+    nba_line = f"Counsel: {lawyer}" + (f"  |  SCN Enroll. No: {nba_no}" if nba_no else "") + "\n" if lawyer else ""
+    header = f"{'='*60}\n{title}\n{firm}\n{nba_line}Generated: {datetime.now():%d %B %Y at %H:%M}\n{'='*60}\n\n"
     footer = f"\n\n{'='*60}\nGenerated by {firm} via LexiAssist v8.0\n{'='*60}"
     return header + text + footer
 
 def export_html(text: str, title: str = "LexiAssist Analysis") -> str:
     firm = get_firm_name()
+    profile = st.session_state.get("profile", {})
+    lawyer = profile.get("lawyer_name", "")
+    nba_no = profile.get("nba_enroll", "")
+    nba_branch = profile.get("nba_branch", "")
     import html as html_mod
     safe = html_mod.escape(text).replace("\n","<br>")
+    meta_parts = [html_mod.escape(firm)]
+    if lawyer:
+        meta_parts.append(html_mod.escape(lawyer))
+    if nba_no:
+        meta_parts.append(f"SCN Enroll. No: {html_mod.escape(nba_no)}")
+    if nba_branch:
+        meta_parts.append(f"NBA {html_mod.escape(nba_branch)} Branch")
+    meta_parts.append(f"Generated {datetime.now():%d %B %Y}")
+    meta_parts.append("LexiAssist v8.0")
+    meta_str = " &middot; ".join(meta_parts)
     return (f"<!DOCTYPE html><html><head><meta charset='utf-8'>"
             f"<title>{html_mod.escape(title)}</title>"
             f"<style>body{{font-family:Calibri,Arial,sans-serif;max-width:900px;margin:2rem auto;"
@@ -1736,11 +1893,11 @@ def export_html(text: str, title: str = "LexiAssist Analysis") -> str:
             f".footer{{margin-top:2rem;padding-top:1rem;border-top:1px solid #e2e8f0;"
             f"color:#9ca3af;font-size:.8rem;}}</style></head>"
             f"<body><h1>{html_mod.escape(title)}</h1>"
-            f"<div class='meta'>{html_mod.escape(firm)} &middot; "
-            f"Generated {datetime.now():%d %B %Y} &middot; LexiAssist v8.0</div>"
+            f"<div class='meta'>{meta_str}</div>"
             f"<div class='body'>{safe}</div>"
-            f"<div class='footer'>\u26a0 AI-generated. Not legal advice. "
-            f"Verify all citations independently.</div></body></html>")
+            f"<div class='footer'>\u26a0 AI-generated via LexiAssist v8.0. Not legal advice. "
+            f"Verify all citations and authorities independently before relying on this output."
+            f"</div></body></html>")
 
 def safe_pdf_download(text: str, title: str, fname: str, key: str):
     try:
@@ -2856,6 +3013,19 @@ def render_sidebar():
         st.divider()
         st.caption("⚖️ LexiAssist v8.0 © 2026")
         st.caption("🇳🇬 Nigerian Law · 🤖 AI-Powered")
+        # NBA Annual Practicing Certificate reminder
+        today = date.today()
+        # NBA APC renewal runs January–March each year
+        if today.month <= 3:
+            days_left = (date(today.year, 3, 31) - today).days
+            if days_left <= 60:
+                st.warning(
+                    f"⚠️ **NBA APC Reminder:** Annual Practicing Certificate renewal "
+                    f"deadline is **31 March {today.year}**. "
+                    f"{days_left} day(s) remaining.",
+                )
+        elif today.month == 12:
+            st.info("ℹ️ **NBA APC:** Renewal opens January. Deadline: 31 March.")
 
 
 def render_home():
@@ -2957,28 +3127,71 @@ Your workspace is empty. Pick any of the three actions below to begin:
                 st.metric("This Month", f"${cost_summary['monthly_cost']:.4f}")
 
     st.markdown("---")
-    st.markdown("### 🏆 Elite Features")
+    st.markdown("### 🏆 What LexiAssist Does")
     f1, f2, f3, f4 = st.columns(4)
     with f1:
         st.markdown("""<div class="custom-card">
-            <h4>🎯 Position-Taking</h4>
-            <p>No more "may be liable" — firm conclusions backed by authority</p>
+            <h4>🎯 Position-Taking AI</h4>
+            <p>No more "may be liable" — firm conclusions backed by Nigerian statute and case authority</p>
         </div>""", unsafe_allow_html=True)
     with f2:
         st.markdown("""<div class="custom-card">
             <h4>📑 Contract Review</h4>
-            <p>Clause-by-clause risk analysis with red flag matrix</p>
+            <p>Clause-by-clause risk matrix, red flag grading, and redline recommendations</p>
         </div>""", unsafe_allow_html=True)
     with f3:
         st.markdown("""<div class="custom-card">
-            <h4>⚔️ Strategy Layer</h4>
-            <p>Actionable next steps per party — litigator-grade advice</p>
+            <h4>📜 Smart Pleadings</h4>
+            <p>18 court document types drafted in full Nigerian court format from your case file</p>
         </div>""", unsafe_allow_html=True)
     with f4:
         st.markdown("""<div class="custom-card">
-            <h4>💾 Cloud Persistence</h4>
-            <p>PostgreSQL-backed — all data synced across sessions and devices</p>
+            <h4>🛡️ AML / SCUML</h4>
+            <p>AI-assisted anti-money laundering checks, red flag detection, and SCUML compliance</p>
         </div>""", unsafe_allow_html=True)
+
+    f5, f6, f7, f8 = st.columns(4)
+    with f5:
+        st.markdown("""<div class="custom-card">
+            <h4>⏳ Limitation Checker</h4>
+            <p>AI computes all applicable deadlines from your facts — 32 causes of action covered</p>
+        </div>""", unsafe_allow_html=True)
+    with f6:
+        st.markdown("""<div class="custom-card">
+            <h4>⚖️ Fee Calculator</h4>
+            <p>Land solicitor's fees, stamp duty, court filing fees — Lagos, FCT, Rivers, FHC, TAT</p>
+        </div>""", unsafe_allow_html=True)
+    with f7:
+        st.markdown("""<div class="custom-card">
+            <h4>🎯 Witness Prep</h4>
+            <p>Examination-in-chief questions, cross-examination risks, and coaching notes</p>
+        </div>""", unsafe_allow_html=True)
+    with f8:
+        st.markdown("""<div class="custom-card">
+            <h4>💾 Multi-User Cloud</h4>
+            <p>PostgreSQL-backed — all data persists across sessions; admin + user roles</p>
+        </div>""", unsafe_allow_html=True)
+
+    # ── Nigerian Court Calendar Notice ──
+    st.markdown("---")
+    _today = date.today()
+    _month = _today.month
+    _day   = _today.day
+    vacation_notices = []
+    # Long vacation: August–September
+    if _month == 8 or (_month == 9 and _day < 25):
+        vacation_notices.append("☀️ **Long Vacation** (August–September) — Most Superior Courts are on recess. Urgent matters by leave only.")
+    # Christmas vacation: mid-December to mid-January
+    if _month == 12 and _day >= 15:
+        vacation_notices.append("🎄 **Christmas Vacation** — Courts rising. Last sittings typically 3rd week of December.")
+    if _month == 1 and _day < 15:
+        vacation_notices.append("🎄 **Christmas Vacation** — Courts resuming mid-January. Verify exact resumption dates with each registry.")
+    # Easter: approximate April check
+    if _month == 4 and 5 <= _day <= 20:
+        vacation_notices.append("✝️ **Easter Vacation Period** — Verify court sitting schedule with your registry.")
+    if vacation_notices:
+        for vn in vacation_notices:
+            st.warning(vn)
 
 
 # ═══════════════════════════════════════════════════════
@@ -4185,6 +4398,38 @@ def render_billing():
         else:
             st.info("No time entries to report.")
 
+        # ── Nigerian Tax Compliance Reminders ──
+        st.markdown("---")
+        st.markdown("#### 🧾 Nigerian Tax Obligations for Law Firms")
+        t1, t2, t3 = st.columns(3)
+        with t1:
+            st.markdown("""<div class="custom-card">
+                <h4>💼 WHT on Legal Fees</h4>
+                <p>Corporate clients deduct <strong>5% Withholding Tax</strong> from legal fees
+                paid to law firms per CITA and PITA. You are entitled to a WHT credit note.
+                Ensure clients issue WHT credit certificates — use these to offset your CIT
+                liability at year-end.</p>
+                <small><em>CITA s. 81; FIRS WHT Regulations</em></small>
+            </div>""", unsafe_allow_html=True)
+        with t2:
+            st.markdown("""<div class="custom-card">
+                <h4>🧮 VAT on Legal Services</h4>
+                <p>Legal services attract <strong>7.5% VAT</strong> (Finance Act 2019).
+                If your firm's annual turnover exceeds <strong>₦25 million</strong>,
+                you must register for VAT, charge it on invoices, and remit to FIRS
+                by the <strong>21st of the following month</strong>.</p>
+                <small><em>VATA Cap V1 LFN (as amended); Finance Act 2019 s. 38</em></small>
+            </div>""", unsafe_allow_html=True)
+        with t3:
+            st.markdown("""<div class="custom-card">
+                <h4>👔 PAYE for Staff</h4>
+                <p>Deduct and remit <strong>PAYE tax</strong> to the relevant State IRS
+                (based on employee's residence) by the <strong>10th of each month</strong>.
+                File annual returns with LIRS/FIRS by <strong>31 January</strong>.
+                Failure: ₦50,000/month penalty + 10% p.a. interest.</p>
+                <small><em>PITA Cap P8 LFN 2004 (as amended); Finance Acts</em></small>
+            </div>""", unsafe_allow_html=True)
+
     # ── AI Cost Tracker ──
     with tab_costs:
         st.markdown("#### 🤖 AI Usage & Cost Tracker")
@@ -4277,8 +4522,8 @@ def render_tools():
         <p>Limitation periods · Court hierarchy · Legal maxims — view and customise</p>
     </div>""", unsafe_allow_html=True)
 
-    tab_lim, tab_calc, tab_court, tab_maxim = st.tabs(
-        ["⏳ Limitation Periods", "🧮 Deadline Calculator", "🏛️ Court Hierarchy", "📜 Legal Maxims"]
+    tab_lim, tab_calc, tab_court, tab_maxim, tab_aml = st.tabs(
+        ["⏳ Limitation Periods", "🧮 Deadline Calculator", "🏛️ Court Hierarchy", "📜 Legal Maxims", "🛡️ AML / SCUML"]
     )
 
     # ── Limitation Periods (editable) ──
@@ -4680,14 +4925,31 @@ border-radius:0.5rem;padding:1rem;margin-bottom:0.8rem;">
     
     # ── Court Hierarchy ──
     with tab_court:
-        st.markdown("#### 🏛️ Nigerian Court Hierarchy")
-        st.caption("From the Supreme Court down to courts of first instance")
-        for c in COURT_HIERARCHY:
-            indent = "&nbsp;&nbsp;&nbsp;&nbsp;" * (c["level"] - 1)
-            level_label = {1: "APEX", 2: "APPELLATE", 3: "SUPERIOR", 4: "LOWER"}.get(c["level"], "")
+        st.markdown("#### 🏛️ Nigerian Court Hierarchy & Jurisdiction Guide")
+        st.caption("From the Supreme Court down to specialised tribunals")
+        FULL_HIERARCHY = [
+            {"level": 1, "name": "Supreme Court of Nigeria", "desc": "Final court of appeal. Hears appeals from Court of Appeal on civil and criminal matters. Exclusive original jurisdiction in disputes between States, or between States and the Federation — CFRN s. 233.", "icon": "🏛️"},
+            {"level": 2, "name": "Court of Appeal", "desc": "Intermediate appellate court. 21 divisions across Nigeria. Hears appeals from FHC, State High Courts, NIC, Sharia Court of Appeal, Customary Court of Appeal — CFRN s. 240.", "icon": "⚖️"},
+            {"level": 3, "name": "Federal High Court (FHC)", "desc": "Federal subject-matter jurisdiction: revenue, admiralty, banking, IP, immigration, company law (CAMA), capital market, EFCC/ICPC prosecutions, fundamental rights (federal) — CFRN s. 251.", "icon": "🏢"},
+            {"level": 3, "name": "State High Courts", "desc": "Unlimited civil and criminal jurisdiction within each state. Hears all matters not exclusively conferred on FHC or NIC. Also hear fundamental rights enforcement — CFRN s. 272.", "icon": "🏢"},
+            {"level": 3, "name": "National Industrial Court (NIC)", "desc": "Exclusive jurisdiction over labour, employment, trade unions, industrial relations, and workplace safety matters. Appeals to Court of Appeal — NIC Act 2006; CFRN Third Alteration 2010.", "icon": "🏢"},
+            {"level": 3, "name": "High Court of the FCT", "desc": "Exercises State High Court equivalent jurisdiction for the Federal Capital Territory, Abuja.", "icon": "🏢"},
+            {"level": 4, "name": "Magistrate / District Courts", "desc": "Summary criminal and civil jurisdiction up to statutory limits (varies by state — Lagos: ₦500k civil; FCT: ₦1m). First instance for most minor offences.", "icon": "📋"},
+            {"level": 4, "name": "Customary Courts / Area Courts", "desc": "Apply customary law in civil and minor criminal matters. Prevalent in Northern and Midwestern states. Appeals to Customary Court of Appeal.", "icon": "📋"},
+            {"level": 4, "name": "Sharia Courts of Appeal", "desc": "Appellate jurisdiction over Islamic personal law (marriage, divorce, inheritance, wakf) in the Northern States that have adopted full Sharia — CFRN s. 277.", "icon": "📋"},
+            {"level": 5, "name": "Tax Appeal Tribunal (TAT)", "desc": "Hears appeals from FIRS and State IRS tax assessments. Six zones. 30-day appeal window. Appeals go to Federal High Court — FIRSEA 2007; TAT Rules 2021.", "icon": "🧮"},
+            {"level": 5, "name": "Investment & Securities Tribunal (IST)", "desc": "Exclusive jurisdiction over capital market disputes — SEC, NSE/NGX matters. Appeals to Court of Appeal — ISA 2007.", "icon": "📈"},
+            {"level": 5, "name": "Code of Conduct Tribunal (CCT)", "desc": "Tries public officers for breaches of the Code of Conduct — failure to declare assets, conflict of interest. Appeals to Court of Appeal — CFRN Fifth Schedule.", "icon": "🛡️"},
+            {"level": 5, "name": "National Information Technology Development Agency (NITDA) Tribunal", "desc": "Data protection and IT regulatory disputes under the Nigeria Data Protection Act 2023.", "icon": "💻"},
+        ]
+        level_label_map = {1: "APEX", 2: "APPELLATE", 3: "SUPERIOR COURT", 4: "LOWER COURT", 5: "TRIBUNAL"}
+        for c in FULL_HIERARCHY:
+            indent = "&nbsp;&nbsp;&nbsp;&nbsp;" * max(0, c["level"] - 1)
+            level_label = level_label_map.get(c["level"], "")
+            badge_cls = "badge-err" if c["level"]==1 else ("badge-warn" if c["level"]==2 else ("badge-ok" if c["level"]==3 else "badge-info"))
             st.markdown(f"""<div class="tool-card">
                 {indent}{c['icon']} <strong>{esc(c['name'])}</strong>
-                <span class="badge badge-info">{level_label}</span><br>
+                <span class="badge {badge_cls}">{level_label}</span><br>
                 {indent}&nbsp;&nbsp;&nbsp;&nbsp;<small>{esc(c['desc'])}</small>
             </div>""", unsafe_allow_html=True)
 
@@ -4744,6 +5006,164 @@ border-radius:0.5rem;padding:1rem;margin-bottom:0.8rem;">
                         st.rerun()
                     else:
                         st.error("❌ Both fields required.")
+
+    # ── AML / SCUML Compliance ──
+    with tab_aml:
+        st.markdown("""<div class="page-header" style="margin-bottom:1rem;">
+            <h2>🛡️ AML / SCUML Compliance Guide</h2>
+            <p>Money Laundering (Prevention & Prohibition) Act 2022 · SCUML Registration · Know Your Client obligations</p>
+        </div>""", unsafe_allow_html=True)
+
+        st.markdown("""
+<div class="custom-card">
+<h4>📋 SCUML Registration — Is Your Firm Registered?</h4>
+<p>The <strong>Special Control Unit Against Money Laundering (SCUML)</strong> operates under the Federal Ministry of Finance.
+Legal practitioners handling <em>any</em> of the trigger transactions below are <strong>Designated Non-Financial Businesses and Professions (DNFBPs)</strong>
+and must register with SCUML — <em>Money Laundering (Prevention & Prohibition) Act 2022, s. 26.</em></p>
+<p><strong>Non-registration</strong> is a criminal offence carrying up to <strong>₦10 million fine</strong> and/or <strong>5 years imprisonment</strong>.</p>
+</div>""", unsafe_allow_html=True)
+
+        aml_c1, aml_c2 = st.columns(2)
+        with aml_c1:
+            st.markdown("""
+<div class="custom-card">
+<h4>⚡ Trigger Transactions (Register Required)</h4>
+<ul>
+<li>Real estate transactions (buying, selling, leasing)</li>
+<li>Company incorporations, mergers, acquisitions</li>
+<li>Management of client funds, bank accounts, or assets</li>
+<li>Trust and company service provision</li>
+<li>Any cash transaction ≥ <strong>₦5,000,000</strong> (individual) or <strong>₦10,000,000</strong> (company)</li>
+<li>Wire transfers or cross-border payments on behalf of clients</li>
+</ul>
+<small><em>Source: MLPPA 2022, s. 25; SCUML Registration Guidelines</em></small>
+</div>""", unsafe_allow_html=True)
+
+        with aml_c2:
+            st.markdown("""
+<div class="custom-card">
+<h4>📑 KYC Obligations — What You Must Collect</h4>
+<ul>
+<li><strong>Individual clients:</strong> Full name, DoB, address, BVN, valid ID (NIN, Int'l Passport, Driver's Licence)</li>
+<li><strong>Corporate clients:</strong> CAC CTC, MEMART, board resolution, BEN form (beneficial owner > 5%), director IDs</li>
+<li><strong>Politically Exposed Persons (PEPs):</strong> Enhanced Due Diligence — source of funds, senior management approval</li>
+<li>Retain KYC records for <strong>minimum 5 years</strong> after the business relationship ends</li>
+<li>File <strong>Suspicious Transaction Reports (STRs)</strong> with NFIU within 24 hours of suspicion</li>
+</ul>
+<small><em>Source: MLPPA 2022, ss. 3, 6, 13; CBN/SCUML AML/CFT Regulations</em></small>
+</div>""", unsafe_allow_html=True)
+
+        st.markdown("---")
+        st.markdown("#### 🤖 AML Compliance Check (AI-Assisted)")
+        st.caption("Describe a client matter and the AI will flag AML/CFT risks and your specific compliance obligations.")
+
+        aml_facts = st.text_area(
+            "Matter Facts for AML Check",
+            height=130,
+            key="aml_facts_ta",
+            placeholder="e.g. A new client (company) wants us to handle the purchase of a ₦450M property in Lekki. They want to pay partly in cash. The directors are not well known. No previous business relationship.",
+        )
+        aml_btn = st.button(
+            "🛡️ Run AML Compliance Check",
+            type="primary",
+            disabled=not aml_facts.strip(),
+            key="aml_check_btn",
+            width='stretch',
+        )
+
+        if aml_btn and aml_facts.strip():
+            aml_prompt = f"""
+You are a Nigerian AML/CFT compliance expert. Analyse the matter below for money laundering risks
+and the lawyer's specific obligations under the Money Laundering (Prevention & Prohibition) Act 2022,
+SCUML Registration Guidelines, and NFIU regulations. Today: {date.today().strftime('%d %B %Y')}.
+
+Respond ONLY in this exact JSON format, nothing else:
+{{
+  "risk_rating": "LOW / MEDIUM / HIGH / VERY HIGH",
+  "risk_summary": "One paragraph explaining the overall risk",
+  "red_flags": [
+    {{
+      "flag": "Description of the red flag",
+      "authority": "MLPPA 2022, s.X or SCUML Guideline",
+      "severity": "High / Medium / Low"
+    }}
+  ],
+  "obligations": [
+    {{
+      "obligation": "Specific legal obligation",
+      "authority": "Specific provision",
+      "action_required": "What the lawyer must do now",
+      "deadline": "When it must be done"
+    }}
+  ],
+  "scuml_registration_required": true,
+  "str_required": false,
+  "str_note": "Whether and why an STR should be filed",
+  "proceed_advice": "PROCEED / PROCEED WITH EDD / DO NOT PROCEED",
+  "proceed_reason": "Why"
+}}
+
+MATTER FACTS: {aml_facts}
+"""
+            with st.spinner("🛡️ Checking AML/CFT compliance…"):
+                aml_raw = generate(aml_prompt, IDENTITY_CORE, "brief", "advisory")
+            try:
+                aml_clean = aml_raw.strip().replace("```json", "").replace("```", "").strip()
+                aml_data = json.loads(aml_clean)
+                risk = aml_data.get("risk_rating", "MEDIUM")
+                risk_colors = {"LOW": ("#f0fdf4","#059669","badge-ok"),
+                               "MEDIUM": ("#fef9c3","#d97706","badge-warn"),
+                               "HIGH": ("#fee2e2","#dc2626","badge-err"),
+                               "VERY HIGH": ("#fee2e2","#991b1b","badge-err")}
+                r_bg, r_border, r_badge = risk_colors.get(risk, risk_colors["MEDIUM"])
+                proceed = aml_data.get("proceed_advice","PROCEED WITH EDD")
+                p_colors = {"PROCEED":("#f0fdf4","#059669"), "PROCEED WITH EDD":("#fef9c3","#d97706"), "DO NOT PROCEED":("#fee2e2","#dc2626")}
+                p_bg, p_border = p_colors.get(proceed, ("#fef9c3","#d97706"))
+
+                st.markdown(f"""
+<div style="display:flex;gap:1rem;margin:1rem 0;">
+  <div style="flex:1;background:{r_bg};border:2px solid {r_border};border-radius:.75rem;padding:1rem;text-align:center;">
+    <div style="font-size:1.6rem;font-weight:800;color:{r_border};">{risk}</div>
+    <div style="font-size:.78rem;text-transform:uppercase;letter-spacing:.06em;color:{r_border};">AML Risk Rating</div>
+  </div>
+  <div style="flex:2;background:{p_bg};border:2px solid {p_border};border-radius:.75rem;padding:1rem;">
+    <strong style="color:{p_border};">{proceed}</strong><br>
+    <span style="font-size:.9rem;">{esc(aml_data.get('proceed_reason',''))}</span>
+  </div>
+</div>
+<p>{esc(aml_data.get('risk_summary',''))}</p>
+""", unsafe_allow_html=True)
+
+                red_flags = aml_data.get("red_flags", [])
+                if red_flags:
+                    st.markdown(f"##### 🚩 {len(red_flags)} Red Flag(s) Identified")
+                    for rf in red_flags:
+                        sev = rf.get("severity","Medium")
+                        sev_cls = "badge-err" if sev=="High" else ("badge-warn" if sev=="Medium" else "badge-ok")
+                        st.markdown(f"""<div class="custom-card">
+                            🚩 {esc(rf.get('flag',''))}
+                            <span class="badge {sev_cls}">{sev}</span><br>
+                            <small>{esc(rf.get('authority',''))}</small>
+                        </div>""", unsafe_allow_html=True)
+
+                obls = aml_data.get("obligations", [])
+                if obls:
+                    st.markdown(f"##### ✅ {len(obls)} Compliance Obligation(s)")
+                    for ob in obls:
+                        st.markdown(f"""<div class="custom-card">
+                            <strong>{esc(ob.get('obligation',''))}</strong><br>
+                            📌 {esc(ob.get('action_required',''))}<br>
+                            <small>⏰ {esc(ob.get('deadline',''))} · {esc(ob.get('authority',''))}</small>
+                        </div>""", unsafe_allow_html=True)
+
+                if aml_data.get("str_required"):
+                    st.error(f"🚨 **STR Required:** {aml_data.get('str_note','')} — File with NFIU within 24 hours.")
+                elif aml_data.get("str_note"):
+                    st.info(f"ℹ️ **STR Note:** {aml_data.get('str_note','')}")
+
+            except Exception:
+                st.markdown(aml_raw)
+
 
 # ═══════════════════════════════════════════════════════
 # PAGE: CONFLICT OF INTEREST CHECKER
@@ -5146,56 +5566,93 @@ PLEADING_TYPES = {
         "label": "⚔️ Counter-Claim",
         "desc": "Defendant's claim against the claimant",
     },
+    "defence_to_counterclaim": {
+        "label": "🛡️ Defence to Counter-Claim",
+        "desc": "Claimant's reply to the defendant's counter-claim",
+    },
     "originating_summons": {
         "label": "📋 Originating Summons",
-        "desc": "For matters begun by summons — questions of law or construction",
+        "desc": "For matters begun by summons — questions of law or document construction",
     },
     "motion_on_notice": {
         "label": "📬 Motion on Notice",
-        "desc": "Interlocutory application with supporting affidavit",
+        "desc": "Interlocutory application on notice with supporting affidavit",
+    },
+    "ex_parte_motion": {
+        "label": "⚡ Ex Parte Motion (Urgent)",
+        "desc": "Urgent motion without notice — injunctions, Mareva, Anton Piller",
     },
     "affidavit": {
         "label": "📜 Supporting Affidavit",
         "desc": "Sworn statement of facts in support of a motion or application",
     },
+    "counter_affidavit": {
+        "label": "📜 Counter-Affidavit",
+        "desc": "Respondent's sworn reply to the applicant's affidavit",
+    },
     "written_address": {
-        "label": "✍️ Written Address",
+        "label": "✍️ Written Address / Final Address",
         "desc": "Final address or skeleton argument for court",
     },
     "notice_of_appeal": {
         "label": "🔔 Notice of Appeal",
-        "desc": "Formal notice of appeal with grounds",
+        "desc": "Formal notice of appeal with grounds and relief sought",
     },
     "writ_of_summons": {
         "label": "📃 Writ of Summons",
-        "desc": "Originating process for High Court actions",
+        "desc": "Originating process for High Court actions (States & FCT)",
+    },
+    "petition": {
+        "label": "📝 Petition",
+        "desc": "Election petition, winding-up petition, or matrimonial petition",
+    },
+    "fundamental_rights_motion": {
+        "label": "⚖️ Fundamental Rights Enforcement Motion",
+        "desc": "Application under FREP Rules 2009 — CFRN Chapter IV rights",
+    },
+    "mareva_injunction": {
+        "label": "🔒 Mareva Injunction Application",
+        "desc": "Asset-freezing order to prevent dissipation pending judgment",
+    },
+    "interpleader_summons": {
+        "label": "🔀 Interpleader Summons",
+        "desc": "Where a third party holds property claimed by two parties",
+    },
+    "garnishee_order_nisi": {
+        "label": "💰 Garnishee Proceedings (Order Nisi)",
+        "desc": "Post-judgment enforcement — attaching debts owed to judgment debtor",
     },
 }
 
 PLEADING_PROMPT = """
-You are a senior Nigerian litigation lawyer drafting court documents.
+You are a senior Nigerian litigation lawyer and Senior Advocate (SAN-standard) drafting court documents.
 Draft the {pleading_type} described below in full, professional Nigerian court format.
 
-STRICT RULES:
-1. Use the exact suit number, parties, and court provided
-2. Use [PLACEHOLDER] only for information not provided
-3. Include all mandatory formal requirements for this document type in Nigerian courts
-4. Number all paragraphs correctly
-5. Include proper heading, title, body, relief/prayer section, and signature block
-6. Apply the correct rules of court for the specified court
-7. Do NOT add commentary or strategy — draft only
+STRICT DRAFTING RULES:
+1. Use EXACT suit number, parties' names, and court provided — no modifications
+2. Use [PLACEHOLDER] ONLY for genuinely missing information — fill everything you can from the facts
+3. Include ALL mandatory formal requirements for this document type in Nigerian courts
+4. Number every paragraph correctly (1, 2, 3... for pleadings; i, ii, iii... for grounds)
+5. Include proper heading, document title, body, relief/prayers section, date line, and signature block
+6. Apply the correct Rules of Court for the specified court (Lagos HCCPR 2019, FHC (CPR) 2019, etc.)
+7. For affidavits: use deponent language ("I STATE as follows:"), number every paragraph, end with jurat
+8. For written addresses: use Issues for Determination, structured arguments with case law, conclusion with prayers
+9. For notices of appeal: state specific errors of law or fact with particulars; state relief sought precisely
+10. Do NOT add strategy commentary or analysis — pure court document only
+11. Include stamp duty note where applicable (Affidavit: ₦200 flat; Deed: per Stamp Duties Act)
+12. For Mareva/injunction applications: include undertaking as to damages reminder
 
 CASE DETAILS:
 Case Title: {case_title}
 Suit Number: {suit_no}
 Court: {court}
-Claimant: {claimant}
-Defendant: {defendant}
+Claimant / Applicant: {claimant}
+Defendant / Respondent: {defendant}
 Case Type: {case_type}
 Key Facts: {facts}
 Specific Instructions: {instructions}
 
-Draft the complete {pleading_type} now:
+Draft the complete, court-ready {pleading_type} now. Write every word of the document — do not summarise or use shorthand:
 """
 
 
@@ -6699,6 +7156,8 @@ def render_notes_converter():
         "retainer": "🤝 Client Retainer Letter",
         "demand":   "📩 Letter of Demand",
         "advice":   "📄 Formal Legal Advice Letter",
+        "opinion":  "⚖️ Formal Legal Opinion",
+        "proof":    "📜 Proof of Evidence (Witness Statement)",
     }
     nc1, nc2 = st.columns([2, 1])
     with nc1:
@@ -6770,6 +7229,32 @@ Format: Introduction / Facts as Understood / Legal Position /
 Our Advice / Recommended Next Steps / Costs Estimate / Disclaimer
 Write in plain English the client can understand.
 Explain all legal terms used. No unnecessary Latin.
+Client: {client_name or '[CLIENT]'} | Ref: {matter_ref or '[REF]'}""",
+            "opinion": f"""Convert these raw meeting notes into a formal Legal Opinion
+in the standard Nigerian law firm format.
+Structure STRICTLY as:
+1. INTRODUCTION & INSTRUCTIONS
+2. DOCUMENTS/FACTS CONSIDERED
+3. ISSUES FOR OPINION
+4. LAW APPLICABLE
+5. OPINION (one firm paragraph per issue — no hedging)
+6. CONCLUSION
+7. CAVEATS & LIMITATIONS
+Sign off: "This Opinion is rendered in good faith and is based on Nigerian law
+as at the date hereof. It does not constitute legal advice for any other purpose."
+Client: {client_name or '[CLIENT]'} | Ref: {matter_ref or '[REF]'}""",
+            "proof": f"""Convert these raw meeting notes into a formal Proof of Evidence
+(Witness Statement) for use in Nigerian court proceedings.
+Structure:
+- Court heading with suit number (use [SUIT NO] if not stated)
+- Title: WITNESS STATEMENT ON OATH OF [WITNESS NAME]
+- Numbered paragraphs (each containing one fact only)
+- Use first person: "I am..." "I say that..."
+- End with: "I make this statement knowing that it will be relied upon
+  in the above proceedings and believing that the facts stated herein
+  are true to the best of my knowledge and belief."
+- Jurat block at the end
+- Note: Stamp duty ₦200 flat (Stamp Duties Act) — affix before swearing
 Client: {client_name or '[CLIENT]'} | Ref: {matter_ref or '[REF]'}""",
         }
         full_prompt = (
@@ -6862,11 +7347,19 @@ def render_profile():
             with p1:
                 firm_name = st.text_input("Firm Name", value=profile.get("firm_name", ""), key="prof_firm_inp",
                                           placeholder="e.g. Adekunle & Associates")
-                lawyer_name = st.text_input("Lawyer Name", value=profile.get("lawyer_name", ""), key="prof_lawyer_inp")
+                lawyer_name = st.text_input("Lawyer Name", value=profile.get("lawyer_name", ""), key="prof_lawyer_inp",
+                                            placeholder="e.g. Barr. Chidi Adekunle")
                 email = st.text_input("Email", value=profile.get("email", ""), key="prof_email_inp")
+                nba_branch = st.text_input("NBA Branch", value=profile.get("nba_branch", ""), key="prof_nba_branch",
+                                           placeholder="e.g. Lagos, Abuja, Port Harcourt")
             with p2:
                 phone = st.text_input("Phone", value=profile.get("phone", ""), key="prof_phone_inp")
-                address = st.text_area("Address", value=profile.get("address", ""), height=100, key="prof_addr_inp")
+                address = st.text_area("Address", value=profile.get("address", ""), height=82, key="prof_addr_inp")
+                nba_enroll = st.text_input("NBA Enrollment No. (SCN Call No.)", value=profile.get("nba_enroll", ""),
+                                           key="prof_nba_enroll", placeholder="e.g. 2009/SCN/12345",
+                                           help="Your Supreme Court of Nigeria enrollment number as it appears on your call certificate")
+                call_year = st.text_input("Year Called to Bar", value=profile.get("call_year", ""),
+                                          key="prof_call_year", placeholder="e.g. 2009")
 
             if st.form_submit_button("💾 Save Profile", type="primary"):
                 st.session_state.profile["firm_name"] = firm_name.strip()
@@ -6874,6 +7367,9 @@ def render_profile():
                 st.session_state.profile["email"] = email.strip()
                 st.session_state.profile["phone"] = phone.strip()
                 st.session_state.profile["address"] = address.strip()
+                st.session_state.profile["nba_enroll"] = nba_enroll.strip()
+                st.session_state.profile["call_year"] = call_year.strip()
+                st.session_state.profile["nba_branch"] = nba_branch.strip()
                 persist_profile()
                 st.success("✅ Profile saved! Firm name will appear on all exports.")
                 st.rerun()
@@ -6882,9 +7378,14 @@ def render_profile():
         if profile.get("firm_name"):
             st.markdown("---")
             st.markdown("#### 📄 Export Header Preview")
+            nba_line = ""
+            if profile.get("nba_enroll") or profile.get("call_year"):
+                nba_line = f"NBA Enroll. No: {esc(profile.get('nba_enroll',''))} · Called: {esc(profile.get('call_year',''))}<br>"
+            branch_line = f"NBA Branch: {esc(profile.get('nba_branch',''))}<br>" if profile.get("nba_branch") else ""
             st.markdown(f"""<div class="custom-card">
                 <h4>{esc(profile.get('firm_name', ''))}</h4>
                 {esc(profile.get('lawyer_name', ''))}<br>
+                {nba_line}{branch_line}
                 📧 {esc(profile.get('email', ''))} · 📞 {esc(profile.get('phone', ''))}<br>
                 📍 {esc(profile.get('address', ''))}
             </div>""", unsafe_allow_html=True)
