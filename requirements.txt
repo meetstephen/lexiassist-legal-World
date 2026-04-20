@@ -1,9 +1,30 @@
+# LexiAssist v8.0 — Requirements
+# Deploy on Streamlit Cloud (Python 3.11+)
+
+# ── Core framework ─────────────────────────────────────
 streamlit>=1.40.0
+
+# ── AI Engine ──────────────────────────────────────────
+# IMPORTANT: This app uses the NEW Google GenAI SDK.
+# "from google import genai" requires google-genai, NOT google-generativeai.
 google-genai>=0.8.0
+
+# ── Database ───────────────────────────────────────────
+# psycopg2-binary (not psycopg2) — Streamlit Cloud has no PostgreSQL build headers
 psycopg2-binary>=2.9.9
+
+# ── Data & Exports ─────────────────────────────────────
 pandas>=2.0.0
+openpyxl>=3.1.0
 plotly>=5.18.0
+
+# ── Document parsing ───────────────────────────────────
 pdfplumber>=0.10.0
 python-docx>=1.1.0
+
+# ── Document generation ────────────────────────────────
 fpdf2>=2.7.9
-openpyxl>=3.1.0
+
+
+
+
