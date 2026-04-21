@@ -1206,7 +1206,7 @@ def get_theme_css(
 ) -> str:
     t = get_theme(theme_name)
 
-    text_color = "#FFFFFF" if high_contrast else t["text"]
+    text_color = "#362E2EFF" if high_contrast else t["text"]
     text_sec   = "#CCCCCC" if high_contrast else t["text_secondary"]
     bg_color   = "#000000" if (high_contrast and t["bg"][1:3] < "33") else t["bg"]
     base_font  = round(16 * font_size_scale, 1)
@@ -1261,6 +1261,7 @@ def get_theme_css(
     return f"""<style>
 /* ── Google Fonts — loaded inside style tag (no external link tags) ── */
 @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200&display=block');
 
 /* ── Custom properties ── */
 :root {{
@@ -1287,7 +1288,7 @@ def get_theme_css(
   text-rendering:optimizeLegibility!important;}}
 
 /* ── Universal text sharpening ── */
-p,li,td,th,caption,figcaption,span,label,div,
+p,li,td,th,caption,figcaption,label,div,
 .stMarkdown,.stMarkdown p,.stMarkdown li,.stMarkdown span,
 [data-testid="stMarkdownContainer"] *,[data-testid="stText"],[data-testid="stCaptionContainer"],
 .stRadio label,.stRadio div,.stCheckbox label,.stCheckbox div,
@@ -1298,6 +1299,40 @@ p,li,td,th,caption,figcaption,span,label,div,
   -moz-osx-font-smoothing:grayscale!important;font-family:var(--font)!important;}}
 .stCaption,[data-testid="stCaptionContainer"] p,small,.stHelp{{
   color:var(--la-text2)!important;-webkit-font-smoothing:antialiased!important;}}
+
+/* ── CRITICAL: Restore Material Symbols font for ALL Streamlit icon spans ── */
+/* Without this, icon ligatures like arrow_right show as raw text */
+span.material-symbols-rounded,
+span.material-symbols-outlined,
+span.material-symbols-sharp,
+span.material-icons,
+span.material-icons-outlined,
+span.material-icons-round,
+span.material-icons-sharp,
+[class*="material-symbols"],
+[class*="material-icons"],
+.stButton>button span[class*="material"],
+.stDownloadButton>button span[class*="material"],
+.stFormSubmitButton>button span[class*="material"],
+button span[class*="material"],
+[data-testid="stSidebarCollapsedControl"] span,
+[data-testid="stSidebarCollapseButton"] span,
+[data-testid="stExpander"] summary span[class*="material"],
+[data-testid="stBaseButton-header"] span[class*="material"],
+section[data-testid="stSidebar"] button span{{
+  font-family:'Material Symbols Rounded','Material Icons','Material Icons Outlined',
+    'Material Icons Round','Material Icons Sharp' !important;
+  font-feature-settings:'liga' 1 !important;
+  -webkit-font-feature-settings:'liga' 1 !important;
+  font-variation-settings:'FILL' 0,'wght' 400,'GRAD' 0,'opsz' 24 !important;
+  font-style:normal !important;
+  display:inline-block !important;
+  white-space:nowrap !important;
+  letter-spacing:normal !important;
+  text-transform:none !important;
+  word-wrap:normal !important;
+  direction:ltr !important;
+  -webkit-font-smoothing:antialiased !important;}}
 
 /* ── Headings ── */
 h1,h2,h3,h4,h5,h6,
@@ -1413,10 +1448,15 @@ section[data-testid="stSidebar"] > div > div > div > button svg{{
   opacity:1!important;display:block!important;width:1.1rem!important;height:1.1rem!important;}}
 
 /* ── Buttons ── */
-.stButton>button{{font-family:var(--font)!important;
+.stButton>button{{
   -webkit-font-smoothing:antialiased!important;border-radius:var(--r-md)!important;
   font-weight:500!important;letter-spacing:.005em!important;
   transition:var(--tb)!important;transform:translateZ(0);}}
+/* Button label text (not the icon span) */
+.stButton>button p,
+.stButton>button div:not([class*="material"]):not([class*="icon"]),
+.stDownloadButton>button p{{
+  font-family:var(--font)!important;-webkit-font-smoothing:antialiased!important;}}
 .stButton>button[kind="primary"],
 .stButton>button[data-testid="baseButton-primary"]{{
   background:{acc}!important;color:#fff!important;border:none!important;
