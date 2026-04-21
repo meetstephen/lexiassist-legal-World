@@ -1382,23 +1382,35 @@ section[data-testid="stSidebar"] .stButton>button{{
 section[data-testid="stSidebar"] .stButton>button:hover{{
   background:{acc}22!important;border-color:{acc}55!important;}}
 
-/* ── Sidebar collapse/expand toggle arrow ── */
+/* ── Sidebar collapse/expand toggle arrow (all Streamlit versions) ── */
 [data-testid="stSidebarCollapsedControl"],
-[data-testid="collapsedControl"]{{
+[data-testid="collapsedControl"],
+[data-testid="stSidebarCollapseButton"]{{
   background:{sidebar_bg}!important;border-right:1px solid {sb_line}!important;
-  display:flex!important;visibility:visible!important;opacity:1!important;}}
+  display:flex!important;align-items:center!important;justify-content:center!important;
+  visibility:visible!important;opacity:1!important;z-index:999!important;}}
 [data-testid="stSidebarCollapsedControl"] button,
-[data-testid="collapsedControl"] button{{
+[data-testid="collapsedControl"] button,
+[data-testid="stSidebarCollapseButton"] button,
+button[data-testid="stSidebarCollapseButton"],
+button[data-testid="stBaseButton-header"]{{
   background:{sb_hover_bg}!important;border:1px solid {sb_line}!important;
   border-radius:var(--r-md)!important;color:{sb_text}!important;
-  visibility:visible!important;opacity:1!important;}}
+  visibility:visible!important;opacity:1!important;
+  width:2rem!important;height:2rem!important;min-width:2rem!important;
+  display:flex!important;align-items:center!important;justify-content:center!important;
+  padding:0!important;}}
 [data-testid="stSidebarCollapsedControl"] svg,
 [data-testid="collapsedControl"] svg,
+[data-testid="stSidebarCollapseButton"] svg,
+button[data-testid="stSidebarCollapseButton"] svg,
+button[data-testid="stBaseButton-header"] svg,
 section[data-testid="stSidebar"] [data-testid="stBaseButton-header"] svg,
-section[data-testid="stSidebar"] button[kind="header"] svg{{
-  fill:{sb_text}!important;color:{sb_text}!important;
+section[data-testid="stSidebar"] button[kind="header"] svg,
+section[data-testid="stSidebar"] > div > div > div > button svg{{
+  fill:{sb_text}!important;stroke:{sb_text}!important;color:{sb_text}!important;
   background:transparent!important;visibility:visible!important;
-  opacity:1!important;display:block!important;}}
+  opacity:1!important;display:block!important;width:1.1rem!important;height:1.1rem!important;}}
 
 /* ── Buttons ── */
 .stButton>button{{font-family:var(--font)!important;
@@ -1479,25 +1491,51 @@ section[data-testid="stSidebar"] .stTextArea textarea::placeholder{{
   fill:var(--la-text)!important;color:var(--la-text)!important;
   background-color:transparent!important;display:block!important;
   visibility:visible!important;opacity:1!important;}}
-/* ── File uploader ── */
-[data-testid="stFileUploader"] section{{
+/* ── File uploader — fix text visibility on all backgrounds ── */
+[data-testid="stFileUploader"] section,
+[data-testid="stFileUploader"] > section,
+[data-testid="stFileUploader"] [data-testid="stFileDropzoneInstructions"]{{
   background-color:var(--la-input)!important;
   border:1.5px dashed var(--la-border)!important;
-  border-radius:var(--r-md)!important;}}
+  border-radius:var(--r-md)!important;
+  padding:.9rem!important;}}
 [data-testid="stFileUploader"] section p,
 [data-testid="stFileUploader"] section span,
 [data-testid="stFileUploader"] section div,
+[data-testid="stFileUploader"] section label,
+[data-testid="stFileUploader"] section button,
+[data-testid="stFileUploader"] section button span,
 [data-testid="stFileDropzoneInstructions"],
-[data-testid="stFileDropzoneInstructions"] *{{
+[data-testid="stFileDropzoneInstructions"] *,
+[data-testid="stFileDropzoneInstructions"] span,
+[data-testid="stFileDropzoneInstructions"] p{{
   color:var(--la-text)!important;background-color:transparent!important;
-  -webkit-font-smoothing:antialiased!important;}}
-[data-testid="stFileUploader"] svg{{
+  -webkit-font-smoothing:antialiased!important;
+  line-height:1.5!important;}}
+/* Upload icon SVG */
+[data-testid="stFileUploader"] svg,
+[data-testid="stFileDropzoneInstructions"] svg{{
   fill:var(--la-text2)!important;color:var(--la-text2)!important;
-  background:transparent!important;}}
+  background:transparent!important;display:block!important;
+  visibility:visible!important;opacity:1!important;}}
+/* Browse files button text */
+[data-testid="stFileUploader"] section button{{
+  background:transparent!important;border:1px solid var(--la-border)!important;
+  color:var(--la-acc)!important;border-radius:var(--r-sm)!important;
+  font-size:.85rem!important;}}
+/* Caption / small text below uploader */
 [data-testid="stFileUploader"] small,
 [data-testid="stFileUploader"] .stCaption,
-[data-testid="stFileUploader"] .stCaption p{{
-  color:var(--la-text2)!important;font-size:.8rem!important;}}
+[data-testid="stFileUploader"] .stCaption p,
+[data-testid="stFileUploader"] [data-testid="stCaptionContainer"] p{{
+  color:var(--la-text2)!important;font-size:.8rem!important;
+  background-color:transparent!important;}}
+/* Sidebar file uploader specifically */
+section[data-testid="stSidebar"] [data-testid="stFileUploader"] section p,
+section[data-testid="stSidebar"] [data-testid="stFileUploader"] section span,
+section[data-testid="stSidebar"] [data-testid="stFileDropzoneInstructions"],
+section[data-testid="stSidebar"] [data-testid="stFileDropzoneInstructions"] *{{
+  color:{sb_input_tx}!important;background-color:transparent!important;}}
 
 /* ── Stat cards ── */
 .stat-card{{background:var(--la-card);border:1px solid var(--la-border);
@@ -1584,18 +1622,61 @@ div[data-testid="stTabs"] button[aria-selected="true"]{{color:var(--la-acc)!impo
   font-weight:600!important;background:transparent!important;
   border-bottom:2px solid var(--la-acc)!important;}}
 
-/* ── Expanders ── */
-.streamlit-expanderHeader,[data-testid="stExpander"] summary{{
+/* ── Expanders — fix arrow visibility + prevent text overlap ── */
+.streamlit-expanderHeader,
+[data-testid="stExpander"] summary,
+[data-testid="stExpander"] > details > summary{{
   background:var(--la-bg2)!important;color:var(--la-text)!important;
   border-radius:var(--r-md)!important;border:1px solid var(--la-border)!important;
   font-weight:500!important;
   transition:background var(--tb),border-color var(--tb)!important;
+  -webkit-font-smoothing:antialiased!important;
+  display:flex!important;align-items:center!important;
+  flex-direction:row!important;gap:.5rem!important;
+  padding:.55rem .9rem!important;list-style:none!important;
+  cursor:pointer!important;line-height:1.4!important;
+  min-height:2.4rem!important;box-sizing:border-box!important;}}
+/* Arrow SVG inside expander header */
+.streamlit-expanderHeader svg,
+[data-testid="stExpander"] summary svg,
+[data-testid="stExpander"] > details > summary svg{{
+  fill:var(--la-text)!important;color:var(--la-text)!important;
+  min-width:1rem!important;width:1rem!important;height:1rem!important;
+  flex-shrink:0!important;visibility:visible!important;
+  opacity:1!important;display:inline-block!important;}}
+/* Expander label text — prevent overlap */
+[data-testid="stExpander"] summary p,
+[data-testid="stExpander"] > details > summary p,
+.streamlit-expanderHeader p{{
+  color:var(--la-text)!important;margin:0!important;padding:0!important;
+  line-height:1.4!important;flex:1!important;
   -webkit-font-smoothing:antialiased!important;}}
-.streamlit-expanderHeader:hover,[data-testid="stExpander"] summary:hover{{
+/* Remove default browser triangle marker */
+[data-testid="stExpander"] summary::-webkit-details-marker,
+[data-testid="stExpander"] > details > summary::-webkit-details-marker{{display:none!important;}}
+[data-testid="stExpander"] summary::marker,
+[data-testid="stExpander"] > details > summary::marker{{display:none!important;}}
+/* Expander hover */
+.streamlit-expanderHeader:hover,
+[data-testid="stExpander"] summary:hover,
+[data-testid="stExpander"] > details > summary:hover{{
   background:var(--la-card)!important;border-color:{acc}55!important;}}
-.streamlit-expanderContent,[data-testid="stExpander"] details{{
+/* Expander body */
+.streamlit-expanderContent,
+[data-testid="stExpander"] details,
+[data-testid="stExpander"] > details{{
   background:var(--la-card)!important;border:1px solid var(--la-border)!important;
   border-top:none!important;border-radius:0 0 var(--r-md) var(--r-md)!important;}}
+/* Widgets inside expander — prevent stacking/collision */
+[data-testid="stExpander"] [data-testid="stWidgetLabel"],
+[data-testid="stExpander"] .stSlider,
+[data-testid="stExpander"] .stCheckbox,
+[data-testid="stExpander"] .stRadio{{
+  margin-top:.4rem!important;margin-bottom:.4rem!important;
+  display:block!important;clear:both!important;}}
+[data-testid="stExpander"] [data-testid="stWidgetLabel"] p{{
+  line-height:1.4!important;margin-bottom:.25rem!important;
+  display:block!important;}}
 
 /* ── Metrics ── */
 [data-testid="stMetric"]{{background:var(--la-card)!important;
@@ -1698,10 +1779,29 @@ div[data-testid="stColumn"] div[data-testid="stMarkdownContainer"]{{
   text-overflow:clip!important;line-height:1.4!important;
   padding:.45rem 1rem!important;min-height:2.2rem!important;}}
 /* Accessibility / settings widgets: ensure label and control don't collide */
-.stSlider,[data-testid="stWidgetLabel"]{{
-  margin-bottom:.3rem!important;display:block!important;}}
-[data-testid="stWidgetLabel"] p{{
-  line-height:1.4!important;margin-bottom:.2rem!important;}}
+.stSlider,
+.stCheckbox,
+.stRadio,
+[data-testid="stWidgetLabel"]{{
+  margin-bottom:.4rem!important;margin-top:.2rem!important;
+  display:block!important;clear:both!important;
+  position:relative!important;}}
+[data-testid="stWidgetLabel"] p,
+.stSlider label,
+.stCheckbox label,
+.stRadio label{{
+  line-height:1.4!important;margin-bottom:.25rem!important;
+  display:block!important;}}
+/* Prevent slider track from overlapping label */
+.stSlider > div {{
+  margin-top:.15rem!important;}}
+/* Sidebar-specific: give each widget proper breathing room */
+section[data-testid="stSidebar"] .stSlider,
+section[data-testid="stSidebar"] .stCheckbox,
+section[data-testid="stSidebar"] .stRadio{{
+  padding:.1rem 0!important;margin-bottom:.5rem!important;}}
+section[data-testid="stSidebar"] [data-testid="stWidgetLabel"] p{{
+  color:{sb_text}!important;}}
 /* Hide zero-height keep-alive iframe cleanly */
 iframe[height="0"],iframe[style*="height: 0"]{{
   display:none!important;height:0!important;min-height:0!important;
