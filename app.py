@@ -9239,7 +9239,7 @@ def init_session_state():
         "api_key": "",
         "api_configured": False,
         "gemini_model": DEFAULT_MODEL,
-        "theme": "⚖️ Corporate",
+        "theme": "🔥 Ember",
         "font_size_scale": 1.0,
         "high_contrast": False,
         "reduce_motion": False,
