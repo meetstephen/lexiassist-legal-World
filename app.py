@@ -2437,6 +2437,7 @@ class Database:
         self._execute("DELETE FROM case_analyses WHERE user_id = %s", (user_id,))
         self._execute("DELETE FROM cost_logs WHERE user_id = %s", (user_id,))
         self._execute("DELETE FROM kv_store WHERE key LIKE %s", (f"u:{user_id}:%",))
+        self._execute("DELETE FROM user_sessions WHERE user_id = %s", (user_id,))
         self.conn.commit()
 
     def update_user_last_login(self, user_id: str):
@@ -2864,7 +2865,10 @@ def do_login(username: str, password: str, remember_me: bool = True) -> bool:
     if remember_me:
         token = db.create_session_token(uid, days=30)
         st.session_state["_session_token"] = token
-        pass  # token stored in session_state only — never exposed in URL
+        try:
+            st.query_params["t"] = token  # write to URL so auto-login reads it on refresh
+        except Exception:
+            pass
     return True
 
 
@@ -3094,8 +3098,8 @@ def render_sidebar():
         name_display = firm if (firm and firm != "LexiAssist") else "LexiAssist v8.0"
         tag_display  = "Powered by LexiAssist v8.0" if (firm and firm != "LexiAssist") else "Elite AI Legal Engine"
         hdr_col = "#c9a84c" if corp else "#1a2e4a"
-        cap_col = "#a0bcd8" if corp else "#64748b"
-        div_col = "#2d4a6e" if corp else "#e2e8f0"
+        cap_col = "#2b3e51" if corp else "#08074a"
+        div_col = "#6508e7" if corp else "#090b0e"
         st.markdown(f"""
 <div style="padding:1rem 0.4rem 0.8rem 0.4rem;border-bottom:1px solid {div_col};">
   <div style="font-size:1.05rem;font-weight:800;color:{hdr_col};letter-spacing:-0.01em;">⚖️ {esc(name_display)}</div>
@@ -3106,8 +3110,8 @@ def render_sidebar():
         if uname:
             role_icon = "🛡️ Admin" if urole=="admin" else "👤 User"
             bg_c = "#ffffff10" if corp else "#22c55e18"
-            bd_c = "#ffffff25" if corp else "#22c55e55"
-            tx_c = "#c9a84c"   if corp else "#059669"
+            bd_c = "#ffffff00" if corp else "#22c55e55"
+            tx_c = "#eeb10b"   if corp else "#02261A"
             st.markdown(f"""
 <div style="margin:0.8rem 0 0.4rem 0;padding:0.6rem 0.8rem;background:{bg_c};border:1px solid {bd_c};border-radius:8px;">
   <div style="font-weight:700;font-size:0.9rem;color:{tx_c};">@{esc(uname)}</div>
@@ -3401,9 +3405,24 @@ Your workspace is empty. Pick any of the three actions below to begin:
         vacation_notices.append("🎄 **Christmas Vacation** — Courts rising. Last sittings typically 3rd week of December.")
     if _month == 1 and _day < 15:
         vacation_notices.append("🎄 **Christmas Vacation** — Courts resuming mid-January. Verify exact resumption dates with each registry.")
-    # Easter: approximate April check
-    if _month == 4 and 5 <= _day <= 20:
-        vacation_notices.append("✝️ **Easter Vacation Period** — Verify court sitting schedule with your registry.")
+    # Easter: computed properly for the current year
+    def _easter_date(year: int) -> date:
+        a = year % 19; b = year // 100; c = year % 100
+        d = b // 4;   e = b % 4;       f = (b + 8) // 25
+        g = (b - f + 1) // 3
+        h = (19*a + b - d - g + 15) % 30
+        i = c // 4;   k = c % 4
+        l = (32 + 2*e + 2*i - h - k) % 7
+        m = (a + 11*h + 22*l) // 451
+        month = (h + l - 7*m + 114) // 31
+        day   = ((h + l - 7*m + 114) % 31) + 1
+        return date(year, month, day)
+    from datetime import timedelta as _td
+    _easter      = _easter_date(_today.year)
+    _good_friday = _easter - _td(days=2)
+    _easter_mon  = _easter + _td(days=1)
+    if _good_friday <= _today <= _easter_mon:
+        vacation_notices.append("✝️ **Easter Vacation Period** — Courts typically on recess Good Friday through Easter Monday.")
     if vacation_notices:
         for vn in vacation_notices:
             st.warning(vn)
@@ -6925,9 +6944,9 @@ def render_legal_news():
 
         if feed_data is None:
             st.markdown("""
-<div style="background:#f8fafc;border:1.5px dashed #cbd5e1;border-radius:0.85rem;
-padding:2.5rem;text-align:center;color:#64748b;">
-  <h3 style="margin:0 0 0.5rem 0;">📰 Your Legal Feed is Empty</h3>
+<div style="background:var(--la-bg2);border:1.5px dashed var(--la-border);border-radius:0.85rem;
+padding:2.5rem;text-align:center;color:var(--la-text2);">
+  <h3 style="margin:0 0 0.5rem 0;color:var(--la-text);">📰 Your Legal Feed is Empty</h3>
   <p style="margin:0;">Select a subject area and click <strong>Fetch Latest</strong>
   to load Nigerian legal developments.</p>
 </div>""", unsafe_allow_html=True)
@@ -6945,8 +6964,8 @@ padding:2.5rem;text-align:center;color:#64748b;">
             hd1, hd2 = st.columns([3, 1])
             with hd1:
                 st.markdown(f"""
-<div style="padding:0.6rem 1rem;background:#f1f5f9;border-radius:0.5rem;
-display:inline-block;font-size:0.9rem;">
+<div style="padding:0.6rem 1rem;background:var(--la-bg2);border:1px solid var(--la-border);border-radius:0.5rem;
+display:inline-block;font-size:0.9rem;color:var(--la-text);">
   📅 <strong>Ref date:</strong> {esc(gen_date)} &nbsp;|&nbsp;
   📂 <strong>Subject:</strong> {esc(subject_loaded)} &nbsp;|&nbsp;
   📰 <strong>{len(items)} items</strong> &nbsp;|&nbsp;
@@ -6989,17 +7008,17 @@ display:inline-block;font-size:0.9rem;">
 
                     with st.expander(f"{'📌' if is_bookmarked else '📰'} {esc(title)}", expanded=False):
                         st.markdown(f"""
-<div style="background:#ffffff;border:1px solid #e2e8f0;border-radius:0.75rem;padding:1.2rem;">
-  <p style="margin:0 0 0.9rem 0;font-size:0.95rem;line-height:1.7;color:#1e293b;">{esc(summary)}</p>
-  <div style="background:#f0fdf4;border-left:3px solid #059669;padding:0.7rem 1rem;
+<div style="background:var(--la-card);border:1px solid var(--la-border);border-radius:0.75rem;padding:1.2rem;">
+  <p style="margin:0 0 0.9rem 0;font-size:0.95rem;line-height:1.7;color:var(--la-text);">{esc(summary)}</p>
+  <div style="background:var(--la-bg2);border-left:3px solid var(--la-pos);padding:0.7rem 1rem;
   border-radius:0.4rem;margin-bottom:0.7rem;">
-    <strong style="color:#059669;">🔑 Key Takeaway:</strong>
-    <span style="font-size:0.93rem;"> {esc(takeaway)}</span>
+    <strong style="color:var(--la-pos);">🔑 Key Takeaway:</strong>
+    <span style="font-size:0.93rem;color:var(--la-text);"> {esc(takeaway)}</span>
   </div>
-  <div style="background:#eff6ff;border-left:3px solid #3b82f6;padding:0.7rem 1rem;
+  <div style="background:var(--la-bg2);border-left:3px solid var(--la-acc);padding:0.7rem 1rem;
   border-radius:0.4rem;">
-    <strong style="color:#1d4ed8;">⚖️ Practice Impact:</strong>
-    <span style="font-size:0.93rem;"> {esc(impact)}</span>
+    <strong style="color:var(--la-acc);">⚖️ Practice Impact:</strong>
+    <span style="font-size:0.93rem;color:var(--la-text);"> {esc(impact)}</span>
   </div>
 </div>""", unsafe_allow_html=True)
 
@@ -7129,15 +7148,17 @@ border-radius:0.75rem;padding:1.4rem;">
                                  f" · {esc(bm.get('subject',''))} · {esc(bm.get('saved_at',''))}",
                                  expanded=False):
                     st.markdown(f"""
-<div style="background:#fff;border:1px solid #e2e8f0;border-radius:0.75rem;padding:1.1rem;">
-  <p style="margin:0 0 0.8rem 0;font-size:0.93rem;line-height:1.7;">{esc(bm.get('summary',''))}</p>
-  <div style="background:#f0fdf4;border-left:3px solid #059669;padding:0.6rem 0.9rem;
+<div style="background:var(--la-card);border:1px solid var(--la-border);border-radius:0.75rem;padding:1.1rem;">
+  <p style="margin:0 0 0.8rem 0;font-size:0.93rem;line-height:1.7;color:var(--la-text);">{esc(bm.get('summary',''))}</p>
+  <div style="background:var(--la-bg2);border-left:3px solid var(--la-pos);padding:0.6rem 0.9rem;
   border-radius:0.4rem;margin-bottom:0.6rem;">
-    <strong style="color:#059669;">🔑</strong> {esc(bm.get('key_takeaway',''))}
+    <strong style="color:var(--la-pos);">🔑</strong>
+    <span style="color:var(--la-text);"> {esc(bm.get('key_takeaway',''))}</span>
   </div>
-  <div style="background:#eff6ff;border-left:3px solid #3b82f6;padding:0.6rem 0.9rem;
+  <div style="background:var(--la-bg2);border-left:3px solid var(--la-acc);padding:0.6rem 0.9rem;
   border-radius:0.4rem;">
-    <strong style="color:#1d4ed8;">⚖️</strong> {esc(bm.get('practice_impact',''))}
+    <strong style="color:var(--la-acc);">⚖️</strong>
+    <span style="color:var(--la-text);"> {esc(bm.get('practice_impact',''))}</span>
   </div>
 </div>""", unsafe_allow_html=True)
 
@@ -7704,7 +7725,7 @@ def render_profile():
             new_pw = st.text_input("New Password", type="password", key="new_pw_inp")
             confirm_pw = st.text_input("Confirm New Password", type="password", key="confirm_pw_inp")
             if st.form_submit_button("🔐 Update Password", type="primary"):
-                if hash_password(current_pw) != profile.get("password_hash", ""):
+                if not verify_password(current_pw, profile.get("password_hash", "")):
                     st.error("❌ Current password is incorrect.")
                 elif not new_pw:
                     st.error("❌ New password cannot be empty.")
@@ -8806,8 +8827,65 @@ def add_to_history(query: str, response: str, task: str, mode: str):
         "word_count": len(response.split()),
     }
     st.session_state.chat_history.append(entry)
+    # Cap at 200 most recent sessions to prevent unbounded DB growth
+    if len(st.session_state.chat_history) > 200:
+        st.session_state.chat_history = st.session_state.chat_history[-200:]
     persist("chat_history")
     return entry
+
+# ═══════════════════════════════════════════════════════
+# HEARING REMINDER AUTO-SENDER
+# ═══════════════════════════════════════════════════════
+def _maybe_send_hearing_reminders():
+    """Fire once per day: email reminders for hearings 1 or 7 days away."""
+    profile = st.session_state.get("profile", {})
+    smtp_user   = profile.get("notif_smtp_user", "")
+    smtp_pass   = profile.get("notif_smtp_pass", "")
+    notif_email = profile.get("notif_email", "")
+    if not (smtp_user and smtp_pass and notif_email):
+        return  # Not configured — skip silently
+    uid = st.session_state.get("current_user_id", "anon")
+    last_check_key = f"_reminder_last_check_{uid}"
+    today_str = date.today().isoformat()
+    if st.session_state.get(last_check_key) == today_str:
+        return  # Already checked today in this session
+    st.session_state[last_check_key] = today_str
+    hearings = get_hearings()
+    sent = 0
+    for h in hearings:
+        d = days_until(h["date"])
+        if d not in (1, 7):
+            continue
+        subject = f"⚖️ Hearing Reminder ({d} day(s)): {h['title']}"
+        body = (
+            f"LexiAssist v8.0 — Hearing Reminder\n\n"
+            f"Matter:  {h['title']}\n"
+            f"Suit No: {h['suit']}\n"
+            f"Court:   {h['court']}\n"
+            f"Date:    {fmt_date(h['date'])}\n"
+            f"Days remaining: {d}\n\n"
+            f"Please prepare accordingly.\n\n— LexiAssist v8.0"
+        )
+        try:
+            msg = MIMEMultipart()
+            msg["From"] = smtp_user
+            msg["To"] = notif_email
+            msg["Subject"] = subject
+            msg.attach(MIMEText(body, "plain"))
+            with smtplib.SMTP_SSL("smtp.gmail.com", 465) as server:
+                server.login(smtp_user, smtp_pass)
+                server.sendmail(smtp_user, notif_email, msg.as_string())
+            sent += 1
+        except Exception as e:
+            logger.warning(f"Reminder email failed for '{h['title']}': {e}")
+    if sent:
+        st.toast(f"📧 {sent} hearing reminder(s) sent to {notif_email}", icon="✅")
+
+
+def auto_connect():
+    if st.session_state.api_configured:
+        return
+    k = _resolve_api_key()
 
 
 def auto_connect():
@@ -9140,6 +9218,12 @@ def init_session_state():
         "imported_doc": None,
         "selected_history_idx": None,
         "compare_selections": [],
+        "nf_bookmarks": [],
+        "nf_feed_data": None,
+        "nf_subject_loaded": "",
+        "nf_deepdive": {},
+        "nf_scan_result": None,
+        "comparison_result": "",
     }
     for k, v in simple_defaults.items():
         if k not in st.session_state:
@@ -9258,6 +9342,7 @@ def main():
         st.session_state.user_data_loaded = True
 
     render_sidebar()
+    _maybe_send_hearing_reminders()
 
     is_admin = (st.session_state.current_user_role == "admin")
 
