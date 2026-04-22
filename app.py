@@ -1615,6 +1615,12 @@ section[data-testid="stSidebar"] [data-testid="stFileUploaderDropzone"] button,
 section[data-testid="stSidebar"] [data-testid="stFileUploader"] section button{{
   color:{sb_text}!important;background-color:{sb_hover_bg}!important;
   border-color:{sb_line}!important;}}
+/* ── File uploader hidden input — MUST sit above the styled button (z-index:10)
+   so clicks reach the real <input type="file"> and open the file dialog ── */
+[data-testid="stFileUploaderDropzoneInput"]{{
+  position:absolute!important;inset:0!important;
+  z-index:20!important;opacity:0!important;
+  cursor:pointer!important;pointer-events:auto!important;}}
 
 /* ── Stat cards ── */
 .stat-card{{background:var(--la-card);border:1px solid var(--la-border);
