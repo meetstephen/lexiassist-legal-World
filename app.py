@@ -8483,8 +8483,8 @@ def render_settlement_advisor():
         return
 
     st.markdown("""
-<div style="background:#eff6ff;border-left:3px solid #3b82f6;padding:0.8rem 1.1rem;
-border-radius:0.5rem;margin-bottom:1rem;font-size:0.9rem;">
+<div style="background:var(--la-card);border-left:3px solid var(--la-acc);padding:0.8rem 1.1rem;
+border-radius:0.5rem;margin-bottom:1rem;font-size:0.9rem;color:var(--la-text);">
   💡 <strong>How to use:</strong> Fill in the matter details below. The more specific
   your inputs (especially claim amount and case facts), the more actionable the output.
   The AI will take a firm position on the optimal settlement figure and strategy.
@@ -8669,8 +8669,8 @@ def render_due_diligence():
         return
 
     st.markdown("""
-<div style="background:#f0fdf4;border-left:3px solid #059669;padding:0.8rem 1.1rem;
-border-radius:0.5rem;margin-bottom:1rem;font-size:0.9rem;">
+<div style="background:var(--la-card);border-left:3px solid var(--la-pos);padding:0.8rem 1.1rem;
+border-radius:0.5rem;margin-bottom:1rem;font-size:0.9rem;color:var(--la-text);">
   💡 <strong>How it works:</strong> Select your transaction type, describe the deal,
   and the AI generates a comprehensive Nigerian-law due diligence checklist tailored
   to your specific matter — with search requirements, risk flags, and a critical path.
