@@ -1513,24 +1513,45 @@ section[data-testid="stSidebar"] > div > div > div > button svg{{
 section[data-testid="stSidebar"] .stTextInput input::placeholder,
 section[data-testid="stSidebar"] .stTextArea textarea::placeholder{{
   color:{ph_col}!important;opacity:1!important;font-style:italic!important;}}
-.stSelectbox div[data-baseweb="select"],
-.stMultiSelect div[data-baseweb="select"]{{
+/* ── Selectbox & MultiSelect — full value visibility fix ── */
+.stSelectbox div[data-baseweb="select"]>div,
+.stMultiSelect div[data-baseweb="select"]>div{{
   background-color:var(--la-input)!important;
   border-color:var(--la-border)!important;border-radius:var(--r-md)!important;}}
+/* Selected value text, placeholder text, typed input */
+.stSelectbox div[data-baseweb="select"] [class*="singleValue"],
+.stSelectbox div[data-baseweb="select"] [class*="SingleValue"],
+.stSelectbox div[data-baseweb="select"] [class*="placeholder"],
+.stSelectbox div[data-baseweb="select"] [class*="Placeholder"],
 .stSelectbox div[data-baseweb="select"] input,
+.stMultiSelect div[data-baseweb="select"] [class*="singleValue"],
+.stMultiSelect div[data-baseweb="select"] [class*="SingleValue"],
+.stMultiSelect div[data-baseweb="select"] [class*="placeholder"],
 .stMultiSelect div[data-baseweb="select"] input,
-.stSelectbox div[data-baseweb="select"] [data-baseweb="tag"],
 .stMultiSelect div[data-baseweb="select"] [data-baseweb="tag"],
-.stSelectbox div[data-baseweb="select"] [class*="ValueContainer"],
-.stMultiSelect div[data-baseweb="select"] [class*="ValueContainer"]{{
+.stMultiSelect div[data-baseweb="select"] [data-baseweb="tag"] span{{
   color:var(--la-text)!important;background-color:transparent!important;
   font-family:var(--font)!important;-webkit-font-smoothing:antialiased!important;}}
-/* ── Restore dropdown arrow/chevron SVG icons ── */
+/* Value container wrapper */
+.stSelectbox div[data-baseweb="select"] [class*="ValueContainer"],
+.stMultiSelect div[data-baseweb="select"] [class*="ValueContainer"]{{
+  background-color:transparent!important;}}
+/* Arrow/chevron SVG icon */
 .stSelectbox div[data-baseweb="select"] svg,
 .stMultiSelect div[data-baseweb="select"] svg{{
   fill:var(--la-text)!important;color:var(--la-text)!important;
   background-color:transparent!important;display:block!important;
   visibility:visible!important;opacity:1!important;}}
+/* Dropdown open — option list */
+[data-baseweb="menu"],[data-baseweb="menu"] ul,[data-baseweb="popover"]{{
+  background-color:var(--la-card)!important;}}
+[data-baseweb="menu"] li,[data-baseweb="popover"] li,
+[data-baseweb="menu"] [role="option"],[data-baseweb="popover"] [role="option"]{{
+  background-color:var(--la-card)!important;color:var(--la-text)!important;
+  font-family:var(--font)!important;-webkit-font-smoothing:antialiased!important;}}
+[data-baseweb="menu"] li:hover,[data-baseweb="popover"] li:hover,
+[data-baseweb="menu"] [role="option"]:hover{{
+  background-color:{acc}18!important;color:var(--la-acc)!important;}}
 /* ── File uploader — fix text visibility on all backgrounds ── */
 [data-testid="stFileUploader"] section,
 [data-testid="stFileUploader"] > section,
@@ -1764,10 +1785,41 @@ div[data-testid="metric-container"] div[data-testid="stMetricValue"]{{
   -webkit-font-smoothing:antialiased!important;}}
 .stDataFrame td{{color:var(--la-text)!important;-webkit-font-smoothing:antialiased!important;}}
 
-/* ── Alerts ── */
-[data-testid="stAlert"] p,[data-testid="stInfo"] p,[data-testid="stSuccess"] p,
-[data-testid="stWarning"] p,[data-testid="stError"] p{{
-  color:inherit!important;-webkit-font-smoothing:antialiased!important;}}
+
+/* ── Alerts & info boxes — force background + text so dark themes don't get white boxes ── */
+[data-testid="stAlert"]{{
+  background-color:var(--la-card)!important;
+  border-color:var(--la-border)!important;border-radius:var(--r-md)!important;}}
+[data-testid="stAlert"] p,
+[data-testid="stAlert"] span,
+[data-testid="stAlert"] div,
+[data-testid="stAlert"] li,
+[data-testid="stInfo"],
+[data-testid="stSuccess"],
+[data-testid="stWarning"],
+[data-testid="stError"]{{
+  color:var(--la-text)!important;-webkit-font-smoothing:antialiased!important;}}
+/* Force all Streamlit alert flavours to use card bg */
+div[data-testid="stAlert"][data-baseweb="notification"],
+div[class*="stAlert"]{{
+  background-color:var(--la-card)!important;color:var(--la-text)!important;}}
+/* Tool-card, custom info box text visibility */
+.tool-card,.tool-card *,.tool-card p,.tool-card span,
+.tool-card h4,.tool-card li{{
+  color:var(--la-text)!important;-webkit-font-smoothing:antialiased!important;}}
+/* Expander inner content text */
+[data-testid="stExpander"] details *,
+[data-testid="stExpander"] [data-testid="stMarkdownContainer"] p,
+[data-testid="stExpander"] [data-testid="stMarkdownContainer"] li,
+[data-testid="stExpander"] [data-testid="stMarkdownContainer"] span,
+[data-testid="stExpander"] [data-testid="stMarkdownContainer"] h4{{
+  color:var(--la-text)!important;background-color:transparent!important;
+  -webkit-font-smoothing:antialiased!important;}}
+/* Streamlit native info/success/warning/error notification text */
+[data-testid="stNotification"] p,
+[data-testid="stNotification"] span,
+[data-testid="stNotification"] div{{
+  color:var(--la-text)!important;-webkit-font-smoothing:antialiased!important;}}
 
 /* ── Scrollbar ── */
 ::-webkit-scrollbar{{width:5px;height:5px;}}
@@ -3714,7 +3766,7 @@ def render_ai():
 
         st.markdown(f'<div class="response-box">{esc(response)}</div>', unsafe_allow_html=True)
 
-        # ── Copy to clipboard ──
+        # ── Copy to clipboard (iframe-safe fallback) ──
         _copy_html = f"""
 <style>
 #la-copy-btn {{
@@ -3726,17 +3778,22 @@ def render_ai():
 }}
 #la-copy-btn:hover {{ background:rgba(128,128,128,0.12); }}
 </style>
+<textarea id="la-copy-src" style="position:fixed;opacity:0;pointer-events:none;top:-9999px;left:-9999px;">{html_mod.escape(response)}</textarea>
 <div style="text-align:right; padding:4px 0 0 0;">
   <button id="la-copy-btn" onclick="(function(){{
-    navigator.clipboard.writeText({json.dumps(response)}).then(function(){{
-      var b=document.getElementById('la-copy-btn');
-      b.innerHTML='&#10003;&nbsp;Copied!';
-      b.style.color='#16a34a';
-      setTimeout(function(){{b.innerHTML='&#128203;&nbsp;Copy response';b.style.color=''}},2200);
-    }}).catch(function(){{
-      var b=document.getElementById('la-copy-btn');
-      b.innerHTML='Copy not supported in this browser';
-    }});
+    var b=document.getElementById('la-copy-btn');
+    var txt=document.getElementById('la-copy-src');
+    txt.value=txt.textContent;
+    function markOk(){{b.innerHTML='&#10003;&nbsp;Copied!';b.style.color='#16a34a';setTimeout(function(){{b.innerHTML='&#128203;&nbsp;Copy response';b.style.color=''}},2200);}}
+    function markFail(){{b.innerHTML='&#10007;&nbsp;Try Ctrl+C';b.style.color='#dc2626';setTimeout(function(){{b.innerHTML='&#128203;&nbsp;Copy response';b.style.color=''}},2200);}}
+    if(navigator.clipboard && window.isSecureContext){{
+      navigator.clipboard.writeText(txt.value).then(markOk).catch(function(){{
+        txt.select();try{{document.execCommand('copy')?markOk():markFail()}}catch(e){{markFail()}}
+      }});
+    }} else {{
+      txt.select();txt.setSelectionRange(0,999999);
+      try{{document.execCommand('copy')?markOk():markFail()}}catch(e){{markFail()}}
+    }}
   }})()">&#128203;&nbsp;Copy response</button>
 </div>"""
         st.html(_copy_html)
