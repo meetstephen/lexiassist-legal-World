@@ -1552,51 +1552,69 @@ section[data-testid="stSidebar"] .stTextArea textarea::placeholder{{
 [data-baseweb="menu"] li:hover,[data-baseweb="popover"] li:hover,
 [data-baseweb="menu"] [role="option"]:hover{{
   background-color:{acc}18!important;color:var(--la-acc)!important;}}
-/* ── File uploader — fix text visibility on all backgrounds ── */
-[data-testid="stFileUploader"] section,
-[data-testid="stFileUploader"] > section,
-[data-testid="stFileUploader"] [data-testid="stFileDropzoneInstructions"]{{
+/* ── File uploader — fully functional & visible on all themes ── */
+/* Dropzone area */
+[data-testid="stFileUploaderDropzone"],
+[data-testid="stFileUploader"] section{{
   background-color:var(--la-input)!important;
   border:1.5px dashed var(--la-border)!important;
   border-radius:var(--r-md)!important;
-  padding:.9rem!important;}}
-[data-testid="stFileUploader"] section p,
-[data-testid="stFileUploader"] section span,
-[data-testid="stFileUploader"] section div,
-[data-testid="stFileUploader"] section label,
-[data-testid="stFileUploader"] section button,
-[data-testid="stFileUploader"] section button span,
-[data-testid="stFileDropzoneInstructions"],
-[data-testid="stFileDropzoneInstructions"] *,
+  padding:.9rem!important;
+  position:relative!important;
+  pointer-events:auto!important;}}
+/* Instruction text — specific tags only, NO wildcard */
 [data-testid="stFileDropzoneInstructions"] span,
-[data-testid="stFileDropzoneInstructions"] p{{
-  color:var(--la-text)!important;background-color:transparent!important;
+[data-testid="stFileDropzoneInstructions"] p,
+[data-testid="stFileDropzoneInstructions"] small{{
+  color:var(--la-text)!important;
+  background-color:transparent!important;
   -webkit-font-smoothing:antialiased!important;
   line-height:1.5!important;}}
 /* Upload icon SVG */
-[data-testid="stFileUploader"] svg,
-[data-testid="stFileDropzoneInstructions"] svg{{
+[data-testid="stFileUploaderDropzone"] svg,
+[data-testid="stFileUploader"] section svg{{
   fill:var(--la-text2)!important;color:var(--la-text2)!important;
-  background:transparent!important;display:block!important;
-  visibility:visible!important;opacity:1!important;}}
-/* Browse files button text */
+  background:transparent!important;pointer-events:none!important;}}
+/* ── Browse Files button — the actual click target ── */
+[data-testid="stFileUploaderDropzone"] button,
 [data-testid="stFileUploader"] section button{{
-  background:transparent!important;border:1px solid var(--la-border)!important;
-  color:var(--la-acc)!important;border-radius:var(--r-sm)!important;
-  font-size:.85rem!important;}}
-/* Caption / small text below uploader */
+  background-color:var(--la-bg2)!important;
+  color:var(--la-text)!important;
+  border:1px solid var(--la-border)!important;
+  border-radius:var(--r-md)!important;
+  font-family:var(--font)!important;
+  font-size:.87rem!important;
+  font-weight:500!important;
+  padding:.4rem 1.1rem!important;
+  cursor:pointer!important;
+  pointer-events:auto!important;
+  position:relative!important;
+  z-index:10!important;
+  display:inline-flex!important;
+  align-items:center!important;
+  -webkit-font-smoothing:antialiased!important;
+  transition:background var(--tb),border-color var(--tb)!important;}}
+[data-testid="stFileUploaderDropzone"] button:hover,
+[data-testid="stFileUploader"] section button:hover{{
+  background-color:{acc}18!important;
+  border-color:{acc}88!important;
+  color:var(--la-acc)!important;}}
+/* Caption / size limit text */
 [data-testid="stFileUploader"] small,
 [data-testid="stFileUploader"] .stCaption,
 [data-testid="stFileUploader"] .stCaption p,
 [data-testid="stFileUploader"] [data-testid="stCaptionContainer"] p{{
-  color:var(--la-text2)!important;font-size:.8rem!important;
+  color:var(--la-text2)!important;font-size:.78rem!important;
   background-color:transparent!important;}}
-/* Sidebar file uploader specifically */
-section[data-testid="stSidebar"] [data-testid="stFileUploader"] section p,
-section[data-testid="stSidebar"] [data-testid="stFileUploader"] section span,
-section[data-testid="stSidebar"] [data-testid="stFileDropzoneInstructions"],
-section[data-testid="stSidebar"] [data-testid="stFileDropzoneInstructions"] *{{
-  color:{sb_input_tx}!important;background-color:transparent!important;}}
+/* Sidebar file uploader — text colour only, no structural overrides */
+section[data-testid="stSidebar"] [data-testid="stFileDropzoneInstructions"] span,
+section[data-testid="stSidebar"] [data-testid="stFileDropzoneInstructions"] p,
+section[data-testid="stSidebar"] [data-testid="stFileDropzoneInstructions"] small{{
+  color:{sb_input_tx}!important;}}
+section[data-testid="stSidebar"] [data-testid="stFileUploaderDropzone"] button,
+section[data-testid="stSidebar"] [data-testid="stFileUploader"] section button{{
+  color:{sb_text}!important;background-color:{sb_hover_bg}!important;
+  border-color:{sb_line}!important;}}
 
 /* ── Stat cards ── */
 .stat-card{{background:var(--la-card);border:1px solid var(--la-border);
