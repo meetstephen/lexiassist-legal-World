@@ -1587,9 +1587,7 @@ section[data-testid="stSidebar"] .stTextArea textarea::placeholder{{
   font-weight:500!important;
   padding:.4rem 1.1rem!important;
   cursor:pointer!important;
-  pointer-events:auto!important;
-  position:relative!important;
-  z-index:10!important;
+  pointer-events:none!important;
   display:inline-flex!important;
   align-items:center!important;
   -webkit-font-smoothing:antialiased!important;
@@ -1615,6 +1613,20 @@ section[data-testid="stSidebar"] [data-testid="stFileUploaderDropzone"] button,
 section[data-testid="stSidebar"] [data-testid="stFileUploader"] section button{{
   color:{sb_text}!important;background-color:{sb_hover_bg}!important;
   border-color:{sb_line}!important;}}
+/* ── Hidden file input — must be topmost so OS file picker fires on click ── */
+[data-testid="stFileUploaderDropzoneInput"],
+[data-testid="stFileUploaderDropzone"] input[type="file"],
+[data-testid="stFileUploader"] input[type="file"]{{
+  position:absolute!important;inset:0!important;
+  width:100%!important;height:100%!important;
+  opacity:0!important;z-index:100!important;
+  cursor:pointer!important;pointer-events:auto!important;}}
+/* ── Restore Browse button appearance when uploader is inside a tab ── */
+div[data-testid="stTabs"] [data-testid="stFileUploaderDropzone"] button,
+div[data-testid="stTabs"] [data-testid="stFileUploader"] section button{{
+  background-color:var(--la-bg2)!important;border:1px solid var(--la-border)!important;
+  border-radius:var(--r-md)!important;padding:.4rem 1.1rem!important;
+  pointer-events:none!important;}}
 /* ── File uploader hidden input — MUST sit above the styled button (z-index:10)
    so clicks reach the real <input type="file"> and open the file dialog ── */
 [data-testid="stFileUploaderDropzoneInput"]{{
