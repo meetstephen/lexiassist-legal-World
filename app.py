@@ -4107,6 +4107,7 @@ def render_research():
         key="research_query_ta",
     )
 
+    
     # ── Quick Precedent Finder ──
     with st.expander("🔖 Quick Precedent Finder", expanded=False):
         st.caption("Get the top 5 most relevant Nigerian cases on any legal point — instantly.")
@@ -4122,7 +4123,8 @@ def render_research():
             prec_btn = st.button(
                 "🔖 Find Cases",
                 key="prec_btn",
-                disabled=not prec_query.strip(), use_container_width=True,
+                disabled=not prec_query.strip(),
+                use_container_width=True,
                 type="primary",
             )
         if prec_btn and prec_query.strip():
@@ -4157,6 +4159,22 @@ LEGAL ISSUE: {prec_query}
                     else:
                         court_badge = "badge-ok"
                     st.markdown(f"""
+<div class="custom-card">
+  <div style="display:flex;justify-content:space-between;align-items:flex-start;">
+    <h4 style="margin:0;">#{i} · {esc(case.get('name',''))}</h4>
+    <span class="badge {court_badge}">{esc(court)}</span>
+  </div>
+  <div style="margin:0.4rem 0;">
+    📖 <code>{esc(case.get('citation',''))}</code> · 📅 {esc(case.get('year',''))}
+  </div>
+  <div><strong>Ratio:</strong> {esc(case.get('ratio',''))}</div>
+  <div style="color:#6b7280;">
+    <strong>Why relevant:</strong> {esc(case.get('relevance',''))}
+  </div>
+</div>""", unsafe_allow_html=True)
+            except Exception:
+                st.markdown(raw)
+    st.markdown("---")
 <div class="custom-card">
   <div style="display:flex;justify-content:space-between;align-items:flex-start;">
     <h4 style="margin:0;">#{i} · {esc(case.get('name',''))}</h4>
