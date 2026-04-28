@@ -25,6 +25,7 @@ python-docx>=1.1.0
 # ── Document generation ────────────────────────────────
 fpdf2>=2.7.9
 
+cryptography>=42.0.0
 
 
 
