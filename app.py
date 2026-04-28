@@ -29,6 +29,67 @@ from google import genai
 from google.genai import types as _genai_types
 import pandas as pd
 import streamlit as st
+# ═══════════════════════════════════════════════════════
+# ENCRYPTION (Fernet-based, for stored credentials)
+# ═══════════════════════════════════════════════════════
+try:
+    from cryptography.fernet import Fernet, InvalidToken
+    HAS_CRYPTO = True
+except ImportError:
+    HAS_CRYPTO = False
+
+
+def _get_encryption_key() -> bytes:
+    """Resolve Fernet key from secrets or env. Generates a session-only key as fallback (NOT persistent)."""
+    key = ""
+    try:
+        key = st.secrets.get("ENCRYPTION_KEY", "")
+    except Exception:
+        key = os.getenv("ENCRYPTION_KEY", "")
+    if not key:
+        # Fallback: derive from session — credentials encrypted this way will NOT survive restart
+        if "_session_fernet_key" not in st.session_state:
+            if HAS_CRYPTO:
+                st.session_state["_session_fernet_key"] = Fernet.generate_key().decode()
+            else:
+                st.session_state["_session_fernet_key"] = ""
+        key = st.session_state["_session_fernet_key"]
+    return key.encode() if isinstance(key, str) else key
+
+
+def encrypt_secret(plaintext: str) -> str:
+    """Encrypt a string. Returns base64 token, or empty string on failure."""
+    if not plaintext or not HAS_CRYPTO:
+        return plaintext  # Pass through if no crypto available
+    try:
+        key = _get_encryption_key()
+        if not key:
+            return plaintext
+        f = Fernet(key)
+        token = f.encrypt(plaintext.encode())
+        return "enc:" + token.decode()
+    except Exception as e:
+        logger.warning(f"Encryption failed: {e}")
+        return plaintext
+
+
+def decrypt_secret(token: str) -> str:
+    """Decrypt a Fernet token. Returns plaintext, or original string if not encrypted."""
+    if not token or not HAS_CRYPTO:
+        return token
+    if not token.startswith("enc:"):
+        return token  # Legacy plaintext, or already decrypted
+    try:
+        key = _get_encryption_key()
+        if not key:
+            return ""
+        f = Fernet(key)
+        plaintext = f.decrypt(token[4:].encode())
+        return plaintext.decode()
+    except (InvalidToken, Exception) as e:
+        logger.warning(f"Decryption failed: {e}")
+        return ""
+
 
 try:
     import plotly.express as px
@@ -946,6 +1007,467 @@ DEFAULT_LEGAL_MAXIMS = [
     {"maxim": "Lex loci contractus", "meaning": "The law of the place where a contract is made — choice of law in contracts"},
     {"maxim": "Interest reipublicae ut sit finis litium", "meaning": "It is in the public interest that litigation should have an end — finality of judgments"},
 ]
+
+# ═══════════════════════════════════════════════════════
+# CITATION VERIFICATION ENGINE
+# ═══════════════════════════════════════════════════════
+# Curated database of verified Nigerian Supreme Court & Court of Appeal
+# landmark decisions. This is the seed — extend monthly from NWLR/LPELR.
+# Format: case name → (citation, court, year, principle)
+# ═══════════════════════════════════════════════════════
+
+VERIFIED_NIGERIAN_CASES = {
+    # ─── Constitutional Law ───
+    "AG Lagos v AG Federation": {
+        "citation": "(2003) 12 NWLR (Pt. 833) 1",
+        "court": "Supreme Court", "year": 2003,
+        "principle": "Federalism; division of powers between Federation and States",
+    },
+    "Inakoju v Adeleke": {
+        "citation": "(2007) 4 NWLR (Pt. 1025) 423",
+        "court": "Supreme Court", "year": 2007,
+        "principle": "Impeachment procedure; legislative powers of State Houses of Assembly",
+    },
+    "Abacha v Fawehinmi": {
+        "citation": "(2000) 6 NWLR (Pt. 660) 228",
+        "court": "Supreme Court", "year": 2000,
+        "principle": "Fundamental rights; African Charter incorporation; locus standi",
+    },
+    "AG Federation v AG Abia State": {
+        "citation": "(2001) 11 NWLR (Pt. 725) 689",
+        "court": "Supreme Court", "year": 2001,
+        "principle": "Resource control; onshore-offshore dichotomy",
+    },
+
+    # ─── Contract Law ───
+    "Best (Nig) Ltd v Blackwood Hodge (Nig) Ltd": {
+        "citation": "(2011) 5 NWLR (Pt. 1239) 95",
+        "court": "Supreme Court", "year": 2011,
+        "principle": "Privity of contract; consideration; offer and acceptance",
+    },
+    "Orient Bank v Bilante International Ltd": {
+        "citation": "(1997) 8 NWLR (Pt. 515) 37",
+        "court": "Supreme Court", "year": 1997,
+        "principle": "Banking contracts; banker-customer relationship",
+    },
+    "BFI Group Corporation v Bureau of Public Enterprises": {
+        "citation": "(2012) 18 NWLR (Pt. 1332) 209",
+        "court": "Supreme Court", "year": 2012,
+        "principle": "Privatisation contracts; consideration; binding agreements",
+    },
+    "Tsokwa Motors v UBN Plc": {
+        "citation": "(1996) 9 NWLR (Pt. 471) 129",
+        "court": "Supreme Court", "year": 1996,
+        "principle": "Banker's duty of care; negligence in banking",
+    },
+
+    # ─── Land Law ───
+    "Savannah Bank v Ajilo": {
+        "citation": "(1989) 1 NWLR (Pt. 97) 305",
+        "court": "Supreme Court", "year": 1989,
+        "principle": "Land Use Act; Governor's consent; mortgage transactions",
+    },
+    "Adole v Gwar": {
+        "citation": "(2008) 11 NWLR (Pt. 1099) 562",
+        "court": "Supreme Court", "year": 2008,
+        "principle": "Customary land tenure; family land",
+    },
+    "Ogunleye v Oni": {
+        "citation": "(1990) 2 NWLR (Pt. 135) 745",
+        "court": "Supreme Court", "year": 1990,
+        "principle": "Five ways of proving title to land",
+    },
+    "Idundun v Okumagba": {
+        "citation": "(1976) 9-10 SC 227",
+        "court": "Supreme Court", "year": 1976,
+        "principle": "Five methods of proving ownership of land",
+    },
+
+    # ─── Criminal Law & Procedure ───
+    "Sani v State": {
+        "citation": "(2018) 10 NWLR (Pt. 1626) 1",
+        "court": "Supreme Court", "year": 2018,
+        "principle": "Burden of proof; standard of proof beyond reasonable doubt",
+    },
+    "Esangbedo v State": {
+        "citation": "(1989) 4 NWLR (Pt. 113) 57",
+        "court": "Supreme Court", "year": 1989,
+        "principle": "Confessional statements; voluntariness; trial within trial",
+    },
+    "Adeyemi v State": {
+        "citation": "(1991) 6 NWLR (Pt. 195) 1",
+        "court": "Supreme Court", "year": 1991,
+        "principle": "Identification evidence; dock identification",
+    },
+
+    # ─── Company Law ───
+    "Oilfield Supply Centre Ltd v Johnson": {
+        "citation": "(1987) 2 NWLR (Pt. 58) 625",
+        "court": "Supreme Court", "year": 1987,
+        "principle": "Lifting the corporate veil; Salomon principle",
+    },
+    "Marina Nominees Ltd v FBIR": {
+        "citation": "(1986) 2 NWLR (Pt. 20) 48",
+        "court": "Supreme Court", "year": 1986,
+        "principle": "Corporate personality; nominee shareholding",
+    },
+    "Edokpolor & Co Ltd v Sem-Edo Wire Industries Ltd": {
+        "citation": "(1984) 7 SC 119",
+        "court": "Supreme Court", "year": 1984,
+        "principle": "Ultra vires doctrine; corporate capacity",
+    },
+
+    # ─── Evidence ───
+    "Aigbadion v State": {
+        "citation": "(2000) 7 NWLR (Pt. 666) 686",
+        "court": "Supreme Court", "year": 2000,
+        "principle": "Admissibility of confessional statements",
+    },
+    "Subramanian v Public Prosecutor": {
+        "citation": "(1956) 1 WLR 965",
+        "court": "Privy Council", "year": 1956,
+        "principle": "Hearsay rule; original evidence vs hearsay (persuasive in Nigeria)",
+    },
+
+    # ─── Tort ───
+    "UBN v Ajabule": {
+        "citation": "(2011) 18 NWLR (Pt. 1278) 152",
+        "court": "Supreme Court", "year": 2011,
+        "principle": "Negligent misstatement; duty of care",
+    },
+    "Iyere v Bendel Feed and Flour Mill Ltd": {
+        "citation": "(2008) 18 NWLR (Pt. 1119) 300",
+        "court": "Supreme Court", "year": 2008,
+        "principle": "Vicarious liability; course of employment",
+    },
+
+    # ─── Labour & Employment ───
+    "Olaniyan v University of Lagos": {
+        "citation": "(1985) 2 NWLR (Pt. 9) 599",
+        "court": "Supreme Court", "year": 1985,
+        "principle": "Public employment with statutory flavour; right to fair hearing",
+    },
+    "Imoloame v WAEC": {
+        "citation": "(1992) 9 NWLR (Pt. 265) 303",
+        "court": "Supreme Court", "year": 1992,
+        "principle": "Master-servant relationship; wrongful dismissal vs unlawful termination",
+    },
+
+    # ─── Procedure & Jurisdiction ───
+    "Madukolu v Nkemdilim": {
+        "citation": "(1962) 2 SCNLR 341",
+        "court": "Supreme Court", "year": 1962,
+        "principle": "Jurisdictional pre-conditions; competent court requirements",
+    },
+    "Ariori v Elemo": {
+        "citation": "(1983) 1 SCNLR 1",
+        "court": "Supreme Court", "year": 1983,
+        "principle": "Right to fair hearing; waiver of constitutional rights",
+    },
+    "Kotoye v CBN": {
+        "citation": "(1989) 1 NWLR (Pt. 98) 419",
+        "court": "Supreme Court", "year": 1989,
+        "principle": "Interlocutory injunctions; undertaking as to damages",
+    },
+    "Ojukwu v Governor of Lagos State": {
+        "citation": "(1986) 3 NWLR (Pt. 26) 39",
+        "court": "Supreme Court", "year": 1986,
+        "principle": "Rule of law; respect for court orders pendente lite",
+    },
+
+    # ─── Banking & Finance ───
+    "Yesufu v ACB": {
+        "citation": "(1976) 4 SC 1",
+        "court": "Supreme Court", "year": 1976,
+        "principle": "Banker's duty; combination of accounts",
+    },
+    "UBA v Tejumola & Sons Ltd": {
+        "citation": "(1988) 2 NWLR (Pt. 79) 662",
+        "court": "Supreme Court", "year": 1988,
+        "principle": "Banker-customer relationship; debtor-creditor",
+    },
+    "Allied Bank of Nigeria Ltd v Akubueze": {
+        "citation": "(1997) 6 NWLR (Pt. 509) 374",
+        "court": "Supreme Court", "year": 1997,
+        "principle": "Bankers' books; admissibility of bank statements",
+    },
+
+    # ─── Family Law ───
+    "Amadi v Nwosu": {
+        "citation": "(1992) 5 NWLR (Pt. 241) 273",
+        "court": "Supreme Court", "year": 1992,
+        "principle": "Customary marriage; proof and validity",
+    },
+    "Mojekwu v Mojekwu": {
+        "citation": "(1997) 7 NWLR (Pt. 512) 283",
+        "court": "Court of Appeal", "year": 1997,
+        "principle": "Oli-ekpe custom; gender discrimination in inheritance",
+    },
+
+    # ─── Election Law ───
+    "Buhari v Obasanjo": {
+        "citation": "(2005) 13 NWLR (Pt. 941) 1",
+        "court": "Supreme Court", "year": 2005,
+        "principle": "Election petition; substantial compliance test",
+    },
+    "Atiku Abubakar v INEC": {
+        "citation": "(2020) 12 NWLR (Pt. 1737) 37",
+        "court": "Supreme Court", "year": 2020,
+        "principle": "Election petition procedure; burden of proof",
+    },
+
+    # ─── Tax ───
+    "7-Up Bottling Co v LSIRB": {
+        "citation": "(2000) 3 NWLR (Pt. 650) 565",
+        "court": "Court of Appeal", "year": 2000,
+        "principle": "Multiple taxation; State vs Federal taxing powers",
+    },
+    "Aderawos Timber Trading Co Ltd v FBIR": {
+        "citation": "(1969) NCLR 287",
+        "court": "Supreme Court", "year": 1969,
+        "principle": "Income tax; allowable deductions",
+    },
+
+    # ─── Equity & Trusts ───
+    "Adetona v Zenith International Bank Plc": {
+        "citation": "(2011) 18 NWLR (Pt. 1278) 627",
+        "court": "Supreme Court", "year": 2011,
+        "principle": "Equitable remedies; specific performance",
+    },
+
+    # ─── Human Rights ───
+    "Director SSS v Agbakoba": {
+        "citation": "(1999) 3 NWLR (Pt. 595) 314",
+        "court": "Supreme Court", "year": 1999,
+        "principle": "Fundamental rights; freedom of movement; passport seizure",
+    },
+    "Fawehinmi v IGP": {
+        "citation": "(2002) 7 NWLR (Pt. 767) 606",
+        "court": "Supreme Court", "year": 2002,
+        "principle": "Fundamental rights enforcement; police powers of arrest",
+    },
+
+    # ─── Arbitration ───
+    "Kano State Urban Development Board v Fanz Construction Ltd": {
+        "citation": "(1990) 4 NWLR (Pt. 142) 1",
+        "court": "Supreme Court", "year": 1990,
+        "principle": "Arbitration agreements; setting aside awards",
+    },
+    "Statoil (Nig) Ltd v NNPC": {
+        "citation": "(2013) 14 NWLR (Pt. 1373) 1",
+        "court": "Supreme Court", "year": 2013,
+        "principle": "Arbitration; public policy; setting aside awards",
+    },
+
+    # ─── IP ───
+    "Ferodo Ltd v Ibeto Industries Ltd": {
+        "citation": "(2004) 5 NWLR (Pt. 866) 317",
+        "court": "Supreme Court", "year": 2004,
+        "principle": "Trade mark infringement; passing off",
+    },
+
+    # ─── Maritime ───
+    "MV Caroline Maersk v Nokoy Investment Ltd": {
+        "citation": "(2002) 12 NWLR (Pt. 782) 472",
+        "court": "Supreme Court", "year": 2002,
+        "principle": "Admiralty jurisdiction; bills of lading",
+    },
+
+    # ─── Practice & Procedure ───
+    "Tukur v Government of Gongola State": {
+        "citation": "(1989) 4 NWLR (Pt. 117) 517",
+        "court": "Supreme Court", "year": 1989,
+        "principle": "Locus standi; sufficient interest test",
+    },
+    "Adesanya v President of Nigeria": {
+        "citation": "(1981) 5 SC 112",
+        "court": "Supreme Court", "year": 1981,
+        "principle": "Locus standi; constitutional challenges",
+    },
+    "Owners of MV Arabella v NAIC": {
+        "citation": "(2008) 11 NWLR (Pt. 1097) 182",
+        "court": "Supreme Court", "year": 2008,
+        "principle": "Service of process; foreign defendants",
+    },
+}
+
+# ── Citation regex patterns ──
+_CITATION_PATTERNS = [
+    # NWLR format: (YYYY) Vol NWLR (Pt. XXX) Page
+    re.compile(
+        r"\(?(?P<year>(?:18|19|20)\d{2})\)?\s+"
+        r"(?P<vol>\d{1,3})\s+"
+        r"(?P<reporter>NWLR|SCNLR|SC|LPELR|FWLR|CCHCJ|NCLR|NSCC|WACA|NRNLR|WLR)"
+        r"(?:\s*\(?\s*Pt\.?\s*(?P<part>\d+)\)?)?"
+        r"\s+(?P<page>\d{1,4})",
+        re.IGNORECASE,
+    ),
+    # LPELR format: [YYYY] LPELR-NNNNN(COURT)
+    re.compile(
+        r"\[?(?P<year>(?:19|20)\d{2})\]?\s+"
+        r"LPELR[-\s]?(?P<num>\d{2,6})"
+        r"(?:\((?P<court>SC|CA|HC|NIC)\))?",
+        re.IGNORECASE,
+    ),
+]
+
+
+def extract_citations(text: str) -> list[dict]:
+    """Pull every citation-shaped string out of text."""
+    found = []
+    seen_spans = set()
+    for pattern in _CITATION_PATTERNS:
+        for m in pattern.finditer(text):
+            span = m.span()
+            if any(s[0] <= span[0] < s[1] for s in seen_spans):
+                continue
+            seen_spans.add(span)
+            found.append({
+                "raw": m.group(0).strip(),
+                "year": m.groupdict().get("year", ""),
+                "reporter": m.groupdict().get("reporter", "LPELR"),
+                "start": span[0],
+                "end": span[1],
+            })
+    return found
+
+
+def extract_case_names(text: str) -> list[str]:
+    """Extract case names in the format 'X v Y'."""
+    pattern = re.compile(
+        r"\b([A-Z][A-Za-z&\.\s\-']{2,60}?)\s+v\.?\s+([A-Z][A-Za-z&\.\s\-']{2,60}?)"
+        r"(?=\s*[\(\[\.,;]|\s+(?:and|or|in|on|at|of)\b|$)",
+        re.MULTILINE,
+    )
+    names = []
+    for m in pattern.finditer(text):
+        full = f"{m.group(1).strip()} v {m.group(2).strip()}"
+        full = re.sub(r"\s+", " ", full)
+        if 8 <= len(full) <= 120:
+            names.append(full)
+    return list(dict.fromkeys(names))  # dedupe while preserving order
+
+
+def verify_case_name(name: str) -> Optional[dict]:
+    """Look up a case name with exact, partial, and fuzzy matching."""
+    name_clean = re.sub(r"\s+", " ", name.strip()).lower()
+
+    # Exact match
+    for key, val in VERIFIED_NIGERIAN_CASES.items():
+        if key.lower() == name_clean:
+            return {"name": key, **val, "match_type": "exact"}
+
+    # Partial/substring match
+    for key, val in VERIFIED_NIGERIAN_CASES.items():
+        if key.lower() in name_clean or name_clean in key.lower():
+            return {"name": key, **val, "match_type": "partial"}
+
+    # Fuzzy token overlap (last resort)
+    name_tokens = set(name_clean.replace(" v ", " ").split())
+    best_score = 0
+    best_match = None
+
+    for key, val in VERIFIED_NIGERIAN_CASES.items():
+        key_tokens = set(key.lower().replace(" v ", " ").split())
+        if not key_tokens or not name_tokens:
+            continue
+        overlap = len(name_tokens & key_tokens)
+        score = overlap / max(len(name_tokens), len(key_tokens))
+        if score > best_score and score >= 0.7:
+            best_score = score
+            best_match = {"name": key, **val, "match_type": "fuzzy", "score": round(score, 2)}
+
+    return best_match
+
+
+def verify_response_citations(response_text: str) -> dict:
+    """Full citation audit on AI-generated legal response."""
+    citations = extract_citations(response_text)
+    case_names = extract_case_names(response_text)
+
+    verified_cases = []
+    unverified_cases = []
+
+    for name in case_names:
+        match = verify_case_name(name)
+        if match:
+            verified_cases.append({"raw": name, **match})
+        else:
+            unverified_cases.append(name)
+
+    return {
+        "citations_found": len(citations),
+        "case_names_found": len(case_names),
+        "verified_cases": verified_cases,
+        "unverified_cases": unverified_cases,
+        "citations": citations,
+    }
+
+
+def esc(text: str) -> str:
+    """Simple HTML escaping for safe rendering."""
+    return str(text).replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+
+
+def render_citation_audit(audit: dict) -> str:
+    """Returns HTML for citation audit display in Streamlit."""
+    if audit["case_names_found"] == 0 and audit["citations_found"] == 0:
+        return ""
+
+    verified_count = len(audit["verified_cases"])
+    unverified_count = len(audit["unverified_cases"])
+
+    if unverified_count == 0 and verified_count > 0:
+        banner_color = "#059669"
+        banner_bg = "#f0fdf4"
+        icon = "✅"
+        msg = f"All {verified_count} case(s) cited match the verified Nigerian case database."
+    elif verified_count > 0 and unverified_count > 0:
+        banner_color = "#d97706"
+        banner_bg = "#fffbeb"
+        icon = "⚠️"
+        msg = (f"{verified_count} verified · {unverified_count} unverified — "
+               "check unverified citations against NWLR/LPELR before relying on them.")
+    else:
+        banner_color = "#dc2626"
+        banner_bg = "#fef2f2"
+        icon = "🚫"
+        msg = (f"{unverified_count} case citation(s) could NOT be verified against "
+               "the database. Treat as UNVERIFIED — do not file without independent check.")
+
+    html = f"""
+    <div style="background:{banner_bg}; border:1.5px solid {banner_color};
+                border-radius:0.6rem; padding:0.9rem 1.1rem; margin:1rem 0; font-size:0.88rem;">
+        <div style="display:flex; justify-content:space-between; align-items:center;">
+            <strong style="color:{banner_color};">{icon} Citation Audit</strong>
+            <span style="font-size:0.78rem; color:{banner_color};">
+                {audit['citations_found']} citation(s) · {audit['case_names_found']} case name(s)
+            </span>
+        </div>
+        <p style="margin:0.5rem 0 0 0; color:{banner_color};">{msg}</p>
+    </div>"""
+
+    if audit["verified_cases"]:
+        html += f'<details style="margin-top:0.5rem;"><summary style="cursor:pointer; font-size:0.85rem; color:#059669; font-weight:600;">✅ Verified Cases ({len(audit["verified_cases"])})</summary><div style="margin-top:0.5rem; font-size:0.83rem;">'
+        for vc in audit["verified_cases"]:
+            html += (f'<div style="padding:0.4rem 0; border-bottom:1px solid #e2e8f0;">'
+                     f'<strong>{esc(vc["name"])}</strong> '
+                     f'<code style="background:#f0fdf4; padding:0.1rem 0.4rem; border-radius:3px;">{esc(vc["citation"])}</code><br>'
+                     f'<small style="color:#475569;">{esc(vc["court"])} · {vc["year"]} · {esc(vc["principle"])}</small>'
+                     f'</div>')
+        html += '</div></details>'
+
+    if audit["unverified_cases"]:
+        html += f'<details style="margin-top:0.5rem;" open><summary style="cursor:pointer; font-size:0.85rem; color:#dc2626; font-weight:600;">⚠️ Unverified — Check Before Filing ({len(audit["unverified_cases"])})</summary><div style="margin-top:0.5rem; font-size:0.83rem;">'
+        for uc in audit["unverified_cases"]:
+            html += (f'<div style="padding:0.4rem 0; border-bottom:1px solid #fee2e2;">'
+                     f'<strong style="color:#991b1b;">{esc(uc)}</strong> '
+                     f'<span style="background:#fee2e2; color:#991b1b; padding:2px 6px; border-radius:3px; font-size:0.75rem;">UNVERIFIED</span><br>'
+                     f'<small style="color:#7f1d1d;">Not found in verified database. Verify on NWLR / LPELR / LawPavilion before citing.</small>'
+                     f'</div>')
+        html += '</div></details>'
+
+    return html
 
 DEFAULT_TEMPLATES = [
     {"id": "builtin_1", "name": "Employment Contract", "cat": "Corporate", "builtin": True,
@@ -3766,20 +4288,37 @@ def render_ai():
         st.markdown("### 🔍 Issue Decomposition")
         st.markdown(f'<div class="response-box">{esc(result)}</div>', unsafe_allow_html=True)
 
-    # ── Main Generation ──
+    # ── Main Generation (with streaming + audit + confidence) ──
     if generate_btn and query.strip():
-        with st.spinner(f"🧠 Generating {mode_info['label']} analysis…"):
-            start_t = time.time()
-            result = run_ai_query(query.strip(), task, mode, doc_context)
-            elapsed = time.time() - start_t
+        st.markdown("### 📋 Analysis (streaming…)")
+        stream_container = st.container()
+        start_t = time.time()
+
+        # Build prompt with optional document context
+        system = build_system_prompt(task, mode)
+        full_prompt = query.strip()
+        if doc_context:
+            full_prompt = f"DOCUMENT CONTEXT:\n{doc_context[:8000]}\n\nQUERY:\n{query.strip()}"
+
+        with st.spinner(f"🧠 Streaming {mode_info['label']} analysis…"):
+            result = generate(full_prompt, system, mode, task, stream_to=stream_container)
+        elapsed = time.time() - start_t
+
+        # Citation audit + confidence scoring
+        audit = verify_response_citations(result)
+        confidence = compute_confidence_score(result, audit)
 
         st.session_state.last_response = result
+        st.session_state.last_audit = audit
+        st.session_state.last_confidence = confidence
         st.session_state.original_query = query.strip()
         st.session_state.last_task = task
         st.session_state.last_mode = mode
         st.session_state.selected_history_idx = None
         add_to_history(query.strip(), result, task, mode)
-        st.caption(f"⏱️ Generated in {elapsed:.1f}s · {len(result.split()):,} words")
+
+        st.caption(f"⏱️ Generated in {elapsed:.1f}s · {len(result.split()):,} words · "
+                   f"Confidence: {confidence['overall']}/10")
 
     # ── Display Response ──
     if st.session_state.last_response and st.session_state.selected_history_idx is None:
@@ -3787,6 +4326,13 @@ def render_ai():
         st.markdown("---")
         task_lbl = TASK_TYPES.get(st.session_state.get("last_task", "general"), {}).get("label", "Analysis")
         st.markdown(f"### 📋 {task_lbl} Result")
+        # ── Confidence + Citation Audit panels ──
+        confidence = st.session_state.get("last_confidence", {})
+        audit = st.session_state.get("last_audit", {})
+        if confidence:
+            st.markdown(render_confidence_panel(confidence), unsafe_allow_html=True)
+        if audit:
+            st.markdown(render_citation_audit(audit), unsafe_allow_html=True)
 
         # Export row
         fname = f"LexiAssist_Analysis_{datetime.now():%Y%m%d_%H%M}"
@@ -7760,9 +8306,16 @@ def render_profile():
             if st.form_submit_button("💾 Save Notification Settings", type="primary"):
                 st.session_state.profile["notif_email"] = notif_email.strip()
                 st.session_state.profile["notif_smtp_user"] = notif_smtp_user.strip()
-                st.session_state.profile["notif_smtp_pass"] = notif_smtp_pass.strip()
+                # Encrypt password before storing — decrypt_secret() will unwrap it at send-time.
+                # If the user left the field blank (masked), keep the existing stored value.
+                raw_pass = notif_smtp_pass.strip()
+                if raw_pass:
+                    st.session_state.profile["notif_smtp_pass"] = encrypt_secret(raw_pass)
+                # (else: field was blank/masked — don't overwrite the stored encrypted value)
                 persist_profile()
-                st.success("✅ Notification settings saved!")
+                st.success("✅ Notification settings saved!" +
+                           (" 🔒 Password encrypted." if raw_pass and HAS_CRYPTO else
+                            " ⚠️ Install `cryptography` to encrypt stored passwords." if raw_pass else ""))
         st.markdown("---")
         st.markdown("##### 📬 Send Reminders Now")
         hearings = get_hearings()
@@ -7827,7 +8380,7 @@ def render_profile():
                         with smtplib.SMTP_SSL("smtp.gmail.com", 465) as server:
                             server.login(
                                 st.session_state.profile["notif_smtp_user"],
-                                st.session_state.profile["notif_smtp_pass"],
+                                decrypt_secret(st.session_state.profile["notif_smtp_pass"]),
                             )
                             server.sendmail(
                                 st.session_state.profile["notif_smtp_user"],
@@ -8973,7 +9526,7 @@ def _maybe_send_hearing_reminders():
     """Fire once per day: email reminders for hearings 1 or 7 days away."""
     profile = st.session_state.get("profile", {})
     smtp_user   = profile.get("notif_smtp_user", "")
-    smtp_pass   = profile.get("notif_smtp_pass", "")
+    smtp_pass   = decrypt_secret(profile.get("notif_smtp_pass", ""))  # unwrap Fernet token
     notif_email = profile.get("notif_email", "")
     if not (smtp_user and smtp_pass and notif_email):
         return  # Not configured — skip silently
@@ -9105,12 +9658,25 @@ def fmt_date(d) -> str:
     except Exception:
         return str(d)
 
+def generate(prompt: str, system: str, mode: str, task: str = "general",
+             stream_to: Optional[Any] = None, enable_quality_gate: bool = True) -> str:
+    """Core generation with streaming, quality gate, retry, and cost logging.
 
-def generate(prompt: str, system: str, mode: str, task: str = "general") -> str:
-    """Core generation with retry, cost logging, and proper token limits."""
+    Args:
+        prompt: User query / content
+        system: System instruction
+        mode: brief / standard / comprehensive
+        task: For cost logging
+        stream_to: Optional Streamlit container for streaming display
+        enable_quality_gate: If True, low-quality responses are auto-regenerated once
+
+    Returns:
+        Final response text
+    """
     k = _resolve_api_key()
     if not k:
         return "⚠️ No API key configured. Please set up your key."
+
     mode_cfg = RESPONSE_MODES.get(mode, RESPONSE_MODES["standard"])
     gen_config = _genai_types.GenerateContentConfig(
         system_instruction=system,
@@ -9121,35 +9687,265 @@ def generate(prompt: str, system: str, mode: str, task: str = "general") -> str:
     )
     client = _get_genai_client(k)
 
+    def _do_generate(use_stream: bool) -> str:
+        """Single attempt. Streams to UI if stream_to is set."""
+        if use_stream and stream_to is not None:
+            full_text = ""
+            placeholder = stream_to.empty()
+            try:
+                stream = client.models.generate_content_stream(
+                    model=st.session_state.gemini_model,
+                    contents=prompt,
+                    config=gen_config,
+                )
+                for chunk in stream:
+                    if chunk.text:
+                        full_text += chunk.text
+                        # Update placeholder with cursor
+                        placeholder.markdown(
+                            f'<div class="response-box">{esc(full_text)}<span style="opacity:0.5;">▌</span></div>',
+                            unsafe_allow_html=True,
+                        )
+                # Final render without cursor
+                placeholder.markdown(
+                    f'<div class="response-box">{esc(full_text)}</div>',
+                    unsafe_allow_html=True,
+                )
+                return full_text
+            except Exception as e:
+                logger.warning(f"Streaming failed, falling back to non-stream: {e}")
+                # Fall through to non-streaming
+        # Non-streaming path
+        resp = client.models.generate_content(
+            model=st.session_state.gemini_model,
+            contents=prompt,
+            config=gen_config,
+        )
+        return resp.text if resp and resp.text else ""
+
+    result = ""
     for attempt in range(3):
         try:
-            resp = client.models.generate_content(
-                model=st.session_state.gemini_model,
-                contents=prompt,
-                config=gen_config,
-            )
-            if resp and resp.text:
-                # Log cost
-                cost = estimate_cost(prompt + system, resp.text)
-                db = get_db()
-                db.add_cost_log({
-                    "id": new_id(),
-                    "timestamp": datetime.now().isoformat(),
-                    "model": st.session_state.gemini_model,
-                    "task": task,
-                    "mode": mode,
-                    "input_chars": len(prompt) + len(system),
-                    "output_chars": len(resp.text),
-                    "estimated_cost": cost,
-                    "query_preview": prompt[:120],
-                })
-                return resp.text
-            return "⚠️ Empty response from AI. Try rephrasing your query."
+            result = _do_generate(use_stream=(stream_to is not None))
+            if result:
+                break
         except Exception as e:
+            err_str = str(e)
             if attempt == 2:
-                return f"⚠️ Generation error after 3 attempts: {str(e)[:200]}"
+                return f"⚠️ Generation error after 3 attempts: {err_str[:200]}"
             time.sleep(2 * (attempt + 1))
-    return "⚠️ Generation failed. Please try again."
+
+    if not result:
+        return "⚠️ Empty response from AI. Try rephrasing your query."
+
+    # ── Quality Gate (silent self-critique + auto-regenerate once) ──
+    if enable_quality_gate and mode in ("standard", "comprehensive") and len(result.split()) > 100:
+        quality_score = _assess_response_quality(result, prompt)
+        if quality_score < 5:
+            logger.info(f"Quality gate triggered (score {quality_score}/10) — regenerating")
+            try:
+                regen = _do_generate(use_stream=False)
+                if regen:
+                    new_score = _assess_response_quality(regen, prompt)
+                    if new_score > quality_score:
+                        result = regen
+                        # Re-render to streaming target if applicable
+                        if stream_to is not None:
+                            stream_to.markdown(
+                                f'<div class="response-box">{esc(result)}</div>',
+                                unsafe_allow_html=True,
+                            )
+            except Exception as e:
+                logger.warning(f"Quality regeneration failed: {e}")
+
+    # ── Cost logging ──
+    try:
+        cost = estimate_cost(prompt + system, result)
+        get_db().add_cost_log({
+            "id": new_id(),
+            "timestamp": datetime.now().isoformat(),
+            "model": st.session_state.gemini_model,
+            "task": task,
+            "mode": mode,
+            "input_chars": len(prompt) + len(system),
+            "output_chars": len(result),
+            "estimated_cost": cost,
+            "query_preview": prompt[:120],
+        })
+    except Exception as e:
+        logger.warning(f"Cost logging failed: {e}")
+
+    return result
+
+
+def _assess_response_quality(response: str, query: str) -> int:
+    """Silent quality check. Returns 0-10 score using a cheap model call."""
+    try:
+        k = _resolve_api_key()
+        if not k:
+            return 7  # Assume okay if can't check
+        client = _get_genai_client(k)
+
+        check_prompt = f"""Rate the following Nigerian legal analysis on a strict 0-10 scale.
+
+Criteria:
+- Does it cite at least one Nigerian statute or case? (+3)
+- Does it take a firm position (no excessive hedging)? (+3)
+- Is it complete (no abrupt cut-off)? (+2)
+- Does it directly address the query? (+2)
+
+Respond ONLY with a single integer 0-10, nothing else.
+
+QUERY: {query[:500]}
+
+ANALYSIS:
+{response[:4000]}
+
+SCORE:"""
+        resp = client.models.generate_content(
+            model="gemini-2.5-flash-lite",
+            contents=check_prompt,
+            config=_genai_types.GenerateContentConfig(
+                temperature=0.0, max_output_tokens=10,
+            ),
+        )
+        if resp and resp.text:
+            match = re.search(r"\b([0-9]|10)\b", resp.text.strip())
+            if match:
+                return int(match.group(1))
+    except Exception as e:
+        logger.warning(f"Quality assessment failed: {e}")
+    return 7  # Default to passing
+
+
+def compute_confidence_score(response: str, audit: dict) -> dict:
+    """4-axis confidence scoring on an AI response. Pure heuristics — no extra API call.
+
+    Returns: {statutory: int, case_law: int, procedural: int, position: int, overall: int}
+    Each axis is 0-10. Overall is weighted average.
+    """
+    text = response or ""
+    text_lower = text.lower()
+    word_count = len(text.split())
+
+    # ── Statutory grounding (look for Act/section references) ──
+    statute_patterns = [
+        r"\b(?:CFRN|Constitution)\b",
+        r"\b(?:CAMA|Companies and Allied Matters Act)\b",
+        r"\b(?:ACJA|Administration of Criminal Justice Act)\b",
+        r"\bEvidence Act\b", r"\bLabour Act\b", r"\bLand Use Act\b",
+        r"\bCriminal Code\b", r"\bPenal Code\b",
+        r"\bElectoral Act\b", r"\bArbitration\s+(?:and\s+)?(?:Conciliation|Mediation)\s+Act\b",
+        r"\bPetroleum Industry Act\b", r"\bPIA\s+2021\b",
+        r"\bFinance Act\b", r"\bCITA\b", r"\bPITA\b", r"\bVATA?\b",
+        r"\bSection\s+\d+", r"\bs\.\s*\d+", r"\bSec\.\s*\d+",
+        r"\bArticle\s+\d+", r"\bPart\s+[IVX]+",
+    ]
+    statute_hits = sum(1 for p in statute_patterns if re.search(p, text, re.IGNORECASE))
+    statutory_score = min(10, statute_hits * 2)
+
+    # ── Case law grounding (use audit results) ──
+    verified = len(audit.get("verified_cases", []))
+    unverified = len(audit.get("unverified_cases", []))
+    citations = audit.get("citations_found", 0)
+    if verified + unverified == 0 and citations == 0:
+        case_score = 2  # No cases mentioned at all
+    elif verified == 0 and unverified > 0:
+        case_score = 3  # Cases mentioned but none verified — risky
+    else:
+        # Verified cases worth more, unverified penalised lightly
+        case_score = min(10, (verified * 3) + max(0, citations - unverified) + (1 if verified > 0 else 0))
+
+    # ── Procedural certainty (look for procedural cues) ──
+    proc_patterns = [
+        r"\b(?:filing|file)\b", r"\bdeadline\b", r"\blimitation\b",
+        r"\bjurisdic", r"\bvenue\b", r"\bservice of process\b",
+        r"\bpre-action\b", r"\bnotice\b", r"\bappeal\b",
+        r"\b\d+\s+days?\b", r"\b\d+\s+months?\b", r"\b\d+\s+years?\b",
+        r"\bRules of Court\b", r"\bCivil Procedure\b",
+    ]
+    proc_hits = sum(1 for p in proc_patterns if re.search(p, text_lower))
+    procedural_score = min(10, proc_hits + 2)
+
+    # ── Position-taking (penalise hedging language) ──
+    hedge_patterns = [
+        r"\bmay (?:be|have|need|require)\b", r"\bmight\b", r"\bcould (?:be|have)\b",
+        r"\bperhaps\b", r"\bpossibly\b", r"\barguably\b",
+        r"\bit (?:could|would) be argued\b", r"\bit depends\b",
+    ]
+    position_patterns = [
+        r"\b(?:is|are) liable\b", r"\bmust\b", r"\bshall\b",
+        r"\bclearly\b", r"\bunequivocally\b", r"\bestablished\b",
+        r"\bthe (?:claimant|defendant|applicant) (?:wins|loses|succeeds|fails)\b",
+        r"\bweakest party\b", r"\bbest claim\b", r"\bbest defence\b",
+    ]
+    hedge_count = sum(len(re.findall(p, text_lower)) for p in hedge_patterns)
+    position_count = sum(len(re.findall(p, text_lower)) for p in position_patterns)
+    if word_count < 100:
+        position_score = 5
+    else:
+        # Normalise per 100 words
+        hedge_density = (hedge_count / word_count) * 100
+        position_density = (position_count / word_count) * 100
+        position_score = max(0, min(10, int(7 + position_density - (hedge_density * 1.5))))
+
+    # ── Overall weighted ──
+    overall = round(
+        statutory_score * 0.25
+        + case_score * 0.30
+        + procedural_score * 0.20
+        + position_score * 0.25
+    )
+
+    return {
+        "statutory": statutory_score,
+        "case_law": case_score,
+        "procedural": procedural_score,
+        "position": position_score,
+        "overall": overall,
+    }
+
+
+def render_confidence_panel(scores: dict) -> str:
+    """Render the 4-axis confidence display as HTML."""
+    overall = scores.get("overall", 0)
+
+    if overall >= 8:
+        bar_color = "#059669"; label = "HIGH CONFIDENCE"; bg = "#f0fdf4"
+    elif overall >= 6:
+        bar_color = "#d97706"; label = "MODERATE CONFIDENCE"; bg = "#fffbeb"
+    elif overall >= 4:
+        bar_color = "#ea580c"; label = "LOW CONFIDENCE — VERIFY"; bg = "#fff7ed"
+    else:
+        bar_color = "#dc2626"; label = "VERY LOW — DO NOT RELY"; bg = "#fef2f2"
+
+    def axis_bar(name: str, score: int) -> str:
+        ax_color = "#059669" if score >= 7 else ("#d97706" if score >= 5 else "#dc2626")
+        return f"""
+<div style="margin-bottom:0.45rem;">
+  <div style="display:flex;justify-content:space-between;font-size:0.78rem;margin-bottom:2px;">
+    <span style="color:#475569;font-weight:500;">{esc(name)}</span>
+    <span style="color:{ax_color};font-weight:700;">{score}/10</span>
+  </div>
+  <div style="background:#e5e7eb;border-radius:999px;height:6px;">
+    <div style="width:{score*10}%;background:{ax_color};height:6px;border-radius:999px;"></div>
+  </div>
+</div>"""
+
+    return f"""
+<div style="background:{bg};border:1.5px solid {bar_color};border-radius:0.7rem;
+padding:1rem 1.2rem;margin:1rem 0;">
+  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:0.7rem;">
+    <strong style="color:{bar_color};">📊 AI Confidence Score</strong>
+    <span style="background:{bar_color};color:white;font-size:0.72rem;font-weight:700;
+    padding:0.2rem 0.7rem;border-radius:1rem;">{label} · {overall}/10</span>
+  </div>
+  {axis_bar("Statutory grounding", scores.get("statutory", 0))}
+  {axis_bar("Case law support", scores.get("case_law", 0))}
+  {axis_bar("Procedural certainty", scores.get("procedural", 0))}
+  {axis_bar("Firm position-taking", scores.get("position", 0))}
+</div>"""
+
 
 
 def get_active_cases() -> list:
