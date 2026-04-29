@@ -10367,7 +10367,7 @@ def render_user_management():
   </small>
 </div>""", unsafe_allow_html=True)
 
-with um_audit:
+    with um_audit:
         st.markdown("#### 🗂️ Immutable Audit Log")
         st.caption(
             "Every significant action in LexiAssist is recorded here in an append-only, "
@@ -10440,7 +10440,7 @@ def add_client(data: dict):
     data["created_at"] = datetime.now().isoformat()
     st.session_state.clients.append(data)
     persist("clients")
-get_db().append_audit("CLIENT_ADDED", f"name={data.get('name','')}")
+    get_db().append_audit("CLIENT_ADDED", f"name={data.get('name','')}")
 
 def add_time_entry(data: dict):
     data["id"] = new_id()
@@ -11168,7 +11168,7 @@ def add_case(data: dict):
     data["created_at"] = datetime.now().isoformat()
     st.session_state.cases.append(data)
     persist("cases")
-get_db().append_audit("CASE_ADDED", f"title={data.get('title','')}")
+    get_db().append_audit("CASE_ADDED", f"title={data.get('title','')}")
 
 def _resolve_api_key() -> str:
     for src in [
