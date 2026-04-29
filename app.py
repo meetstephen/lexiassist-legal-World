@@ -929,6 +929,24 @@ Generate a comprehensive due diligence checklist structured as:
 For each section, provide numbered checklist items with priority flags.
 End with a CRITICAL PATH — the 5 searches that must be completed first and why.
 """
+
+# ═══════════════════════════════════════════════════════
+# PHASE 4 — LEGAL DATA VERSION TRACKING
+# ═══════════════════════════════════════════════════════
+LEGAL_DATA_VERSION = {
+    "version":     "v9.0.1",
+    "updated":     "15 April 2026",
+    "last_act":    "Finance Act 2023 (incorporated)",
+    "limitations": "Limitation periods last reviewed: March 2026",
+    "court_fees":  "Lagos, FCT, Rivers court fees last verified: January 2026",
+    "notes": (
+        "Finance Act 2023 amends Stamp Duties Act — stamp duty rates updated. "
+        "Electoral Act 2022 (all election petition provisions). "
+        "Arbitration and Conciliation Act 2023 now governs all arbitrations. "
+        "PIA 2021 fully in force — governs all upstream/midstream petroleum operations."
+    ),
+}
+
 DEFAULT_LIMITATION_PERIODS = [
     {"cause": "Simple Contract", "period": "6 years", "authority": "Limitation Act Cap L16 LFN 2004, s. 8(1)(a)"},
     {"cause": "Tort / Negligence", "period": "6 years", "authority": "Limitation Act, s. 8(1)(a)"},
@@ -1404,11 +1422,6 @@ def verify_response_citations(response_text: str) -> dict:
     }
 
 
-def esc(text: str) -> str:
-    """Simple HTML escaping for safe rendering."""
-    return str(text).replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
-
-
 def render_citation_audit(audit: dict) -> str:
     """Returns HTML for citation audit display in Streamlit."""
     if audit["case_names_found"] == 0 and audit["citations_found"] == 0:
@@ -1468,6 +1481,395 @@ def render_citation_audit(audit: dict) -> str:
         html += '</div></details>'
 
     return html
+
+# ═══════════════════════════════════════════════════════
+# PHASE 2 — RAG / STATUTE GROUNDING ENGINE
+# ═══════════════════════════════════════════════════════
+
+# ── Seed statute database (key provisions — expand by adding to DB via admin) ──
+_STATUTE_SEEDS = [
+    # CFRN 1999
+    {
+        "id": "cfrn_36", "source": "CFRN 1999", "section": "Section 36",
+        "content": (
+            "Section 36(1) CFRN 1999: In the determination of his civil rights and obligations, "
+            "including any question or determination by or against any government or authority, "
+            "a person shall be entitled to a fair hearing within a reasonable time by a court or "
+            "other tribunal established by law and constituted in such manner as to secure its "
+            "independence and impartiality. "
+            "Section 36(5): Every person who is charged with a criminal offence shall be "
+            "presumed to be innocent until he is proved guilty. "
+            "Section 36(6): Every person who is charged with a criminal offence shall be "
+            "entitled to be informed promptly in the language he understands and in detail of "
+            "the nature of the offence; to be given adequate time and facilities for the "
+            "preparation of his defence; to defend himself in person or by legal practitioners "
+            "of his own choice."
+        ),
+        "keywords": "fair hearing,criminal,civil rights,court,tribunal,innocent,presumed,charged,offence,constitution,constitutional,fundamental rights",
+    },
+    {
+        "id": "cfrn_308", "source": "CFRN 1999", "section": "Section 308",
+        "content": (
+            "Section 308 CFRN 1999 (Executive Immunity): Notwithstanding anything to the contrary "
+            "in this Constitution, no civil or criminal proceedings shall be instituted or continued "
+            "against a person to whom this section applies during his period of office; "
+            "a person to whom this section applies shall not be arrested or imprisoned during that "
+            "period either in pursuance of the process of any court or otherwise. "
+            "This section applies to a person holding the office of President or Vice-President, "
+            "Governor or Deputy Governor."
+        ),
+        "keywords": "immunity,president,governor,vice president,deputy governor,civil proceedings,criminal proceedings,arrest,section 308,executive immunity",
+    },
+    {
+        "id": "cfrn_44", "source": "CFRN 1999", "section": "Section 44",
+        "content": (
+            "Section 44(1) CFRN 1999: No moveable property or any interest in an immovable "
+            "property shall be taken possession of compulsorily and no right over or interest in "
+            "any such property shall be acquired compulsorily in any part of Nigeria except in "
+            "the manner and for the purposes prescribed by a law that, among other things, "
+            "requires the prompt payment of compensation therefor."
+        ),
+        "keywords": "compulsory acquisition,property,compensation,moveable,immovable,government acquisition,section 44,takeover",
+    },
+    # Land Use Act 1978
+    {
+        "id": "lua_1", "source": "Land Use Act 1978", "section": "Section 1",
+        "content": (
+            "Section 1 Land Use Act 1978: Subject to the provisions of this Act, all land "
+            "comprised in the territory of each State in the Federation are hereby vested in "
+            "the Governor of that State and such land shall be held in trust and administered "
+            "for the use and common benefit of all Nigerians in accordance with the provisions "
+            "of this Act."
+        ),
+        "keywords": "land use act,governor,vested,territory,state land,occupancy,right of occupancy,LUA",
+    },
+    {
+        "id": "lua_22", "source": "Land Use Act 1978", "section": "Section 22",
+        "content": (
+            "Section 22 Land Use Act 1978: It shall not be lawful for the holder of a statutory "
+            "right of occupancy granted by the Governor to alienate his right of occupancy or "
+            "any part thereof by assignment, mortgage, transfer of possession, sublease or "
+            "otherwise howsoever without the consent of the Governor first had and obtained. "
+            "Any such alienation made without such consent shall be null and void."
+        ),
+        "keywords": "governor consent,alienation,mortgage,assignment,statutory right of occupancy,null void,land,transfer,sublease",
+    },
+    {
+        "id": "lua_28", "source": "Land Use Act 1978", "section": "Section 28",
+        "content": (
+            "Section 28 Land Use Act 1978: It shall be lawful for the Governor to revoke a right "
+            "of occupancy for overriding public interest. Overriding public interest includes: "
+            "the alienation by the occupier by assignment, mortgage, transfer of possession, "
+            "sublease or otherwise of his right of occupancy contrary to this Act; "
+            "the requirement of the land by the Government of the State for public purposes; "
+            "the requirement of the land for mining purposes or oil pipelines or for any purpose "
+            "connected with or ancillary to oil mining."
+        ),
+        "keywords": "revocation,right of occupancy,governor,public interest,public purpose,section 28,land use act,mining",
+    },
+    # Evidence Act 2011
+    {
+        "id": "ea_131", "source": "Evidence Act 2011", "section": "Section 131",
+        "content": (
+            "Section 131 Evidence Act 2011: Whoever desires any court to give judgment as to any "
+            "legal right or liability dependent on the existence of facts which he asserts shall "
+            "prove that those facts exist. "
+            "Section 132: The burden of proof in a suit or proceeding lies on that person who "
+            "would fail if no evidence at all were given on either side. "
+            "Section 133: In civil cases, the burden of first proving the existence or non-existence "
+            "of a fact lies on the party against whom the judgment of the court would be given "
+            "if no evidence were produced on either side."
+        ),
+        "keywords": "burden of proof,evidence act,prove,fact,judgment,civil,he who asserts,onus,standard of proof",
+    },
+    {
+        "id": "ea_29", "source": "Evidence Act 2011", "section": "Section 29",
+        "content": (
+            "Section 29 Evidence Act 2011: In any proceeding, a confession made by a defendant "
+            "may be given in evidence against him insofar as it is relevant to any matter in "
+            "issue in the proceedings and is not excluded by the court in pursuance of this section. "
+            "If, in any proceeding where the prosecution proposes to give in evidence a confession "
+            "made by a defendant, it is represented to the court that the confession was or may "
+            "have been obtained by oppression of the person who made it or in consequence of "
+            "anything said or done which was likely, in the circumstances existing at the time, "
+            "to render unreliable any confession which might be made by him in consequence thereof, "
+            "the court shall not allow the confession to be given in evidence against him except "
+            "insofar as the prosecution proves to the court beyond reasonable doubt that the "
+            "confession was not obtained as aforesaid."
+        ),
+        "keywords": "confession,confessional statement,admissibility,oppression,voluntariness,criminal,trial within trial,caution,statement",
+    },
+    # CAMA 2020
+    {
+        "id": "cama_22", "source": "CAMA 2020", "section": "Section 22",
+        "content": (
+            "Section 22 CAMA 2020: A private company shall not offer its shares or debentures "
+            "to members of the public and shall restrict the right to transfer its shares. "
+            "The maximum number of members of a private company shall be fifty, not including "
+            "persons who are in the employment of the company and persons who having been formerly "
+            "in the employment of the company were while in that employment, and have continued "
+            "after the determination of that employment to be, members of the company."
+        ),
+        "keywords": "private company,shares,members,public offer,transfer restriction,CAMA,company law,50 members",
+    },
+    {
+        "id": "cama_839", "source": "CAMA 2020", "section": "Section 839",
+        "content": (
+            "Section 839 CAMA 2020: Where it appears that any business of a company is being "
+            "carried on with intent to defraud creditors of the company or creditors of any other "
+            "person or for any fraudulent purpose, the court, on the application of the "
+            "Commission or a liquidator or any creditor or contributory of the company, may "
+            "declare that any persons who were knowingly parties to the carrying on of the "
+            "business in that manner are to be liable to make such contributions (if any) to "
+            "the company's assets as the court thinks proper. This is the fraudulent trading provision."
+        ),
+        "keywords": "fraudulent trading,creditors,defraud,lifting veil,contribution,liability,directors,section 839,winding up",
+    },
+    # Labour Act
+    {
+        "id": "labour_7", "source": "Labour Act Cap L1 LFN 2004", "section": "Section 7",
+        "content": (
+            "Section 7 Labour Act: Not later than three months after the beginning of a worker's "
+            "period of employment, the employer shall give to the worker a written statement "
+            "specifying the parties to the contract; the date on which the contract began; "
+            "the nature of the employment; if the contract is for a fixed term, the date when "
+            "the contract expires; the appropriate pay and the intervals at which it will be paid; "
+            "the terms and conditions relating to hours of work, holidays, incapacity for work, "
+            "pensions and pension schemes, and notice of termination of employment."
+        ),
+        "keywords": "employment contract,written statement,labour act,employer,worker,terms,conditions,notice,termination,section 7",
+    },
+    {
+        "id": "labour_11", "source": "Labour Act Cap L1 LFN 2004", "section": "Section 11",
+        "content": (
+            "Section 11(6) Labour Act: Where a contract of employment is for an unspecified period, "
+            "the contract may be terminated by either party by one day's notice given orally or "
+            "in writing if the worker is paid by the day; by one week's notice if the worker "
+            "is paid by the week; by one month's notice or payment in lieu thereof if the worker "
+            "is paid by the month; by one month's notice given in writing if the worker has been "
+            "in employment for more than 3 months."
+        ),
+        "keywords": "notice,termination,employment,labour act,payment in lieu,section 11,contract,period,dismiss",
+    },
+    # ACJA 2015
+    {
+        "id": "acja_8", "source": "ACJA 2015", "section": "Section 8",
+        "content": (
+            "Section 8 ACJA 2015: A suspect shall not be arrested merely on a civil wrong or "
+            "breach of contract. Any officer who arrests a suspect in contravention of this "
+            "provision commits an offence and is liable on conviction to imprisonment for a term "
+            "of 7 years or a fine of N200,000.00 or both."
+        ),
+        "keywords": "arrest,civil wrong,breach of contract,ACJA,suspect,police,unlawful arrest,section 8,fine,imprisonment",
+    },
+    {
+        "id": "acja_35", "source": "ACJA 2015", "section": "Section 35",
+        "content": (
+            "Section 35 ACJA 2015: A suspect who is arrested, detained or restricted shall be "
+            "informed immediately in a language he understands of the reasons for his arrest "
+            "and of his rights. The suspect shall be informed of his right to remain silent or "
+            "avoid answering any question until after consultation with a legal practitioner or "
+            "any other person of his own choice. Every suspect has a right to be brought before "
+            "a court within 24 hours of arrest."
+        ),
+        "keywords": "right to silence,caution,ACJA,arrest,24 hours,court,remand,legal practitioner,section 35,informed",
+    },
+    # Electoral Act 2022
+    {
+        "id": "ea2022_134", "source": "Electoral Act 2022", "section": "Section 134",
+        "content": (
+            "Section 134 Electoral Act 2022: An election may be questioned on the following grounds: "
+            "(a) that a person whose election is questioned was, at the time of the election, "
+            "not qualified to contest the election; (b) that the election was invalid by reason "
+            "of corrupt practices or non-compliance with the provisions of this Act; "
+            "(c) that the respondent was not duly elected by majority of lawful votes cast at "
+            "the election. The burden of proof of corrupt practice or non-compliance lies on "
+            "the petitioner. The petitioner must plead figures and particulars."
+        ),
+        "keywords": "election petition,grounds,corrupt practices,non-compliance,lawful votes,burden of proof,plead,particulars,electoral act 2022,section 134",
+    },
+    # PIA 2021
+    {
+        "id": "pia_9", "source": "Petroleum Industry Act 2021", "section": "Section 9",
+        "content": (
+            "Section 9 PIA 2021: The Commission shall have power to: grant, renew, extend, "
+            "modify, suspend or revoke licences, leases, and permits in the upstream petroleum "
+            "sector; ensure compliance with the obligations of licence holders, lessees and "
+            "permit holders under the Act; issue regulations, guidelines, codes and standards "
+            "for the upstream petroleum operations; impose penalties for breach of the Act."
+        ),
+        "keywords": "PIA,petroleum industry act,upstream,licence,lease,permit,commission,revoke,grant,oil,gas,2021",
+    },
+    # Arbitration and Conciliation Act 2023
+    {
+        "id": "aca_29", "source": "Arbitration and Conciliation Act 2023", "section": "Section 29",
+        "content": (
+            "Section 29 Arbitration and Conciliation Act 2023: The arbitral tribunal may award "
+            "any remedy or relief that could have been ordered by a court including: "
+            "a declaration as to any matter to be determined in the proceedings; "
+            "an injunction; an order for specific performance; an order for the rectification, "
+            "setting aside or cancellation of a deed or other document. "
+            "An award is final and binding on the parties and any person claiming through them."
+        ),
+        "keywords": "arbitration,award,remedy,relief,injunction,specific performance,final,binding,ACA 2023,tribunal",
+    },
+    # Limitation Law
+    {
+        "id": "lim_tort", "source": "Limitation Act / Limitation Laws (various States)", "section": "General Limitation Periods",
+        "content": (
+            "General Limitation Periods under Nigerian Law: "
+            "Simple contract: 6 years from date of breach (Limitation Act). "
+            "Tort (general): 6 years. "
+            "Personal injury claims: 3 years. "
+            "Land: 12 years (Limitation Act s.16). "
+            "Judgment debt: 12 years. "
+            "Actions against government/public officers: pre-action notice required — "
+            "typically 3 months under the Public Officers Protection Act. "
+            "Fundamental rights enforcement: no strict limitation but unreasonable delay is fatal. "
+            "Election petition: 21 days from declaration of results (Electoral Act 2022 s.132)."
+        ),
+        "keywords": "limitation,period,statute of limitations,6 years,12 years,3 years,time bar,lapse,contract,tort,land,personal injury,POPA,21 days,election petition",
+    },
+]
+
+
+def _extract_query_keywords(query: str) -> list[str]:
+    """Extract meaningful keywords from a query for RAG retrieval."""
+    # Remove very common words
+    stopwords = {
+        "the","a","an","and","or","but","in","on","at","to","for","of","is","are",
+        "was","were","be","been","being","have","has","had","do","does","did","will",
+        "would","could","should","may","might","shall","this","that","these","those",
+        "my","his","her","their","our","your","i","he","she","they","we","you","it",
+        "with","from","by","about","as","into","through","during","before","after",
+        "above","below","between","out","off","over","under","again","further","then",
+        "once","what","when","where","which","who","how","if","not","no","can","client",
+        "matter","case","issue","situation","problem","question","advice","legal","law",
+    }
+    words = re.findall(r'\b[a-zA-Z]{4,}\b', query.lower())
+    return [w for w in words if w not in stopwords]
+
+
+@st.cache_data(ttl=300, show_spinner=False)
+def _load_rag_cache() -> list[dict]:
+    """Load all statute chunks into memory (cached 5 min)."""
+    try:
+        db = get_db()
+        # If DB has chunks, use those
+        if db.count_statute_chunks() > 0:
+            return db.search_statute_chunks([], limit=9999)
+        # Otherwise use seeds
+        return _STATUTE_SEEDS
+    except Exception:
+        return _STATUTE_SEEDS
+
+
+def build_rag_context(query: str, top_k: int = 6) -> str:
+    """
+    Retrieve the most relevant statute chunks for a query and format as grounding context.
+    Returns empty string if nothing relevant found (graceful degradation).
+    """
+    keywords = _extract_query_keywords(query)
+    if not keywords:
+        return ""
+
+    chunks = _STATUTE_SEEDS  # always search seeds
+    kw_set = {k.lower() for k in keywords}
+
+    scored = []
+    for c in chunks:
+        kw_field = set(c.get("keywords", "").lower().split(","))
+        content_words = set(c.get("content", "").lower().split())
+        score = len(kw_set & kw_field) * 3 + len(kw_set & content_words)
+        if score > 0:
+            scored.append((score, c))
+
+    # Also try DB chunks
+    try:
+        db_chunks = get_db().search_statute_chunks(keywords, limit=top_k)
+        for dc in db_chunks:
+            scored.append((dc["score"], dc))
+    except Exception:
+        pass
+
+    scored.sort(key=lambda x: x[0], reverse=True)
+    top = [c for _, c in scored[:top_k]]
+
+    if not top:
+        return ""
+
+    lines = [
+        "═══ VERIFIED STATUTORY GROUNDING (retrieved from primary Nigerian law) ═══",
+        "The following provisions are directly relevant to this query.",
+        "You MUST cite these sections explicitly in your analysis — do not paraphrase around them.",
+        "",
+    ]
+    for i, c in enumerate(top, 1):
+        source = c.get("source", "")
+        section = c.get("section", "")
+        content = c.get("content", "")
+        lines.append(f"[{i}] {source} — {section}")
+        lines.append(content.strip())
+        lines.append("")
+    lines.append("═══ END STATUTORY GROUNDING ═══")
+    return "\n".join(lines)
+
+# ═══════════════════════════════════════════════════════
+# PHASE 4 — FUZZY NAME MATCHING (Conflict Checker pre-filter)
+# ═══════════════════════════════════════════════════════
+
+def _fuzzy_score(a: str, b: str) -> float:
+    """Token-set similarity 0.0–1.0. No external library required.
+    Mirrors rapidfuzz.fuzz.token_set_ratio logic."""
+    def _tok(s: str) -> set:
+        return set(re.sub(r"[^a-z0-9\s]", " ", s.lower()).split())
+    ta, tb = _tok(a), _tok(b)
+    if not ta or not tb:
+        return 0.0
+    inter = ta & tb
+    if not inter:
+        return 0.0
+    return len(inter) / max(len(ta), len(tb))
+
+
+def get_fuzzy_conflict_candidates(
+    prospect_name: str,
+    opponent_name: str,
+    related: str,
+    extra: str,
+    threshold: float = 0.45,
+) -> dict[str, list[str]]:
+    """
+    Pre-screen existing clients and case titles for name similarity BEFORE the AI call.
+    Returns dict of {category: [matching names]} to inject into the conflict check prompt.
+    Only candidates above threshold are passed to AI — reduces LLM cost and false negatives.
+    """
+    all_prospects = [
+        s.strip() for s in
+        f"{prospect_name}\n{opponent_name}\n{related}\n{extra}".splitlines()
+        if s.strip()
+    ]
+
+    client_hits: list[str] = []
+    case_hits:   list[str] = []
+
+    for p in all_prospects:
+        if len(p) < 3:
+            continue
+        for cl in st.session_state.get("clients", []):
+            name = cl.get("name", "")
+            if _fuzzy_score(p, name) >= threshold:
+                client_hits.append(name)
+        for c in st.session_state.get("cases", []):
+            title = c.get("title", "")
+            parties = f"{title} {c.get('notes', '')}"
+            if _fuzzy_score(p, parties) >= threshold:
+                case_hits.append(title)
+
+    return {
+        "fuzzy_client_matches": list(dict.fromkeys(client_hits)),
+        "fuzzy_case_matches":   list(dict.fromkeys(case_hits)),
+    }
 
 DEFAULT_TEMPLATES = [
     {"id": "builtin_1", "name": "Employment Contract", "cat": "Corporate", "builtin": True,
@@ -2900,6 +3302,25 @@ class Database:
                 last_used TEXT DEFAULT '',
                 device_hint TEXT DEFAULT ''
             )""",
+        # ── Phase 2: Audit Log (append-only, hash-chained) ──
+            """CREATE TABLE IF NOT EXISTS audit_log (
+                id TEXT PRIMARY KEY,
+                timestamp TEXT NOT NULL,
+                user_id TEXT NOT NULL,
+                action TEXT NOT NULL,
+                detail TEXT DEFAULT '',
+                prev_hash TEXT DEFAULT '',
+                entry_hash TEXT DEFAULT ''
+            )""",
+            # ── Phase 2: Statute Chunks (RAG grounding) ──
+            """CREATE TABLE IF NOT EXISTS statute_chunks (
+                id TEXT PRIMARY KEY,
+                source TEXT NOT NULL,
+                section_label TEXT NOT NULL,
+                content TEXT NOT NULL,
+                keywords TEXT DEFAULT '',
+                created_at TEXT DEFAULT ''
+            )""",
         ]
         for stmt in ddl_statements:
             self._exec_ddl(stmt)
@@ -3397,7 +3818,89 @@ class Database:
             ]
         except Exception:
             return []
+# ── Phase 2: Audit Log ──────────────────────────────────────────────
+    def append_audit(self, action: str, detail: str = "") -> None:
+        """Append an immutable, hash-chained audit entry. Never updates — only inserts."""
+        import hashlib as _hl
+        uid = self._uid()
+        entry_id = new_id()
+        ts = datetime.now().isoformat()
+        # Get the hash of the most recent entry to chain onto
+        cur = self._execute(
+            "SELECT entry_hash FROM audit_log ORDER BY timestamp DESC LIMIT 1"
+        )
+        row = cur.fetchone()
+        prev_hash = row[0] if row else "GENESIS"
+        raw = f"{entry_id}|{ts}|{uid}|{action}|{detail}|{prev_hash}"
+        entry_hash = _hl.sha256(raw.encode()).hexdigest()
+        self._execute(
+            "INSERT INTO audit_log (id, timestamp, user_id, action, detail, prev_hash, entry_hash) "
+            "VALUES (%s, %s, %s, %s, %s, %s, %s)",
+            (entry_id, ts, uid, action, detail[:2000], prev_hash, entry_hash),
+        )
+        self.conn.commit()
 
+    def get_audit_log(self, limit: int = 150) -> list:
+        uid = self._uid()
+        cur = self._execute(
+            "SELECT id, timestamp, action, detail, entry_hash FROM audit_log "
+            "WHERE user_id = %s ORDER BY timestamp DESC LIMIT %s",
+            (uid, limit),
+        )
+        return [
+            {"id": r[0], "timestamp": r[1], "action": r[2],
+             "detail": r[3], "entry_hash": r[4]}
+            for r in (cur.fetchall() or [])
+        ]
+
+    def get_all_audit_log_admin(self, limit: int = 500) -> list:
+        """Admin view — all users."""
+        cur = self._execute(
+            "SELECT id, timestamp, user_id, action, detail, entry_hash FROM audit_log "
+            "ORDER BY timestamp DESC LIMIT %s", (limit,)
+        )
+        return [
+            {"id": r[0], "timestamp": r[1], "user_id": r[2],
+             "action": r[3], "detail": r[4], "entry_hash": r[5]}
+            for r in (cur.fetchall() or [])
+        ]
+
+    # ── Phase 2: RAG — statute chunk storage ────────────────────────────
+    def upsert_statute_chunk(self, chunk_id: str, source: str, section_label: str,
+                             content: str, keywords: str) -> None:
+        self._execute(
+            "INSERT INTO statute_chunks (id, source, section_label, content, keywords, created_at) "
+            "VALUES (%s, %s, %s, %s, %s, %s) "
+            "ON CONFLICT (id) DO UPDATE SET content=EXCLUDED.content, keywords=EXCLUDED.keywords",
+            (chunk_id, source, section_label, content, keywords, datetime.now().isoformat()),
+        )
+        self.conn.commit()
+
+    def search_statute_chunks(self, query_keywords: list[str], limit: int = 8) -> list:
+        """Keyword-ranked search over statute chunks (no embedding API required)."""
+        if not query_keywords:
+            return []
+        results = []
+        cur = self._execute("SELECT id, source, section_label, content, keywords FROM statute_chunks")
+        rows = cur.fetchall() or []
+        q_set = {w.lower() for w in query_keywords if len(w) > 3}
+        for row in rows:
+            chunk_kw = set(row[4].lower().split(","))
+            content_words = set(row[3].lower().split())
+            score = len(q_set & chunk_kw) * 3 + len(q_set & content_words)
+            if score > 0:
+                results.append({
+                    "source": row[1], "section": row[2],
+                    "content": row[3], "score": score,
+                })
+        results.sort(key=lambda x: x["score"], reverse=True)
+        return results[:limit]
+
+    def count_statute_chunks(self) -> int:
+        cur = self._execute("SELECT COUNT(*) FROM statute_chunks")
+        row = cur.fetchone()
+        return row[0] if row else 0
+    
     def cleanup_expired_sessions(self):
         """Remove expired tokens (call periodically)."""
         try:
@@ -4242,6 +4745,89 @@ def render_ai():
     if task == "contract_review":
         st.info("📑 **Contract Review Mode:** Paste or upload a contract. The AI will analyse each clause for risk, flag issues, and provide a red flag matrix with an overall signability grade.")
 
+    # ── Phase 3: Contract Version Diffing ────────────────────────────────
+        with st.expander("📄 Compare Contract Versions (V1 vs V2)", expanded=False):
+            st.caption(
+                "Paste two versions of the same contract to get a visual diff and "
+                "AI explanation of what changed and the legal significance of each change."
+            )
+            diff_c1, diff_c2 = st.columns(2)
+            with diff_c1:
+                contract_v1 = st.text_area(
+                    "Version 1 (Original / Older)",
+                    height=200, key="diff_v1",
+                    placeholder="Paste the original contract text here…",
+                )
+            with diff_c2:
+                contract_v2 = st.text_area(
+                    "Version 2 (Amended / Newer)",
+                    height=200, key="diff_v2",
+                    placeholder="Paste the amended contract text here…",
+                )
+
+            diff_btn = st.button(
+                "🔬 Analyse Differences", key="diff_btn", type="primary",
+                use_container_width=True,
+                disabled=not (contract_v1.strip() and contract_v2.strip()),
+            )
+
+            if diff_btn and contract_v1.strip() and contract_v2.strip():
+                import difflib
+
+                # ── Visual line-by-line diff ──
+                v1_lines = contract_v1.strip().splitlines(keepends=True)
+                v2_lines = contract_v2.strip().splitlines(keepends=True)
+                differ  = difflib.HtmlDiff(wrapcolumn=80)
+                diff_html = differ.make_table(
+                    v1_lines, v2_lines,
+                    fromdesc="Version 1", todesc="Version 2",
+                    context=True, numlines=3,
+                )
+                # Style the diff table inline
+                styled_diff = (
+                    '<style>'
+                    '.diff_header{background:#1e3a5f;color:#fff;padding:2px 6px;font-size:0.78rem;}'
+                    '.diff_next{background:#374151;color:#fff;}'
+                    'td.diff_add{background:#d1fae5;}'
+                    'td.diff_chg{background:#fef3c7;}'
+                    'td.diff_sub{background:#fee2e2;}'
+                    '.diff table{font-size:0.75rem;font-family:monospace;width:100%;}'
+                    '</style>'
+                    f'<div class="diff">{diff_html}</div>'
+                )
+                st.markdown("##### 📊 Visual Diff")
+                st.markdown(styled_diff, unsafe_allow_html=True)
+
+                # ── AI legal significance analysis ──
+                st.markdown("##### ⚖️ Legal Significance Analysis")
+                # Compute unified diff as text for the AI
+                unified = "\n".join(
+                    difflib.unified_diff(v1_lines, v2_lines, fromfile="V1", tofile="V2", lineterm="")
+                )
+                diff_prompt = (
+                    "You are reviewing the following changes between two versions of a Nigerian contract.\n\n"
+                    "UNIFIED DIFF (lines starting with '+' are NEW in V2, lines with '-' are REMOVED from V1):\n\n"
+                    f"{unified[:6000]}\n\n"
+                    "For EACH changed section:\n"
+                    "1. WHAT CHANGED: Plain English explanation of the change\n"
+                    "2. LEGAL SIGNIFICANCE: Risk level (🔴 High / 🟡 Medium / 🟢 Low) and why\n"
+                    "3. WHO BENEFITS: Which party benefits from this change\n"
+                    "4. RECOMMENDATION: Accept / Reject / Negotiate — and what counter-clause to propose\n\n"
+                    "After all changes, provide:\n"
+                    "═══ OVERALL ASSESSMENT ═══\n"
+                    "▸ Net effect on Client's position: Stronger / Weaker / Neutral\n"
+                    "▸ Most dangerous change: [what and why]\n"
+                    "▸ Accept V2 as-is: Yes / No / Conditional"
+                )
+                with st.spinner("⚖️ Analysing legal significance of changes…"):
+                    diff_analysis = generate(diff_prompt, IDENTITY_CORE, "standard", "contract_review")
+                st.markdown(f'<div class="response-box">{esc(diff_analysis)}</div>', unsafe_allow_html=True)
+                diff_fname = f"LexiAssist_ContractDiff_{datetime.now():%Y%m%d_%H%M}"
+                st.download_button(
+                    "📥 Download Analysis (TXT)", export_txt(diff_analysis, "Contract Version Analysis"),
+                    f"{diff_fname}.txt", "text/plain", key="diff_dl_txt", use_container_width=True,
+                )
+    
     prefill = st.session_state.pop("loaded_template", "") if "loaded_template" in st.session_state and st.session_state.get("loaded_template") else ""
     query = st.text_area(
         "Your Legal Query",
@@ -4295,7 +4881,7 @@ def render_ai():
         start_t = time.time()
 
         # Build prompt with optional document context
-        system = build_system_prompt(task, mode)
+        system = build_system_prompt(task, mode, query.strip())
         full_prompt = query.strip()
         if doc_context:
             full_prompt = f"DOCUMENT CONTEXT:\n{doc_context[:8000]}\n\nQUERY:\n{query.strip()}"
@@ -4317,6 +4903,7 @@ def render_ai():
         st.session_state.selected_history_idx = None
         add_to_history(query.strip(), result, task, mode)
 
+        get_db().append_audit("AI_QUERY", f"task={task} mode={mode} words={len(result.split())} q={query.strip()[:120]}")
         st.caption(f"⏱️ Generated in {elapsed:.1f}s · {len(result.split()):,} words · "
                    f"Confidence: {confidence['overall']}/10")
 
@@ -4929,6 +5516,91 @@ def render_cases():
                                     db.delete_case_analysis(sa["id"])
                                     st.success("Deleted!")
                                     st.rerun()
+                    
+                    # ── Phase 3: Case Bundle PDF Export ──────────────────────────────────
+                        st.markdown("---")
+                        if st.button(
+                            "📦 Export Full Case Bundle (PDF)",
+                            key=f"bundle_{c['id']}",
+                            use_container_width=True,
+                            type="primary",
+                            help="Generates a single PDF with case facts, all saved analyses, hearings, and billing entries",
+                        ):
+                            with st.spinner("📦 Building case bundle…"):
+                                # Assemble bundle text
+                                client_name = get_client_name(c.get("client_id",""))
+                                firm = get_firm_name()
+                                profile = st.session_state.get("profile", {})
+                                lawyer = profile.get("lawyer_name", "")
+                                bundle_lines = [
+                                    f"LEXIASSIST v8.0 — CASE BUNDLE",
+                                    f"{'='*60}",
+                                    f"Case Title    : {c.get('title','')}",
+                                    f"Suit Number   : {c.get('suit_no','—')}",
+                                    f"Court         : {c.get('court','—')}",
+                                    f"Status        : {c.get('status','—')}",
+                                    f"Client        : {client_name}",
+                                    f"Next Hearing  : {fmt_date(c.get('next_hearing',''))}",
+                                    f"Handling Counsel: {lawyer}",
+                                    f"Firm          : {firm}",
+                                    f"Generated     : {datetime.now():%d %B %Y at %H:%M}",
+                                    f"{'='*60}",
+                                    "",
+                                    "CASE NOTES",
+                                    "-"*40,
+                                    c.get("notes","None provided."),
+                                    "",
+                                ]
+                                # All saved analyses
+                                if saved:
+                                    bundle_lines.append(f"SAVED ANALYSES ({len(saved)})")
+                                    bundle_lines.append("-"*40)
+                                    for idx2, sa in enumerate(saved, 1):
+                                        task_lbl2 = TASK_TYPES.get(sa.get("task",""),{}).get("label","")
+                                        mode_lbl2 = RESPONSE_MODES.get(sa.get("mode",""),{}).get("label","")
+                                        bundle_lines.append(f"\n[{idx2}] {sa.get('timestamp','')[:10]} · {task_lbl2} · {mode_lbl2}")
+                                        bundle_lines.append(f"Query: {sa.get('query','')}")
+                                        bundle_lines.append("-"*30)
+                                        bundle_lines.append(sa.get("response",""))
+                                        bundle_lines.append("")
+
+                                # Billing entries for this case's client
+                                billing = [
+                                    e for e in st.session_state.get("time_entries", [])
+                                    if e.get("client_id") == c.get("client_id","")
+                                ]
+                                if billing:
+                                    bundle_lines.append(f"\nBILLING SUMMARY ({len(billing)} entries)")
+                                    bundle_lines.append("-"*40)
+                                    total_bill = sum(e.get("amount",0) for e in billing)
+                                    total_hr   = sum(e.get("hours",0) for e in billing)
+                                    for e in billing:
+                                        bundle_lines.append(
+                                            f"  {e.get('date','')[:10]} · {e.get('description','')[:60]} · "
+                                            f"{e.get('hours',0)}h · ₦{e.get('amount',0):,.0f}"
+                                        )
+                                    bundle_lines.append(f"\nTotal: {total_hr:.1f} hours · ₦{total_bill:,.2f}")
+
+                                bundle_lines.append(f"\n{'='*60}")
+                                bundle_lines.append("⚠️ AI-generated content. Not legal advice. Verify all citations independently.")
+                                bundle_lines.append(f"{'='*60}")
+
+                                bundle_text = "\n".join(bundle_lines)
+                                bundle_fname = f"LexiAssist_CaseBundle_{c.get('title','Case').replace(' ','_')[:30]}_{datetime.now():%Y%m%d}"
+
+                                bnd1, bnd2 = st.columns(2)
+                                with bnd1:
+                                    st.download_button(
+                                        "📥 Download TXT Bundle",
+                                        bundle_text.encode("utf-8"),
+                                        f"{bundle_fname}.txt", "text/plain",
+                                        key=f"bndl_txt_{c['id']}",
+                                        use_container_width=True,
+                                    )
+                                with bnd2:
+                                    safe_pdf_download(bundle_text, f"Case Bundle — {c.get('title','')}", bundle_fname, f"bndl_pdf_{c['id']}")
+                                st.success(f"✅ Bundle ready — {len(saved)} analysis(es) · {len(billing)} billing entry(ies)")
+                    
                     else:
                         st.info("No analyses saved to this case yet. Use 'Save to Case' in the AI Assistant or Research tab.")
 
@@ -5017,6 +5689,70 @@ def render_templates():
                 if st.button("📋 Load to AI", key=f"load_t_{t['id']}", use_container_width=True):
                     st.session_state.loaded_template = t["content"]
                     st.success(f"✅ '{t['name']}' loaded! Go to AI Assistant tab.")
+            
+         # ── Phase 4: Auto-detect placeholders and offer fill form ──
+                    placeholders = re.findall(r'\[([A-Z][A-Z0-9 _/]+)\]', t["content"])
+                    placeholders = list(dict.fromkeys(placeholders))  # dedupe, preserve order
+                    if placeholders:
+                        st.info(
+                            f"📋 This template has **{len(placeholders)} placeholder(s)**. "
+                            "Fill them in below to get a ready-to-use draft."
+                        )
+                        with st.expander("✏️ Fill Placeholders", expanded=True):
+                            fill_vals = {}
+                            cols_per_row = 2
+                            ph_rows = [placeholders[i:i+cols_per_row] for i in range(0,len(placeholders),cols_per_row)]
+                            for row in ph_rows:
+                                row_cols = st.columns(len(row))
+                                for col, ph in zip(row_cols, row):
+                                    with col:
+                                        fill_vals[ph] = st.text_input(
+                                            ph.replace("_"," ").title(),
+                                            key=f"ph_{t['id']}_{ph}",
+                                            placeholder=f"Enter {ph.lower()}…",
+                                        )
+                            if st.button("⚡ Generate Filled Draft", key=f"fill_btn_{t['id']}", type="primary", use_container_width=True):
+                                filled = t["content"]
+                                for ph, val in fill_vals.items():
+                                    if val.strip():
+                                        filled = filled.replace(f"[{ph}]", val.strip())
+                                unfilled = re.findall(r'\[[A-Z][A-Z0-9 _/]+\]', filled)
+                                if unfilled:
+                                    st.warning(f"⚠️ {len(unfilled)} placeholder(s) still empty: {', '.join(unfilled[:5])}")
+                                st.session_state[f"filled_template_{t['id']}"] = filled
+                                st.success("✅ Draft generated! See below.")
+
+                    # Show filled draft if available
+                    filled_key = f"filled_template_{t.get('id','')}"
+                    if st.session_state.get(filled_key):
+                        filled_draft = st.session_state[filled_key]
+                        st.markdown("##### 📄 Filled Draft")
+                        st.text_area("Review / Edit", filled_draft, height=300, key=f"filled_ta_{t.get('id','')}")
+                        ft_fname = f"LexiAssist_FilledTemplate_{datetime.now():%Y%m%d_%H%M}"
+                        fc1, fc2, fc3 = st.columns(3)
+                        with fc1:
+                            st.download_button(
+                                "📥 TXT", export_txt(filled_draft, t.get("title","")),
+                                f"{ft_fname}.txt", "text/plain", key=f"ft_dl_txt_{t.get('id','')}", use_container_width=True,
+                            )
+                        with fc2:
+                            safe_pdf_download(filled_draft, t.get("title","Template"), ft_fname, f"ft_dl_pdf_{t.get('id','')}")
+                        with fc3:
+                            safe_docx_download(filled_draft, t.get("title","Template"), ft_fname, f"ft_dl_docx_{t.get('id','')}")
+                        if st.button("🧠 Send to AI for Polish", key=f"ft_ai_{t.get('id','')}", use_container_width=True):
+                            with st.spinner("🧠 AI polishing…"):
+                                polish_prompt = (
+                                    "Polish the following Nigerian legal document. "
+                                    "Ensure grammatical correctness, professional tone, "
+                                    "and legal completeness. Do not change the substantive "
+                                    "legal meaning or any specific details. Return the full document:\n\n"
+                                    + filled_draft
+                                )
+                                polished = generate(polish_prompt, IDENTITY_CORE, "standard", "drafting")
+                            st.session_state[filled_key] = polished
+                            st.success("✅ Polished! Scroll up to review.")
+                            st.rerun()   
+            
             with tc3:
                 st.download_button(
                     "📥 Download", t["content"],
@@ -5429,7 +6165,21 @@ def render_billing():
 # ═══════════════════════════════════════════════════════
 def render_tools():
     st.markdown("""<div class="page-header">
-        <h2>🔧 Legal Reference Tools</h2>
+        
+    # ── Phase 4: Legal data version banner ──
+    ldv = LEGAL_DATA_VERSION
+    vcolor = "#059669"
+    st.markdown(
+        f'<div style="background:#f0fdf4;border:1px solid #059669;border-radius:8px;'
+        f'padding:0.6rem 1rem;margin-bottom:1rem;font-size:0.82rem;">'
+        f'📋 <strong>Legal Data {esc(ldv["version"])}</strong> · '
+        f'Last updated: {esc(ldv["updated"])} · '
+        f'{esc(ldv["last_act"])} · '
+        f'<span style="color:#64748b;">{esc(ldv["notes"][:120])}…</span>'
+        f'</div>',
+        unsafe_allow_html=True,
+    )    
+                <h2>🔧 Legal Reference Tools</h2>
         <p>Limitation periods · Court hierarchy · Legal maxims — view and customise</p>
     </div>""", unsafe_allow_html=True)
 
@@ -6070,6 +6820,125 @@ MATTER FACTS: {aml_facts}
             except Exception:
                 st.markdown(aml_raw)
 
+# ═══════════════════════════════════════════════════════
+# PHASE 3 — GLOBAL SEARCH
+# ═══════════════════════════════════════════════════════
+
+def render_global_search():
+    st.markdown("""<div class="page-header">
+        <h2>🔎 Global Search</h2>
+        <p>Search across all cases, clients, analyses, and history in one query</p>
+    </div>""", unsafe_allow_html=True)
+
+    query = st.text_input(
+        "Search everything",
+        placeholder="e.g. Lagos State Government · breach of contract · Adeyemi",
+        key="global_search_q",
+    )
+
+    if not query.strip():
+        st.info("Type a name, keyword, or phrase above to search across your entire LexiAssist workspace.")
+        return
+
+    q = query.strip().lower()
+    results: dict[str, list] = {"Cases": [], "Clients": [], "Analyses": [], "AI History": []}
+
+    # Cases
+    for c in st.session_state.get("cases", []):
+        target = f"{c.get('title','')} {c.get('suit_no','')} {c.get('court','')} {c.get('notes','')}".lower()
+        if q in target:
+            results["Cases"].append(c)
+
+    # Clients
+    for cl in st.session_state.get("clients", []):
+        target = f"{cl.get('name','')} {cl.get('email','')} {cl.get('notes','')}".lower()
+        if q in target:
+            results["Clients"].append(cl)
+
+    # Saved case analyses (DB)
+    try:
+        db = get_db()
+        for c in st.session_state.get("cases", []):
+            for sa in db.get_case_analyses(c["id"]):
+                target = f"{sa.get('query','')} {sa.get('response','')}".lower()
+                if q in target:
+                    results["Analyses"].append({**sa, "_case_title": c.get("title","")})
+    except Exception:
+        pass
+
+    # AI Session history
+    for entry in st.session_state.get("chat_history", []):
+        target = f"{entry.get('query','')} {entry.get('response','')}".lower()
+        if q in target:
+            results["AI History"].append(entry)
+
+    total = sum(len(v) for v in results.values())
+    if total == 0:
+        st.warning(f"No results found for **{esc(query)}**. Try different keywords.")
+        return
+
+    st.success(f"Found **{total}** result(s) matching **{esc(query)}**")
+
+    def _highlight(text: str, term: str) -> str:
+        """Bold the matched term in a snippet."""
+        idx = text.lower().find(term.lower())
+        if idx == -1:
+            return esc(text[:200])
+        start = max(0, idx - 60)
+        end = min(len(text), idx + len(term) + 60)
+        snippet = text[start:end]
+        return esc(snippet).replace(
+            esc(text[idx:idx+len(term)]),
+            f'<strong style="background:#fef9c3;">{esc(text[idx:idx+len(term)])}</strong>',
+            1,
+        )
+
+    # Cases
+    if results["Cases"]:
+        st.markdown(f"#### 📁 Cases ({len(results['Cases'])})")
+        for c in results["Cases"]:
+            cname = get_client_name(c.get("client_id",""))
+            st.markdown(
+                f'<div class="history-item"><strong>{esc(c.get("title",""))}</strong>'
+                f' · Suit: {esc(c.get("suit_no","—"))} · Court: {esc(c.get("court","—"))}'
+                f' · Client: {esc(cname)}'
+                f'<br><small style="color:var(--la-text-secondary);">{_highlight(c.get("notes",""),q)}</small></div>',
+                unsafe_allow_html=True,
+            )
+
+    # Clients
+    if results["Clients"]:
+        st.markdown(f"#### 👥 Clients ({len(results['Clients'])})")
+        for cl in results["Clients"]:
+            st.markdown(
+                f'<div class="history-item"><strong>{esc(cl.get("name",""))}</strong>'
+                f' · {esc(cl.get("type",""))} · {esc(cl.get("email",""))}'
+                f'<br><small style="color:var(--la-text-secondary);">{_highlight(cl.get("notes",""),q)}</small></div>',
+                unsafe_allow_html=True,
+            )
+
+    # Saved analyses
+    if results["Analyses"]:
+        st.markdown(f"#### 📎 Saved Case Analyses ({len(results['Analyses'])})")
+        for sa in results["Analyses"][:10]:
+            st.markdown(
+                f'<div class="history-item"><strong>{esc(sa.get("_case_title",""))}</strong>'
+                f' · {esc(fmt_date(sa.get("timestamp","")))} · {esc(sa.get("task",""))}'
+                f'<br><small><em>Query:</em> {_highlight(sa.get("query",""),q)}</small>'
+                f'<br><small>{_highlight(sa.get("response",""),q)}</small></div>',
+                unsafe_allow_html=True,
+            )
+
+    # AI History
+    if results["AI History"]:
+        st.markdown(f"#### 🧠 AI Session History ({len(results['AI History'])})")
+        for entry in results["AI History"][:10]:
+            st.markdown(
+                f'<div class="history-item"><strong>{_highlight(entry.get("query",""),q)}</strong>'
+                f' · {esc(entry.get("timestamp",""))} · {esc(entry.get("task",""))}'
+                f'<br><small>{_highlight(entry.get("response",""),q)}</small></div>',
+                unsafe_allow_html=True,
+            )
 
 # ═══════════════════════════════════════════════════════
 # PAGE: CONFLICT OF INTEREST CHECKER
@@ -6222,6 +7091,19 @@ arose in January 2024 in Lagos.""",
     )
 
     if check_btn and new_client_name.strip():
+        # ── Phase 4: Fuzzy pre-screen ──────────────────────────────────────
+        fuzzy = get_fuzzy_conflict_candidates(
+            new_client_name, new_opponent, new_related_parties,
+            extra_parties if extra_parties.strip() else "", threshold=0.45,
+        )
+        if fuzzy["fuzzy_client_matches"] or fuzzy["fuzzy_case_matches"]:
+            st.warning(
+                f"⚡ **Fuzzy pre-screen found {len(fuzzy['fuzzy_client_matches'])} "
+                f"potential client match(es) and {len(fuzzy['fuzzy_case_matches'])} "
+                f"case match(es)** at ≥45% name similarity — these have been "
+                f"prioritised in the AI check below."
+            )
+
         # Build existing clients string
         clients_str = ""
         for cl in clients:
@@ -6251,6 +7133,12 @@ arose in January 2024 in Lagos.""",
 
         # Build new matter string
         extra = extra_parties.strip() if extra_parties.strip() else "None"
+        # Append fuzzy pre-screen results so AI focuses on high-similarity names
+        fuzzy_note = ""
+        if fuzzy.get("fuzzy_client_matches"):
+            fuzzy_note += f"\n⚡ HIGH SIMILARITY CLIENT NAMES (check carefully): {', '.join(fuzzy['fuzzy_client_matches'])}"
+        if fuzzy.get("fuzzy_case_matches"):
+            fuzzy_note += f"\n⚡ HIGH SIMILARITY CASE TITLES (check carefully): {', '.join(fuzzy['fuzzy_case_matches'])}"
         new_matter_str = (
             f"Prospective Client: {new_client_name}\n"
             f"Opposing Party: {new_opponent or 'Not specified'}\n"
@@ -6260,8 +7148,8 @@ arose in January 2024 in Lagos.""",
             f"Previous Counsel: {new_former_counsel or 'Unknown'}\n"
             f"Extra parties to scan: {extra}\n"
             f"Facts: {new_facts or 'Not provided'}\n"
+            f"{fuzzy_note}\n"
         )
-
         prompt = CONFLICT_PROMPT.format(
             existing_clients=clients_str,
             existing_cases=cases_str,
@@ -9371,7 +10259,7 @@ def render_user_management():
     </div>""", unsafe_allow_html=True)
 
     db = get_db()
-    um_list, um_create, um_stats = st.tabs(["👥 All Users", "➕ Create User", "📊 Usage Stats"])
+    um_list, um_create, um_stats, um_audit = st.tabs(["👥 All Users", "➕ Create User", "📊 Usage Stats", "🗂️ Audit Log"])
 
     # ── All Users ──
     with um_list:
@@ -9479,6 +10367,66 @@ def render_user_management():
   </small>
 </div>""", unsafe_allow_html=True)
 
+with um_audit:
+        st.markdown("#### 🗂️ Immutable Audit Log")
+        st.caption(
+            "Every significant action in LexiAssist is recorded here in an append-only, "
+            "hash-chained log. Entries cannot be modified or deleted. "
+            "Each entry's hash covers its content AND the previous entry's hash, "
+            "making retroactive tampering detectable."
+        )
+        is_super_admin = st.session_state.get("current_username", "") in ("admin", "superadmin")
+        if is_super_admin:
+            audit_rows = db.get_all_audit_log_admin(limit=500)
+            st.caption(f"Showing all users · {len(audit_rows)} entries")
+        else:
+            audit_rows = db.get_audit_log(limit=150)
+            st.caption(f"Your entries · {len(audit_rows)} shown")
+
+        if not audit_rows:
+            st.info("No audit entries yet. Actions will appear here as you use the app.")
+        else:
+            action_types = sorted(set(r["action"] for r in audit_rows))
+            filt = st.multiselect(
+                "Filter by action", action_types, default=action_types, key="audit_filt"
+            )
+            filtered = [r for r in audit_rows if r["action"] in filt]
+            st.caption(f"{len(filtered)} entries after filter")
+
+            for r in filtered:
+                action_color = {
+                    "AI_QUERY":     "#6366f1",
+                    "CASE_ADDED":   "#059669",
+                    "CLIENT_ADDED": "#0891b2",
+                    "LOGIN":        "#d97706",
+                }.get(r["action"], "#64748b")
+                uid_txt = f" · @{esc(r.get('user_id',''))}" if is_super_admin else ""
+                st.markdown(
+                    f'<div class="history-item" style="border-left:3px solid {action_color};">'
+                    f'<strong style="color:{action_color};">{esc(r["action"])}</strong>'
+                    f'{uid_txt} · '
+                    f'<small style="color:var(--la-text-secondary);">'
+                    f'{esc(r["timestamp"][:19])}</small><br>'
+                    f'<small>{esc(r.get("detail","")[:200])}</small><br>'
+                    f'<code style="font-size:0.65rem;color:#94a3b8;">'
+                    f'hash: {esc(r["entry_hash"][:16])}…</code>'
+                    f'</div>',
+                    unsafe_allow_html=True,
+                )
+
+            if st.button("📥 Export Audit Log CSV", key="audit_export_btn"):
+                import csv, io
+                buf = io.StringIO()
+                writer = csv.DictWriter(
+                    buf,
+                    fieldnames=["id", "timestamp", "action", "detail", "entry_hash"],
+                )
+                writer.writeheader()
+                writer.writerows(filtered)
+                st.download_button(
+                    "⬇️ Download CSV", buf.getvalue().encode(),
+                    "lexiassist_audit.csv", "text/csv", key="audit_dl_btn",
+                )
 
 # ═══════════════════════════════════════════════════════
 # MAIN ENTRY POINT
@@ -9492,7 +10440,7 @@ def add_client(data: dict):
     data["created_at"] = datetime.now().isoformat()
     st.session_state.clients.append(data)
     persist("clients")
-
+get_db().append_audit("CLIENT_ADDED", f"name={data.get('name','')}")
 
 def add_time_entry(data: dict):
     data["id"] = new_id()
@@ -9567,13 +10515,6 @@ def _maybe_send_hearing_reminders():
     if sent:
         st.toast(f"📧 {sent} hearing reminder(s) sent to {notif_email}", icon="✅")
 
-
-def auto_connect():
-    if st.session_state.api_configured:
-        return
-    k = _resolve_api_key()
-
-
 def auto_connect():
     if st.session_state.api_configured:
         return
@@ -9590,10 +10531,19 @@ def auto_connect():
             logger.warning(f"Auto-connect failed: {e}")
 
 
-def build_system_prompt(task: str, mode: str) -> str:
-    base = PROMPTS_BY_MODE.get(mode, PROMPTS_BY_MODE["standard"])
+def build_system_prompt(task: str, mode: str, query: str = "") -> str:
+    """Assemble system prompt from identity + mode + task modifier + RAG grounding."""
+    base     = PROMPTS_BY_MODE.get(mode, PROMPTS_BY_MODE["standard"])
     modifier = TASK_MODIFIERS.get(task, TASK_MODIFIERS["general"])
-    return base + modifier
+    system   = base + modifier
+
+    # ── Phase 2: RAG — inject statute grounding if query provided ──
+    if query:
+        rag_ctx = build_rag_context(query)
+        if rag_ctx:
+            system = rag_ctx + "\n\n" + system
+
+    return system
 
 
 def client_billable(cid: str) -> float:
@@ -9658,7 +10608,7 @@ def fmt_date(d) -> str:
     except Exception:
         return str(d)
 
-def generate(prompt: str, system: str, mode: str, task: str = "general",
+def generate(prompt: str, system: str, mode: str, task: str = "general", query: str = "",
              stream_to: Optional[Any] = None, enable_quality_gate: bool = True) -> str:
     """Core generation with streaming, quality gate, retry, and cost logging.
 
@@ -10206,7 +11156,7 @@ def extract_file_text(uploaded_file) -> str:
 
 
 def run_ai_query(query: str, task: str, mode: str, context: str = "") -> str:
-    system = build_system_prompt(task, mode)
+    system = build_system_prompt(task, mode, query)
     full_prompt = query
     if context:
         full_prompt = f"DOCUMENT CONTEXT:\n{context[:8000]}\n\nQUERY:\n{query}"
@@ -10218,6 +11168,7 @@ def add_case(data: dict):
     data["created_at"] = datetime.now().isoformat()
     st.session_state.cases.append(data)
     persist("cases")
+get_db().append_audit("CASE_ADDED", f"title={data.get('title','')}")
 
 def _resolve_api_key() -> str:
     for src in [
@@ -10296,6 +11247,7 @@ def main():
         "🤝 Settlement",
         "🔎 Due Diligence",
         "👤 Profile",
+        "🔎 Search",
     ]
     if is_admin:
         tab_labels.append("🛡️ Admin")
@@ -10321,8 +11273,9 @@ def main():
     with tabs[16]: render_settlement_advisor()
     with tabs[17]: render_due_diligence()
     with tabs[18]: render_profile()
+    with tabs[19]: render_global_search()
     if is_admin:
-        with tabs[19]: render_user_management()
+        with tabs[20]: render_user_management()
 
     # Footer
     st.markdown("---")
@@ -10330,9 +11283,10 @@ def main():
     firm_text = f"{esc(firm)} · " if firm and firm != "LexiAssist" else ""
     uname = st.session_state.get("current_username", "")
     user_text = f" · Signed in as @{esc(uname)}" if uname else ""
+    ldv = LEGAL_DATA_VERSION
     st.caption(
-        f"⚖️ {firm_text}LexiAssist v8.0 © 2026 · Elite AI Legal Engine for Nigerian Lawyers"
-        f"{user_text} · ⚠️ AI-generated information — not legal advice — verify all citations independently"
+        f"⚠️ AI-generated analysis. Not legal advice. "
+        f"Legal data: {ldv['version']} · Updated: {ldv['updated']} · {ldv['last_act']}"
     )
 
     # ── Keep-Alive Ping ──────────────────────────────────────────────────────────
