@@ -6165,7 +6165,10 @@ def render_billing():
 # ═══════════════════════════════════════════════════════
 def render_tools():
     st.markdown("""<div class="page-header">
-        
+        <h2>🔧 Legal Reference Tools</h2>
+        <p>Limitation periods · Court hierarchy · Legal maxims — view and customise</p>
+    </div>""", unsafe_allow_html=True)
+
     # ── Phase 4: Legal data version banner ──
     ldv = LEGAL_DATA_VERSION
     vcolor = "#059669"
@@ -6178,10 +6181,7 @@ def render_tools():
         f'<span style="color:#64748b;">{esc(ldv["notes"][:120])}…</span>'
         f'</div>',
         unsafe_allow_html=True,
-    )    
-                <h2>🔧 Legal Reference Tools</h2>
-        <p>Limitation periods · Court hierarchy · Legal maxims — view and customise</p>
-    </div>""", unsafe_allow_html=True)
+    )
 
     tab_lim, tab_calc, tab_court, tab_maxim, tab_aml = st.tabs(
         ["⏳ Limitation Periods", "🧮 Deadline Calculator", "🏛️ Court Hierarchy", "📜 Legal Maxims", "🛡️ AML / SCUML"]
