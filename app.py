@@ -2281,8 +2281,11 @@ code,pre,.stMarkdown code,.stMarkdown pre{{
 .hero::before{{content:'';position:absolute;inset:0;
   background:repeating-linear-gradient(-45deg,transparent,transparent 40px,
   rgba(255,255,255,0.015) 40px,rgba(255,255,255,0.015) 41px);pointer-events:none;}}
-.hero h1{{font-size:2.15rem!important;font-weight:800!important;
-  letter-spacing:-0.035em!important;margin:0!important;line-height:1.1!important;}}
+.hero::after{{content:'\2696';position:absolute;right:1.5rem;top:50%;
+  transform:translateY(-50%);font-size:11rem;line-height:1;opacity:0.08;
+  pointer-events:none;user-select:none;color:#fff;filter:blur(0.5px);}}
+.hero h1{{font-size:3.1rem!important;font-weight:900!important;
+  letter-spacing:-0.045em!important;margin:0!important;line-height:1.05!important;}}
 .hero p{{font-size:1rem!important;opacity:.85;margin:.55rem 0 0 0!important;
   font-weight:400!important;line-height:1.55!important;letter-spacing:.005em!important;}}
 
@@ -2797,7 +2800,8 @@ div[class*="stAlert"]{{
 @media (max-width:768px){{
   .stApp{{font-size:{mobile_font}px!important;}}
   .hero{{padding:1.4rem 1.3rem!important;border-radius:var(--r-lg)!important;}}
-  .hero h1{{font-size:1.4rem!important;}}
+  .hero h1{{font-size:1.9rem!important;}}
+  .hero::after{{font-size:6rem!important;}}
   .hero p{{font-size:.88rem!important;}}
   .page-header{{padding:1rem 1.2rem!important;}}
   .page-header h2{{font-size:1.1rem!important;}}
@@ -2809,7 +2813,7 @@ div[class*="stAlert"]{{
   .login-card{{padding:1.3rem 1rem!important;}}
   [data-testid="stMetric"]{{padding:.7rem .9rem!important;}}}}
 @media (max-width:480px){{
-  .hero h1{{font-size:1.15rem!important;}}
+  .hero h1{{font-size:1.6rem!important;}}
   .stat-card .stat-value{{font-size:1.15rem!important;}}
   .badge{{font-size:.64rem!important;}}}}
 
@@ -4405,7 +4409,7 @@ def render_home():
     subtitle = f"{esc(firm)} · " if firm and firm != "LexiAssist" else ""
     st.markdown(f"""
     <div class="hero">
-        <h1>⚖️ LexiAssist v8.0</h1>
+        <h1>LexiAssist</h1>
         <p>{subtitle}Elite AI Legal Engine for Nigerian Lawyers<br>
         Position-taking · Strategy-driven · Risk-ranked · Litigator-minded</p>
     </div>
