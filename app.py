@@ -4454,7 +4454,7 @@ def render_home():
     </style>
     <div class="lexi-hero">
         <div class="lexi-hero-watermark">&#9878;</div>
-        <h1>LexiAssist</h1>
+        <h1>⚖️ LexiAssist</h1>
         <p>{subtitle}Elite AI Legal Engine for Nigerian Lawyers<br>
         Position-taking &middot; Strategy-driven &middot; Risk-ranked &middot; Litigator-minded</p>
     </div>
@@ -11276,55 +11276,71 @@ def main():
     is_admin = (st.session_state.current_user_role == "admin")
 
     # ── TOP NAVIGATION TABS ──
-    tab_labels = [
-        "🏠 Home",
-        "🧠 AI Assistant",
-        "📚 Research",
-        "📁 Cases",
-        "⚡ Lifecycle",
-        "📜 Pleadings",
-        "🔍 Conflict Check",
-        "📅 Calendar",
-        "📋 Templates",
-        "👥 Clients",
-        "💰 Billing",
-        "🔧 Tools",
-        "📝 Notes → Brief",
-        "🎯 Witness Prep",
-        "📰 Legal News",
-        "⚖️ Fee Calculator",
-        "🤝 Settlement",
-        "🔎 Due Diligence",
-        "👤 Profile",
-        "🔎 Search",
-    ]
+    # ── Grouped Navigation (Phase 3 — #11) ──────────────────────────────
+    GROUPS = {
+        "⚖️ Practice": [
+            ("🏠 Home",            render_home),
+            ("🧠 AI Assistant",    render_ai),
+            ("📚 Research",        render_research),
+            ("📝 Notes → Brief",   render_notes_converter),
+        ],
+        "📁 Matters": [
+            ("📁 Cases",           render_cases),
+            ("⚡ Lifecycle",       render_lifecycle),
+            ("📜 Pleadings",       render_pleadings),
+            ("📅 Calendar",        render_calendar),
+            ("🔍 Conflict Check",  render_conflict_checker),
+        ],
+        "👥 Clients & Billing": [
+            ("👥 Clients",         render_clients),
+            ("💰 Billing",         render_billing),
+            ("⚖️ Fee Calculator",  render_fee_calculator),
+        ],
+        "🔧 Tools": [
+            ("🔧 Tools",           render_tools),
+            ("🎯 Witness Prep",    render_witness_prep),
+            ("🤝 Settlement",      render_settlement_advisor),
+            ("🔎 Due Diligence",   render_due_diligence),
+            ("📋 Templates",       render_templates),
+            ("📰 Legal News",      render_legal_news),
+            ("🔎 Search",          render_global_search),
+        ],
+        "👤 Account": [
+            ("👤 Profile",         render_profile),
+        ],
+    }
     if is_admin:
-        tab_labels.append("🛡️ Admin")
+        GROUPS["👤 Account"].append(("🛡️ Admin", render_user_management))
 
-    tabs = st.tabs(tab_labels)
+    # Sidebar group selector
+    with st.sidebar:
+        st.markdown("---")
+        st.markdown(
+            '<p style="font-size:0.78rem;color:var(--la-text-secondary);"'
+            '>NAVIGATION</p>',
+            unsafe_allow_html=True,
+        )
+        group_names = list(GROUPS.keys())
+        selected_group = st.radio(
+            "Section",
+            group_names,
+            key="nav_group",
+            label_visibility="collapsed",
+        )
 
-    with tabs[0]:  render_home()
-    with tabs[1]:  render_ai()
-    with tabs[2]:  render_research()
-    with tabs[3]:  render_cases()
-    with tabs[4]:  render_lifecycle()
-    with tabs[5]:  render_pleadings()
-    with tabs[6]:  render_conflict_checker()
-    with tabs[7]:  render_calendar()
-    with tabs[8]:  render_templates()
-    with tabs[9]:  render_clients()
-    with tabs[10]: render_billing()
-    with tabs[11]: render_tools()
-    with tabs[12]: render_notes_converter()
-    with tabs[13]: render_witness_prep()
-    with tabs[14]: render_legal_news()
-    with tabs[15]: render_fee_calculator()
-    with tabs[16]: render_settlement_advisor()
-    with tabs[17]: render_due_diligence()
-    with tabs[18]: render_profile()
-    with tabs[19]: render_global_search()
-    if is_admin:
-        with tabs[20]: render_user_management()
+    # Page tabs within the selected group
+    group_pages = GROUPS[selected_group]
+    page_labels = [p[0] for p in group_pages]
+    page_fns    = [p[1] for p in group_pages]
+
+    if len(page_labels) == 1:
+        # Single page in group — no tabs needed
+        page_fns[0]()
+    else:
+        tabs = st.tabs(page_labels)
+        for tab, fn in zip(tabs, page_fns):
+            with tab:
+                fn()
 
     # Footer
     st.markdown("---")
