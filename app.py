@@ -4408,10 +4408,55 @@ def render_home():
     firm = get_firm_name()
     subtitle = f"{esc(firm)} · " if firm and firm != "LexiAssist" else ""
     st.markdown(f"""
-    <div class="hero">
+    <style>
+    .lexi-hero {{
+        position: relative;
+        overflow: hidden;
+        background: linear-gradient(135deg, #1e3a5f 0%, #0f2440 60%, #162d4a 100%);
+        border-radius: 16px;
+        padding: 2.6rem 2.8rem 2.3rem;
+        margin-bottom: 1.8rem;
+        border: 1px solid rgba(255,255,255,0.08);
+        box-shadow: 0 8px 32px rgba(0,0,0,0.25);
+    }}
+    .lexi-hero-watermark {{
+        position: absolute;
+        right: 2rem;
+        top: 50%;
+        transform: translateY(-50%);
+        font-size: 13rem;
+        line-height: 1;
+        opacity: 0.07;
+        color: #ffffff;
+        pointer-events: none;
+        user-select: none;
+        filter: blur(1px);
+        font-family: serif;
+    }}
+    .lexi-hero h1 {{
+        font-size: 3.4rem !important;
+        font-weight: 900 !important;
+        letter-spacing: -0.04em !important;
+        color: #ffffff !important;
+        margin: 0 0 0.4rem 0 !important;
+        line-height: 1 !important;
+        position: relative;
+        z-index: 1;
+    }}
+    .lexi-hero p {{
+        font-size: 1rem !important;
+        color: rgba(255,255,255,0.82) !important;
+        margin: 0 !important;
+        position: relative;
+        z-index: 1;
+        line-height: 1.6;
+    }}
+    </style>
+    <div class="lexi-hero">
+        <div class="lexi-hero-watermark">&#9878;</div>
         <h1>LexiAssist</h1>
         <p>{subtitle}Elite AI Legal Engine for Nigerian Lawyers<br>
-        Position-taking · Strategy-driven · Risk-ranked · Litigator-minded</p>
+        Position-taking &middot; Strategy-driven &middot; Risk-ranked &middot; Litigator-minded</p>
     </div>
     """, unsafe_allow_html=True)
 
