@@ -4444,7 +4444,7 @@ def render_home():
     subtitle = f"{esc(firm)} · " if firm and firm != "LexiAssist" else ""
     st.markdown(f"""
     <style>
-    .lexi-hero {{
+   .lexi-hero {{
         position: relative;
         overflow: hidden;
         background: linear-gradient(135deg, #1e3a5f 0%, #0f2440 60%, #162d4a 100%);
@@ -4474,13 +4474,9 @@ def render_home():
         letter-spacing: -0.04em !important;
         color: #ffffff !important;
         margin: 0 0 0.4rem 0 !important;
-        line-height: 1.05 !important;
+        line-height: 1 !important;
         position: relative;
         z-index: 1;
-        /* Reserve space away from watermark on desktop */
-        max-width: calc(100% - 10rem);
-        white-space: nowrap;
-        overflow: visible;
     }}
     .lexi-hero p {{
         font-size: 1rem !important;
@@ -4489,68 +4485,14 @@ def render_home():
         position: relative;
         z-index: 1;
         line-height: 1.6;
-        max-width: calc(100% - 8rem);
     }}
-    /* ── Mobile: ≤768px ── */
     @media (max-width: 768px) {{
-        .lexi-hero {{
-            padding: 1.4rem 1.2rem 1.3rem !important;
-            border-radius: 12px !important;
-        }}
         .lexi-hero h1 {{
-            font-size: 2.1rem !important;
-            letter-spacing: -0.025em !important;
-            white-space: nowrap !important;
-            max-width: 100% !important;
-            line-height: 1.05 !important;
-        }}
-        .lexi-hero p {{
-            font-size: 0.82rem !important;
-            max-width: 100% !important;
-            line-height: 1.5 !important;
+            font-size: 2.5rem !important;
         }}
         .lexi-hero-watermark {{
-            font-size: 6rem !important;
-            right: 0.5rem !important;
+            font-size: 7rem !important;
             opacity: 0.05 !important;
-        }}
-    }}
-    /* ── Small mobile: ≤480px ── */
-    @media (max-width: 480px) {{
-        .lexi-hero {{
-            padding: 1.1rem 1rem 1rem !important;
-        }}
-        .lexi-hero h1 {{
-            font-size: 1.75rem !important;
-            letter-spacing: -0.02em !important;
-            white-space: nowrap !important;
-        }}
-        .lexi-hero p {{
-            font-size: 0.76rem !important;
-        }}
-        .lexi-hero-watermark {{
-            display: none !important;
-        }}
-    }}
-    /* ── Very small: ≤360px (older Android) ── */
-    @media (max-width: 360px) {{
-        .lexi-hero h1 {{
-            font-size: 1.5rem !important;
-        }}
-    }}
-    /* ── Stat cards: stack to 2 rows on very small screens ── */
-    @media (max-width: 480px) {{
-        div[data-testid="stHorizontalBlock"] > div[data-testid="stColumn"] {{
-            min-width: 0 !important;
-        }}
-        .stat-card {{
-            padding: 0.55rem 0.4rem !important;
-        }}
-        .stat-card .stat-value {{
-            font-size: 1.1rem !important;
-        }}
-        .stat-card .stat-label {{
-            font-size: 0.62rem !important;
         }}
     }}
     </style>
