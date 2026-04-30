@@ -11756,9 +11756,24 @@ def main():
     uname = st.session_state.get("current_username", "")
     user_text = f" · Signed in as @{esc(uname)}" if uname else ""
     ldv = LEGAL_DATA_VERSION
-    st.caption(
-        f"⚠️ AI-generated analysis. Not legal advice. "
-        f"Legal data: {ldv['version']} · Updated: {ldv['updated']} · {ldv['last_act']}"
+    st.markdown(
+        f"""
+    <div style="text-align:center;font-size:0.82rem;color:#64748b;
+                margin-top:1.5rem;padding:1rem 1rem 0.5rem;
+                border-top:1px solid #e2e8f0;">
+        <span style="color:#ef4444;font-weight:700;font-size:0.85rem;">
+            ⚠️ AI-Generated Analysis — Not Legal Advice
+        </span><br>
+        <span style="font-size:0.75rem;line-height:2;">
+            <strong>Engine:</strong> {esc(ldv['version'])} &nbsp;|&nbsp;
+            <strong>Updated:</strong> {esc(ldv['updated'])} &nbsp;|&nbsp;
+            <strong>Latest Act:</strong> {esc(ldv['last_act'])}
+        </span><br>
+        <span style="font-size:0.72rem;opacity:0.7;">
+            {firm_text}{"Signed in as @" + esc(uname) if uname else ""}
+        </span>
+    </div>""",
+        unsafe_allow_html=True,
     )
 
     # ── Keep-Alive Ping ──────────────────────────────────────────────────────────
