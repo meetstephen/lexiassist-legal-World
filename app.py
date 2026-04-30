@@ -236,6 +236,20 @@ COURTS: Supreme Court of Nigeria → Court of Appeal → Federal High Court / St
 NBA ETHICS: Rules of Professional Conduct for Legal Practitioners 2007 (RPC). Flag ethics obligations where relevant (Rule 15 competence; Rule 17 confidentiality; Rule 22 settlement; Rule 24 candour to court).
 
 CITATION INTEGRITY: NEVER fabricate case names or section numbers.
+CURRENCY OF LAW: Always apply the MOST CURRENT version of any statute.
+Key amendments you MUST know:
+- Finance Acts 2019, 2020, 2021, 2022, 2023 amend CITA, PITA, Stamp Duties Act, VAT Act
+- Arbitration and Conciliation Act 2023 REPEALS the 1988 Act — cite 2023 Act only
+- Electoral Act 2022 REPEALS the 2010 Act — cite 2022 Act only  
+- CAMA 2020 REPEALS CAMA 1990 — cite 2020 Act only
+- BOFIA 2020 REPEALS BOFIA 1991 — cite 2020 Act only
+- Petroleum Industry Act 2021 (PIA) partially repeals PPTA, PPRA, PEDA — cite PIA 2021
+- Copyright Act 2022 REPEALS the 1988 Act — cite 2022 Act only
+- Evidence Act 2011 REPEALS the 1945 Act — cite 2011 Act only
+- ACJA 2015 applies federally; states have their own ACJA equivalents — always specify jurisdiction
+- Police Act 2020 REPEALS the 1943 Act
+If a statute has been repealed, say so explicitly and apply the current version.
+If you are uncertain whether a provision has been amended, flag it: [VERIFY CURRENCY — possible amendment].
 If uncertain, state the legal principle and mark as [CITATION TO BE VERIFIED].
 If a case name is well-known and established, cite it confidently.
 
@@ -4460,9 +4474,13 @@ def render_home():
         letter-spacing: -0.04em !important;
         color: #ffffff !important;
         margin: 0 0 0.4rem 0 !important;
-        line-height: 1 !important;
+        line-height: 1.05 !important;
         position: relative;
         z-index: 1;
+        /* Reserve space away from watermark on desktop */
+        max-width: calc(100% - 10rem);
+        white-space: nowrap;
+        overflow: visible;
     }}
     .lexi-hero p {{
         font-size: 1rem !important;
@@ -4471,6 +4489,69 @@ def render_home():
         position: relative;
         z-index: 1;
         line-height: 1.6;
+        max-width: calc(100% - 8rem);
+    }}
+    /* ── Mobile: ≤768px ── */
+    @media (max-width: 768px) {{
+        .lexi-hero {{
+            padding: 1.4rem 1.2rem 1.3rem !important;
+            border-radius: 12px !important;
+        }}
+        .lexi-hero h1 {{
+            font-size: 2.1rem !important;
+            letter-spacing: -0.025em !important;
+            white-space: nowrap !important;
+            max-width: 100% !important;
+            line-height: 1.05 !important;
+        }}
+        .lexi-hero p {{
+            font-size: 0.82rem !important;
+            max-width: 100% !important;
+            line-height: 1.5 !important;
+        }}
+        .lexi-hero-watermark {{
+            font-size: 6rem !important;
+            right: 0.5rem !important;
+            opacity: 0.05 !important;
+        }}
+    }}
+    /* ── Small mobile: ≤480px ── */
+    @media (max-width: 480px) {{
+        .lexi-hero {{
+            padding: 1.1rem 1rem 1rem !important;
+        }}
+        .lexi-hero h1 {{
+            font-size: 1.75rem !important;
+            letter-spacing: -0.02em !important;
+            white-space: nowrap !important;
+        }}
+        .lexi-hero p {{
+            font-size: 0.76rem !important;
+        }}
+        .lexi-hero-watermark {{
+            display: none !important;
+        }}
+    }}
+    /* ── Very small: ≤360px (older Android) ── */
+    @media (max-width: 360px) {{
+        .lexi-hero h1 {{
+            font-size: 1.5rem !important;
+        }}
+    }}
+    /* ── Stat cards: stack to 2 rows on very small screens ── */
+    @media (max-width: 480px) {{
+        div[data-testid="stHorizontalBlock"] > div[data-testid="stColumn"] {{
+            min-width: 0 !important;
+        }}
+        .stat-card {{
+            padding: 0.55rem 0.4rem !important;
+        }}
+        .stat-card .stat-value {{
+            font-size: 1.1rem !important;
+        }}
+        .stat-card .stat-label {{
+            font-size: 0.62rem !important;
+        }}
     }}
     </style>
     <div class="lexi-hero">
@@ -4483,7 +4564,7 @@ def render_home():
 
     # Stats row
     cost_summary = get_db().get_cost_summary()
-    c1, c2, c3, c4, c5 = st.columns(5)
+    c1, c2, c3, c4, c5 = st.columns([1, 1, 1, 1, 1], gap="small")
     with c1:
         st.markdown(f'<div class="stat-card"><div class="stat-value">{len(st.session_state.cases)}</div><div class="stat-label">Total Cases</div></div>', unsafe_allow_html=True)
     with c2:
@@ -10434,7 +10515,9 @@ def render_user_management():
     </div>""", unsafe_allow_html=True)
 
     db = get_db()
-    um_list, um_create, um_stats, um_audit = st.tabs(["👥 All Users", "➕ Create User", "📊 Usage Stats", "🗂️ Audit Log"])
+    um_list, um_create, um_stats, um_audit, um_law = st.tabs([
+        "👥 All Users", "➕ Create User", "📊 Usage Stats", "🗂️ Audit Log", "📚 Law Updates"
+    ])
 
     # ── All Users ──
     with um_list:
@@ -10602,6 +10685,216 @@ def render_user_management():
                     "⬇️ Download CSV", buf.getvalue().encode(),
                     "lexiassist_audit.csv", "text/csv", key="audit_dl_btn",
                 )
+
+    with um_law:
+        st.markdown("#### 📚 Legal Currency Dashboard")
+        st.caption(
+            "Track repealed laws, recent amendments, and new cases. "
+            "Entries here are injected as a CURRENCY NOTE into every AI prompt automatically."
+        )
+
+        # ── Current legal data version display ──
+        ldv = LEGAL_DATA_VERSION
+        st.markdown(
+            f'<div style="background:#f0fdf4;border:1px solid #059669;border-radius:8px;'
+            f'padding:0.8rem 1rem;margin-bottom:1rem;">'
+            f'<strong>📋 Current Version: {esc(ldv["version"])}</strong> · '
+            f'Updated: {esc(ldv["updated"])} · {esc(ldv["last_act"])}<br>'
+            f'<small style="color:#475569;">{esc(ldv["notes"])}</small>'
+            f'</div>',
+            unsafe_allow_html=True,
+        )
+
+        law_tab1, law_tab2, law_tab3 = st.tabs([
+            "⚠️ Repealed Laws", "📝 Recent Amendments", "⚖️ New Cases"
+        ])
+
+        # ── Store updates in DB via kv_store ──
+        def _load_law_updates(key: str) -> list:
+            try:
+                return get_db()._load_list_raw(f"law_updates_{key}") or []
+            except Exception:
+                return []
+
+        def _save_law_updates(key: str, data: list):
+            try:
+                get_db()._save_list_raw(f"law_updates_{key}", data)
+            except Exception:
+                pass
+
+        with law_tab1:
+            st.markdown("##### ⚠️ Repealed / Superseded Laws")
+            st.caption("Add laws that have been repealed so the AI knows to stop citing them.")
+            repealed = _load_law_updates("repealed")
+            if repealed:
+                for i, r in enumerate(repealed):
+                    col_a, col_b = st.columns([5, 1])
+                    with col_a:
+                        st.markdown(
+                            f'<div class="history-item">'
+                            f'<strong style="color:#dc2626;">🚫 {esc(r.get("old",""))}</strong>'
+                            f' → replaced by <strong style="color:#059669;">'
+                            f'{esc(r.get("new",""))}</strong><br>'
+                            f'<small>{esc(r.get("note",""))} · Added: {esc(r.get("date",""))}</small>'
+                            f'</div>',
+                            unsafe_allow_html=True,
+                        )
+                    with col_b:
+                        if st.button("🗑️", key=f"del_rep_{i}", help="Remove"):
+                            repealed.pop(i)
+                            _save_law_updates("repealed", repealed)
+                            st.rerun()
+
+            with st.form("add_repealed_form"):
+                st.markdown("**Add repealed law:**")
+                rc1, rc2 = st.columns(2)
+                with rc1:
+                    old_act = st.text_input("Repealed Act", placeholder="e.g. Arbitration Act 1988")
+                with rc2:
+                    new_act = st.text_input("Replaced by", placeholder="e.g. Arbitration and Conciliation Act 2023")
+                rep_note = st.text_input("Note", placeholder="e.g. Fully repealed — cite 2023 Act only")
+                if st.form_submit_button("➕ Add", type="primary"):
+                    if old_act.strip():
+                        repealed.append({
+                            "old": old_act.strip(),
+                            "new": new_act.strip(),
+                            "note": rep_note.strip(),
+                            "date": date.today().isoformat(),
+                        })
+                        _save_law_updates("repealed", repealed)
+                        st.success("✅ Added.")
+                        st.rerun()
+
+        with law_tab2:
+            st.markdown("##### 📝 Recent Amendments & Finance Acts")
+            st.caption("Track amendments that change specific provisions the AI might cite incorrectly.")
+            amendments = _load_law_updates("amendments")
+            if amendments:
+                for i, a in enumerate(amendments):
+                    ca1, ca2 = st.columns([5, 1])
+                    with ca1:
+                        st.markdown(
+                            f'<div class="history-item">'
+                            f'<strong>{esc(a.get("act",""))}</strong> — '
+                            f'{esc(a.get("provision",""))}<br>'
+                            f'<small style="color:#d97706;">{esc(a.get("change",""))}'
+                            f' · {esc(a.get("date",""))}</small>'
+                            f'</div>',
+                            unsafe_allow_html=True,
+                        )
+                    with ca2:
+                        if st.button("🗑️", key=f"del_amd_{i}", help="Remove"):
+                            amendments.pop(i)
+                            _save_law_updates("amendments", amendments)
+                            st.rerun()
+
+            with st.form("add_amendment_form"):
+                st.markdown("**Add amendment:**")
+                am1, am2 = st.columns(2)
+                with am1:
+                    amd_act = st.text_input("Act / Statute", placeholder="e.g. Stamp Duties Act")
+                with am2:
+                    amd_prov = st.text_input("Provision", placeholder="e.g. Section 89A")
+                amd_change = st.text_area(
+                    "What changed", height=80,
+                    placeholder="e.g. Finance Act 2020 introduced 0.5% levy on electronic transfers above ₦10,000"
+                )
+                if st.form_submit_button("➕ Add", type="primary"):
+                    if amd_act.strip() and amd_change.strip():
+                        amendments.append({
+                            "act": amd_act.strip(),
+                            "provision": amd_prov.strip(),
+                            "change": amd_change.strip(),
+                            "date": date.today().isoformat(),
+                        })
+                        _save_law_updates("amendments", amendments)
+                        st.success("✅ Added.")
+                        st.rerun()
+
+        with law_tab3:
+            st.markdown("##### ⚖️ New Verified Cases")
+            st.caption(
+                "Add new Supreme Court / Court of Appeal decisions to the verified case database. "
+                "They will be recognised immediately by the citation audit."
+            )
+            new_cases = _load_law_updates("new_cases")
+            if new_cases:
+                for i, nc in enumerate(new_cases):
+                    nc1, nc2 = st.columns([5, 1])
+                    with nc1:
+                        st.markdown(
+                            f'<div class="history-item">'
+                            f'<strong>{esc(nc.get("name",""))}</strong> '
+                            f'<code style="background:#f0fdf4;padding:0.1rem 0.4rem;'
+                            f'border-radius:3px;">{esc(nc.get("citation",""))}</code><br>'
+                            f'<small>{esc(nc.get("principle",""))} · '
+                            f'{esc(nc.get("court",""))} {esc(nc.get("year",""))}</small>'
+                            f'</div>',
+                            unsafe_allow_html=True,
+                        )
+                    with nc2:
+                        if st.button("🗑️", key=f"del_nc_{i}", help="Remove"):
+                            new_cases.pop(i)
+                            _save_law_updates("new_cases", new_cases)
+                            st.rerun()
+
+                # Auto-inject into VERIFIED_NIGERIAN_CASES at runtime
+                for nc in new_cases:
+                    if nc.get("name") and nc.get("name") not in VERIFIED_NIGERIAN_CASES:
+                        VERIFIED_NIGERIAN_CASES[nc["name"]] = {
+                            "citation": nc.get("citation", ""),
+                            "court": nc.get("court", "Supreme Court"),
+                            "year": int(nc.get("year", date.today().year)),
+                            "principle": nc.get("principle", ""),
+                        }
+
+            with st.form("add_case_form"):
+                st.markdown("**Add new verified case:**")
+                ncc1, ncc2 = st.columns(2)
+                with ncc1:
+                    nc_name = st.text_input(
+                        "Case Name", placeholder="e.g. Dangote v FRN"
+                    )
+                    nc_citation = st.text_input(
+                        "Citation", placeholder="e.g. (2024) 5 NWLR (Pt. 1900) 1"
+                    )
+                with ncc2:
+                    nc_court = st.selectbox(
+                        "Court",
+                        ["Supreme Court", "Court of Appeal", "Federal High Court",
+                         "National Industrial Court", "Other"],
+                        key="nc_court_sel",
+                    )
+                    nc_year = st.text_input(
+                        "Year", placeholder=str(date.today().year)
+                    )
+                nc_principle = st.text_area(
+                    "Legal Principle / Ratio",
+                    height=80,
+                    placeholder="e.g. Corporate veil lifted where company used as instrument of fraud",
+                )
+                if st.form_submit_button("➕ Add to Verified Database", type="primary"):
+                    if nc_name.strip() and nc_citation.strip():
+                        new_cases.append({
+                            "name": nc_name.strip(),
+                            "citation": nc_citation.strip(),
+                            "court": nc_court,
+                            "year": nc_year.strip() or str(date.today().year),
+                            "principle": nc_principle.strip(),
+                        })
+                        _save_law_updates("new_cases", new_cases)
+                        # Immediately inject into live runtime dict
+                        VERIFIED_NIGERIAN_CASES[nc_name.strip()] = {
+                            "citation": nc_citation.strip(),
+                            "court": nc_court,
+                            "year": int(nc_year.strip()) if nc_year.strip().isdigit() else date.today().year,
+                            "principle": nc_principle.strip(),
+                        }
+                        st.success(
+                            f"✅ '{nc_name.strip()}' added to verified case database. "
+                            "Citation audit will now recognise it immediately."
+                        )
+                        st.rerun()
 
 # ═══════════════════════════════════════════════════════
 # MAIN ENTRY POINT
