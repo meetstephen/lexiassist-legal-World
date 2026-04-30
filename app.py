@@ -4497,37 +4497,142 @@ def render_home():
 
     st.markdown("")
 
-    # ── Getting Started card — shown only to brand-new users ──
+   # ── Onboarding Wizard — shown until all 4 steps complete ────────────
     is_new_user = (
         len(st.session_state.cases) == 0
         and len(st.session_state.chat_history) == 0
         and len(st.session_state.clients) == 0
     )
-    if is_new_user:
-        st.markdown("""
-<div class="custom-card" style="border-left-color:var(--la-accent-2); margin-bottom:1.2rem;">
-<h4 style="font-size:1.05rem; margin-bottom:0.6rem;">👋 Welcome to LexiAssist — here's how to get started</h4>
-<p style="margin:0 0 0.8rem 0; font-size:0.93rem;">
-Your workspace is empty. Pick any of the three actions below to begin:
-</p>
-<table style="width:100%; border-collapse:separate; border-spacing:0 6px; font-size:0.9rem;">
-<tr>
-  <td style="width:32px; font-size:1.25rem; vertical-align:top;">🧠</td>
-  <td><strong>Ask your first legal question</strong><br>
-  <span style="color:var(--la-text-secondary);">Open the <em>AI Assistant</em> tab, type your query, choose a response mode and hit Generate.</span></td>
-</tr>
-<tr>
-  <td style="font-size:1.25rem; vertical-align:top;">📁</td>
-  <td><strong>Create your first case</strong><br>
-  <span style="color:var(--la-text-secondary);">Go to the <em>Cases</em> tab, click ➕ Add Case and fill in the matter details — all analysis you generate can be saved to it.</span></td>
-</tr>
-<tr>
-  <td style="font-size:1.25rem; vertical-align:top;">📑</td>
-  <td><strong>Review a contract</strong><br>
-  <span style="color:var(--la-text-secondary);">On the <em>AI Assistant</em> tab select <em>Contract Review</em> mode, paste or upload your contract, and receive a full clause-by-clause risk matrix.</span></td>
-</tr>
-</table>
-</div>""", unsafe_allow_html=True)
+
+    _WIZ_KEY = "onboarding_dismissed"
+    _WIZ_STEP_KEY = "onboarding_step"
+
+    # Mark steps complete automatically based on actual data
+    steps_done = {
+        1: bool(st.session_state.get("profile", {}).get("firm_name", "")),
+        2: len(st.session_state.clients) > 0,
+        3: len(st.session_state.cases) > 0,
+        4: len(st.session_state.chat_history) > 0,
+    }
+    all_done = all(steps_done.values())
+
+    show_wizard = (
+        not st.session_state.get(_WIZ_KEY, False)
+        and not all_done
+    )
+
+    if show_wizard:
+        current_step = st.session_state.get(_WIZ_STEP_KEY, 1)
+        # Auto-advance to first incomplete step
+        for s in [1, 2, 3, 4]:
+            if not steps_done[s]:
+                current_step = s
+                break
+
+        st.session_state[_WIZ_STEP_KEY] = current_step
+
+        completed = sum(steps_done.values())
+        progress_pct = int((completed / 4) * 100)
+
+        # Progress bar
+        st.markdown(
+            f'<div style="background:var(--la-card);border:1px solid var(--la-border);'
+            f'border-radius:10px;padding:1rem 1.2rem;margin-bottom:1rem;">'
+            f'<div style="display:flex;justify-content:space-between;'
+            f'align-items:center;margin-bottom:0.5rem;">'
+            f'<strong>🚀 Getting Started — {completed}/4 steps complete</strong>'
+            f'<span style="font-size:0.8rem;color:var(--la-text-secondary);">'
+            f'{progress_pct}%</span></div>'
+            f'<div style="background:#e5e7eb;border-radius:999px;height:8px;">'
+            f'<div style="width:{progress_pct}%;background:#059669;'
+            f'height:8px;border-radius:999px;transition:width 0.4s;"></div>'
+            f'</div></div>',
+            unsafe_allow_html=True,
+        )
+
+        # Step cards
+        STEPS = [
+            {
+                "num": 1, "icon": "🏢",
+                "title": "Set up your firm",
+                "desc": "Add your firm name and lawyer name so LexiAssist can personalise all your documents, letterheads and exports.",
+                "action": "Go to 👤 Profile → 🏢 Firm Details and save your name.",
+                "done_msg": "Firm profile saved ✓",
+            },
+            {
+                "num": 2, "icon": "👤",
+                "title": "Add your first client",
+                "desc": "Create a client record — every case, billing entry and conflict check links back to a client.",
+                "action": "Go to 👥 Clients → ➕ Add Client.",
+                "done_msg": "First client added ✓",
+            },
+            {
+                "num": 3, "icon": "📁",
+                "title": "Create your first case",
+                "desc": "A case ties your client, hearings, pleadings, analyses and billing together in one place.",
+                "action": "Go to 📁 Cases → ➕ Add Case.",
+                "done_msg": "First case created ✓",
+            },
+            {
+                "num": 4, "icon": "🧠",
+                "title": "Run your first AI query",
+                "desc": "Ask LexiAssist a legal question — any area of Nigerian law, any complexity. See it take a firm position.",
+                "action": "Go to 🧠 AI Assistant, type a query, pick Standard mode, hit Generate.",
+                "done_msg": "First AI session complete ✓",
+            },
+        ]
+
+        wiz_cols = st.columns(4)
+        for col, step in zip(wiz_cols, STEPS):
+            done = steps_done[step["num"]]
+            is_current = step["num"] == current_step and not done
+            border = "#059669" if done else ("#6366f1" if is_current else "var(--la-border)")
+            bg     = "#f0fdf4"  if done else ("var(--la-card)" if not is_current else "var(--la-card)")
+            with col:
+                st.markdown(
+                    f'<div style="border:2px solid {border};background:{bg};'
+                    f'border-radius:10px;padding:0.9rem;min-height:170px;">'
+                    f'<div style="font-size:1.5rem;">{step["icon"]}</div>'
+                    f'<div style="font-weight:700;font-size:0.88rem;margin:.35rem 0 .3rem;">'
+                    f'Step {step["num"]}: {esc(step["title"])}</div>'
+                    f'<div style="font-size:0.78rem;color:var(--la-text-secondary);'
+                    f'margin-bottom:0.5rem;">{esc(step["desc"])}</div>'
+                    + (
+                        f'<div style="color:#059669;font-size:0.78rem;font-weight:600;">'
+                        f'✅ {esc(step["done_msg"])}</div>'
+                        if done else
+                        f'<div style="color:#6366f1;font-size:0.76rem;">'
+                        f'👉 {esc(step["action"])}</div>'
+                    )
+                    + '</div>',
+                    unsafe_allow_html=True,
+                )
+
+        # Dismiss button
+        st.markdown("")
+        wz1, wz2 = st.columns([1, 5])
+        with wz1:
+            if st.button(
+                "✖ Dismiss wizard", key="dismiss_wizard",
+                use_container_width=True,
+            ):
+                st.session_state[_WIZ_KEY] = True
+                st.rerun()
+        with wz2:
+            st.caption(
+                "The wizard disappears automatically when all 4 steps are complete. "
+                "You can also dismiss it manually above."
+            )
+
+        st.markdown("---")
+
+    elif all_done and not st.session_state.get(_WIZ_KEY, False):
+        # First time all steps complete — show a one-time congratulations
+        st.success(
+            "🎉 **Setup complete!** You have finished all 4 getting-started steps. "
+            "LexiAssist is fully configured for your practice."
+        )
+        st.session_state[_WIZ_KEY] = True
 
     col_left, col_right = st.columns([3, 2])
     with col_left:
