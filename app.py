@@ -4248,7 +4248,9 @@ def render_setup_screen():
 # ═══════════════════════════════════════════════════════
 # SIDEBAR
 # ═══════════════════════════════════════════════════════
-def render_sidebar():
+def render_sidebar(group_names=None):
+    if group_names is None:
+        group_names = []
     with st.sidebar:
         firm = get_firm_name()
         corp = (st.session_state.get("theme", "⚖️ Corporate") == "⚖️ Corporate")
@@ -4262,6 +4264,25 @@ def render_sidebar():
   <div style="font-size:1.05rem;font-weight:800;color:{hdr_col};letter-spacing:-0.01em;">⚖️ {esc(name_display)}</div>
   <div style="font-size:0.74rem;margin-top:0.15rem;color:{cap_col};">{esc(tag_display)}</div>
 </div>""", unsafe_allow_html=True)
+        # ── Navigation group selector — placed right after branding ──
+        if group_names:
+            st.markdown(
+                '<p style="font-size:0.72rem;font-weight:700;letter-spacing:0.08em;'
+                'color:var(--la-text-secondary);margin:0.8rem 0 0.2rem 0;">NAVIGATION</p>',
+                unsafe_allow_html=True,
+            )
+            selected_group = st.radio(
+                "Section", group_names,
+                key="nav_group",
+                label_visibility="collapsed",
+            )
+            st.markdown(
+                '<div style="border-bottom:1px solid var(--la-border);margin:0.4rem 0 0.2rem 0;"></div>',
+                unsafe_allow_html=True,
+            )
+        else:
+            selected_group = None
+        st.session_state["_selected_nav_group"] = selected_group
         uname = st.session_state.get("current_username","")
         urole = st.session_state.get("current_user_role","")
         if uname:
@@ -11270,7 +11291,6 @@ def main():
         load_user_data()
         st.session_state.user_data_loaded = True
 
-    render_sidebar()
     _maybe_send_hearing_reminders()
 
     is_admin = (st.session_state.current_user_role == "admin")
@@ -11312,21 +11332,10 @@ def main():
     if is_admin:
         GROUPS["👤 Account"].append(("🛡️ Admin", render_user_management))
 
-    # Sidebar group selector
-    with st.sidebar:
-        st.markdown("---")
-        st.markdown(
-            '<p style="font-size:0.78rem;color:var(--la-text-secondary);"'
-            '>NAVIGATION</p>',
-            unsafe_allow_html=True,
-        )
-        group_names = list(GROUPS.keys())
-        selected_group = st.radio(
-            "Section",
-            group_names,
-            key="nav_group",
-            label_visibility="collapsed",
-        )
+    # Navigation is now rendered inside render_sidebar(), right after branding
+    group_names = list(GROUPS.keys())
+    render_sidebar(group_names)
+    selected_group = st.session_state.get("_selected_nav_group", group_names[0])
 
     # Page tabs within the selected group
     group_pages = GROUPS[selected_group]
