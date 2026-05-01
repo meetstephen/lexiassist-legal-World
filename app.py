@@ -4119,6 +4119,16 @@ def render_login_screen():
     font-size: 1rem !important; color: rgba(255,255,255,0.82) !important;
     margin: 0 !important; position: relative; z-index: 1; line-height: 1.6;
 }
+@media (max-width: 768px) {
+    .lexi-hero h1 { font-size: 2.2rem !important; }
+    .lexi-hero { padding: 1.8rem 1.4rem 1.6rem !important; }
+    .lexi-hero-watermark { font-size: 7rem !important; }
+}
+@media (max-width: 480px) {
+    .lexi-hero h1 { font-size: 1.8rem !important; letter-spacing: -0.02em !important; }
+    .lexi-hero { padding: 1.4rem 1.1rem 1.2rem !important; }
+    .lexi-hero-watermark { font-size: 5rem !important; }
+}
 </style>
 <div class="lexi-hero">
   <div class="lexi-hero-watermark">&#9878;</div>
