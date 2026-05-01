@@ -10666,14 +10666,18 @@ def render_user_management():
         # ── Current legal data version display ──
         ldv = LEGAL_DATA_VERSION
         st.markdown(
-            f'<div style="background:#f0fdf4;border:1px solid #059669;border-radius:8px;'
-            f'padding:0.8rem 1rem;margin-bottom:1rem;">'
-            f'<strong>📋 Current Version: {esc(ldv["version"])}</strong> · '
-            f'Updated: {esc(ldv["updated"])} · {esc(ldv["last_act"])}<br>'
-            f'<small style="color:#475569;">{esc(ldv["notes"])}</small>'
+            f'<div style="background:var(--la-bg2);border:1px solid var(--la-border);'
+            f'border-left:4px solid #059669;border-radius:8px;'
+            f'padding:0.8rem 1rem;margin-bottom:1rem;color:var(--la-text);">'
+            f'<strong style="color:var(--la-text);">📋 Current Version: '
+            f'{esc(ldv["version"])}</strong>'
+            f'<span style="color:var(--la-text2);"> · Updated: {esc(ldv["updated"])}'
+            f' · {esc(ldv["last_act"])}</span><br>'
+            f'<small style="color:var(--la-text2);">{esc(ldv["notes"])}</small>'
             f'</div>',
             unsafe_allow_html=True,
         )
+        
 
         law_tab1, law_tab2, law_tab3 = st.tabs([
             "⚠️ Repealed Laws", "📝 Recent Amendments", "⚖️ New Cases"
