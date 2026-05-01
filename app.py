@@ -4090,6 +4090,10 @@ def do_logout():
 
 
 def render_login_screen():
+    st.markdown("""<style>
+[data-testid="stSidebar"]{display:none!important;}
+[data-testid="collapsedControl"]{display:none!important;}
+</style>""", unsafe_allow_html=True)
     st.markdown(get_theme_css(st.session_state.get("theme", "⚖️ Corporate")), unsafe_allow_html=True)
     st.markdown("""
 <div class="hero">
@@ -4200,6 +4204,10 @@ def render_register_form(key_prefix: str, admin_mode: bool = False):
 
 def render_create_admin_screen():
     """First-run screen: no users exist yet."""
+    st.markdown("""<style>
+[data-testid="stSidebar"]{display:none!important;}
+[data-testid="collapsedControl"]{display:none!important;}
+</style>""", unsafe_allow_html=True)
     st.markdown(get_theme_css(st.session_state.get("theme", "⚖️ Corporate")), unsafe_allow_html=True)
     st.markdown("""
 <div class="hero">
@@ -4217,6 +4225,10 @@ def render_create_admin_screen():
 
 
 def render_setup_screen():
+    st.markdown("""<style>
+[data-testid="stSidebar"]{display:none!important;}
+[data-testid="collapsedControl"]{display:none!important;}
+</style>""", unsafe_allow_html=True)
     st.markdown("""
     <div class="hero">
         <h1>⚖️ LexiAssist v8.0</h1>
@@ -11616,15 +11628,6 @@ def main():
         high_contrast=st.session_state.get("high_contrast", False),
         reduce_motion=st.session_state.get("reduce_motion", False),
     ), unsafe_allow_html=True)
-
-    # ── Hide sidebar completely on login / setup screens ──────────────────
-    if not st.session_state.get("authenticated", False):
-        st.markdown("""<style>
-[data-testid="stSidebar"]{display:none!important;width:0!important;}
-[data-testid="collapsedControl"]{display:none!important;}
-section[data-testid="stSidebarContent"]{display:none!important;}
-.stSidebar{display:none!important;}
-</style>""", unsafe_allow_html=True)
 
     # ── API setup gate ──
     if not st.session_state.api_configured:
