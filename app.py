@@ -211,7 +211,7 @@ COST_PER_1M_OUTPUT = 0.60
 # ═══════════════════════════════════════════════════════
 IDENTITY_CORE = """You are LexiAssist v8.0 — an elite Senior Partner at a top-tier Nigerian law firm with
 35+ years of practice across ALL areas of Nigerian law. You are known for:
-- Taking FIRM, CLEAR POSITIONS (never hedging with "may" or "might" when facts permit a conclusion)
+- Taking FIRM, CLEAR POSITIONS where facts and authorities permit a conclusion. Where facts are incomplete, law is unsettled, or authority requires verification, state the uncertainty expressly and identify what must be verified or confirmed.
 - Thinking like a LITIGATOR — always identifying best claim, best defence, weakest party
 - Providing ACTIONABLE STRATEGY — not academic theory
 - Being BRUTALLY HONEST about risks and exposure
@@ -835,7 +835,7 @@ Abuja Multi-Door Courthouse, Rules of Professional Conduct on settlement duties 
 Evidence Act 2011 (without prejudice communications), and standard Nigerian litigation practice.
 
 Your output must be structured, firm, and immediately actionable.
-Give concrete numbers (settlement ranges, percentages, timelines) — do NOT hedge.
+Give concrete numbers (settlement ranges, percentages, timelines) where the facts permit. Where figures depend on missing facts or court discretion, state the range and identify the variables that will determine the outcome.
 Identify the weaker party, their pressure points, and the optimal strategy for the instructing party.
 """
 
@@ -971,7 +971,7 @@ DEFAULT_LIMITATION_PERIODS = [
     {"cause": "Recovery of Rent / Mesne Profits", "period": "6 years", "authority": "Limitation Act, s. 19"},
     {"cause": "Judgment Enforcement", "period": "12 years from judgment date", "authority": "Limitation Act, s. 8(1)(d)"},
     {"cause": "Public Officers (POPA)", "period": "3 months pre-action notice + 12 months to sue", "authority": "Public Officers Protection Act Cap P41 LFN 2004, s. 2"},
-    {"cause": "Fundamental Rights Enforcement", "period": "12 months from infringement", "authority": "Fundamental Rights (Enforcement Procedure) Rules 2009, Order II r. 1"},
+    {"cause": "Fundamental Rights Enforcement", "period": "12 months from infringement (NB: subject to continuing violation doctrine, court discretion, and state-specific interpretation — verify applicable authority)", "authority": "Fundamental Rights (Enforcement Procedure) Rules 2009, Order II r. 1"},
     {"cause": "Election Petition (Governorship / NASS)", "period": "21 days from declaration of result", "authority": "Electoral Act 2022, s. 133(1)"},
     {"cause": "Election Petition (Presidential)", "period": "21 days from declaration of result", "authority": "Electoral Act 2022, s. 133(1)"},
     {"cause": "Labour / Employment (NIC)", "period": "No fixed limit — laches & acquiescence apply", "authority": "NIC Act 2006; NIC (CPR) Rules 2017"},
@@ -2146,7 +2146,7 @@ def get_theme_css(
 
     text_color = "#362E2EFF" if high_contrast else t["text"]
     text_sec   = "#CCCCCC" if high_contrast else t["text_secondary"]
-    bg_color   = "#000000" if (high_contrast and t["bg"][1:3] < "33") else t["bg"]
+    bg_color   = "#000000" if (high_contrast and int(t["bg"][1:3], 16) < 0x33) else t["bg"]
     base_font  = round(16 * font_size_scale, 1)
     input_font = round(base_font * 0.94, 1)
     mobile_font = round(base_font * 0.92, 1)
@@ -2295,7 +2295,7 @@ code,pre,.stMarkdown code,.stMarkdown pre{{
 .hero::before{{content:'';position:absolute;inset:0;
   background:repeating-linear-gradient(-45deg,transparent,transparent 40px,
   rgba(255,255,255,0.015) 40px,rgba(255,255,255,0.015) 41px);pointer-events:none;}}
-.hero::after{{content:'⚖';position:absolute;right:1.5rem;top:50%;
+.hero::after{{content:'\2696';position:absolute;right:1.5rem;top:50%;
   transform:translateY(-50%);font-size:11rem;line-height:1;opacity:0.08;
   pointer-events:none;user-select:none;color:#fff;filter:blur(0.5px);}}
 .hero h1{{font-size:3.1rem!important;font-weight:900!important;
@@ -4096,43 +4096,8 @@ def render_login_screen():
 </style>""", unsafe_allow_html=True)
     st.markdown(get_theme_css(st.session_state.get("theme", "⚖️ Corporate")), unsafe_allow_html=True)
     st.markdown("""
-<style>
-.lexi-hero {
-    position: relative; overflow: hidden;
-    background: linear-gradient(135deg, #1e3a5f 0%, #0f2440 60%, #162d4a 100%);
-    border-radius: 16px; padding: 2.6rem 2.8rem 2.3rem;
-    margin-bottom: 1.8rem; border: 1px solid rgba(255,255,255,0.08);
-    box-shadow: 0 8px 32px rgba(0,0,0,0.25);
-}
-.lexi-hero-watermark {
-    position: absolute; right: 1.5rem; top: 50%; transform: translateY(-50%);
-    font-size: 11rem; line-height: 1; opacity: 0.07; color: #ffffff;
-    pointer-events: none; user-select: none; filter: blur(1px); font-family: serif;
-}
-.lexi-hero h1 {
-    font-size: 3.4rem !important; font-weight: 900 !important;
-    letter-spacing: -0.04em !important; color: #ffffff !important;
-    margin: 0 0 0.4rem 0 !important; line-height: 1 !important;
-    position: relative; z-index: 1;
-}
-.lexi-hero p {
-    font-size: 1rem !important; color: rgba(255,255,255,0.82) !important;
-    margin: 0 !important; position: relative; z-index: 1; line-height: 1.6;
-}
-@media (max-width: 768px) {
-    .lexi-hero h1 { font-size: 2.2rem !important; }
-    .lexi-hero { padding: 1.8rem 1.4rem 1.6rem !important; }
-    .lexi-hero-watermark { font-size: 7rem !important; }
-}
-@media (max-width: 480px) {
-    .lexi-hero h1 { font-size: 1.8rem !important; letter-spacing: -0.02em !important; }
-    .lexi-hero { padding: 1.4rem 1.1rem 1.2rem !important; }
-    .lexi-hero-watermark { font-size: 5rem !important; }
-}
-</style>
-<div class="lexi-hero">
-  <div class="lexi-hero-watermark">&#9878;</div>
-  <h1>⚖️ LexiAssist</h1>
+<div class="hero">
+  <h1>⚖️ LexiAssist v8.0</h1>
   <p>Elite AI Legal Engine &nbsp;&middot;&nbsp; Nigerian Law &nbsp;&middot;&nbsp; Built for Practitioners</p>
 </div>""", unsafe_allow_html=True)
     _, col, _ = st.columns([1, 2, 1])
@@ -4487,6 +4452,17 @@ def render_sidebar(group_names=None):
 
 
 def render_home():
+    # ── Beta verification banner ──
+    st.markdown(
+        '<div style="background:#fffbeb;border:1px solid #f59e0b;border-radius:8px;'
+        'padding:0.55rem 1rem;margin-bottom:0.8rem;font-size:0.8rem;color:#92400e;'
+        'display:flex;align-items:center;gap:0.5rem;">'
+        '<strong>🔬 Private Beta</strong> — AI-generated output. '
+        'All authorities, limitation periods, and legal positions must be '
+        'independently verified before advising any client.'
+        '</div>',
+        unsafe_allow_html=True,
+    )
     firm = get_firm_name()
     subtitle = f"{esc(firm)} · " if firm and firm != "LexiAssist" else ""
     st.markdown(f"""
@@ -5214,7 +5190,7 @@ def render_ai():
     }}
   }})()">&#128203;&nbsp;Copy response</button>
 </div>"""
-        st.html(_copy_html)
+        st.components.v1.html(_copy_html, height=60)
 
         # ── CASE STRENGTH METER ──
         if st.session_state.get("last_task") in ("analysis", "advisory", "contract_review"):
@@ -6512,6 +6488,11 @@ def render_tools():
 You are a Nigerian limitation period expert. Analyse these facts and compute ALL applicable
 limitation periods. Today's date is {date.today().strftime('%d %B %Y')}.
 
+CRITICAL: Where a limitation period depends on jurisdiction-specific state law, public officer 
+exceptions, continuing injury, fraud/concealment, or court discretion, you MUST flag this in 
+special_notes. Do NOT state hard deadlines where the law requires verification. State the 
+general rule AND what must be verified against applicable State Limitation Law.
+
 Respond ONLY in this exact JSON format, nothing else:
 {{
   "causes_of_action": [
@@ -6580,6 +6561,17 @@ margin-bottom:1rem;border:1px solid #e5e7eb;">
 </div>""", unsafe_allow_html=True)
                 st.error(f"🚨 Most Urgent: **{data.get('most_urgent', '')}**")
                 st.warning(f"⚡ Immediate Action: {data.get('immediate_action', '')}")
+                st.markdown(
+                    '<div style="background:#fef9c3;border:1px solid #fde047;border-radius:8px;'
+                    'padding:0.8rem 1rem;margin-top:1rem;font-size:0.83rem;color:#713f12;">'
+                    '<strong>⚠️ Important — Verify Before Relying:</strong> These deadlines are '
+                    'AI-computed estimates. Limitation periods vary by jurisdiction, cause of action, '
+                    'public officer exceptions, continuing injury, fraud/concealment, and applicable '
+                    'State Limitation Law. Always verify against the specific statute and consult '
+                    'applicable State Limitation Law before advising a client.'
+                    '</div>',
+                    unsafe_allow_html=True,
+                )
             except Exception:
                 st.markdown(raw)
     # ── PRE-ACTION NOTICE CHECKER (merged into same tab) ──
