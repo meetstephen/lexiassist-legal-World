@@ -3967,11 +3967,36 @@ def persist_profile():
     get_db().save_profile(st.session_state.get("profile", {}))
 
 
+def _bootstrap_verified_cases() -> None:
+    """Load admin-added cases from DB into VERIFIED_NIGERIAN_CASES on startup.
+    Called every session so custom cases survive server restarts.
+    """
+    try:
+        db = get_db()
+        new_cases = db._load_list_raw("law_updates_new_cases") or []
+        injected = 0
+        for nc in new_cases:
+            name = nc.get("name", "").strip()
+            if name and name not in VERIFIED_NIGERIAN_CASES:
+                VERIFIED_NIGERIAN_CASES[name] = {
+                    "citation": nc.get("citation", ""),
+                    "court": nc.get("court", "Supreme Court"),
+                    "year": int(nc["year"]) if str(nc.get("year", "")).isdigit() else date.today().year,
+                    "principle": nc.get("principle", ""),
+                }
+                injected += 1
+        if injected:
+            logging.info("LexiAssist: bootstrapped %d custom verified cases from DB", injected)
+    except Exception as e:
+        logging.warning("LexiAssist: could not bootstrap verified cases: %s", e)
+
+
 def load_user_data():
     """Load all user-specific data from DB into session state. Called once after login."""
     if not st.session_state.get("current_user_id"):
         return
     db = get_db()
+    _bootstrap_verified_cases()  # Ensure custom admin cases are available every session
     st.session_state.cases = db.load_list("cases") or []
     st.session_state.clients = db.load_list("clients") or []
     st.session_state.time_entries = db.load_list("time_entries") or []
@@ -4030,6 +4055,7 @@ def do_login(username: str, password: str, remember_me: bool = True) -> bool:
     st.session_state.current_username = user["username"]
     st.session_state.current_user_role = user["role"]
     db.update_user_last_login(uid)
+    db.append_audit("LOGIN", f"user={username.strip()}")
     load_user_data()
     st.session_state.user_data_loaded = True
     # ── Persistent session token ──
@@ -4067,6 +4093,8 @@ def do_logout():
     """Revoke session token, clear query params, and wipe session state."""
     db = get_db()
     token = st.session_state.get("_session_token", "")
+    uname = st.session_state.get("current_username", "unknown")
+    db.append_audit("LOGOUT", f"user={uname}")
     if token:
         db.revoke_session_token(token)
     try:
@@ -4123,6 +4151,10 @@ def render_login_screen():
                         time.sleep(0.3); st.rerun()
                     else:
                         st.error("❌ Invalid username or password.")
+                        try:
+                            get_db().append_audit("LOGIN_FAILED", f"user={username_inp.strip()[:60]}")
+                        except Exception:
+                            pass
         if tab_reg is not None:
             with tab_reg: render_register_form("reg_self")
         st.markdown("</div>", unsafe_allow_html=True)
@@ -5913,72 +5945,87 @@ def render_templates():
             with tc2:
                 if st.button("📋 Load to AI", key=f"load_t_{t['id']}", use_container_width=True):
                     st.session_state.loaded_template = t["content"]
+                    st.session_state["_active_fill_tmpl"] = t["id"]
                     st.success(f"✅ '{t['name']}' loaded! Go to AI Assistant tab.")
-            
-         # ── Phase 4: Auto-detect placeholders and offer fill form ──
-                    placeholders = re.findall(r'\[([A-Z][A-Z0-9 _/]+)\]', t["content"])
-                    placeholders = list(dict.fromkeys(placeholders))  # dedupe, preserve order
-                    if placeholders:
-                        st.info(
-                            f"📋 This template has **{len(placeholders)} placeholder(s)**. "
-                            "Fill them in below to get a ready-to-use draft."
-                        )
-                        with st.expander("✏️ Fill Placeholders", expanded=True):
-                            fill_vals = {}
-                            cols_per_row = 2
-                            ph_rows = [placeholders[i:i+cols_per_row] for i in range(0,len(placeholders),cols_per_row)]
-                            for row in ph_rows:
-                                row_cols = st.columns(len(row))
-                                for col, ph in zip(row_cols, row):
-                                    with col:
-                                        fill_vals[ph] = st.text_input(
-                                            ph.replace("_"," ").title(),
-                                            key=f"ph_{t['id']}_{ph}",
-                                            placeholder=f"Enter {ph.lower()}…",
-                                        )
-                            if st.button("⚡ Generate Filled Draft", key=f"fill_btn_{t['id']}", type="primary", use_container_width=True):
-                                filled = t["content"]
-                                for ph, val in fill_vals.items():
-                                    if val.strip():
-                                        filled = filled.replace(f"[{ph}]", val.strip())
-                                unfilled = re.findall(r'\[[A-Z][A-Z0-9 _/]+\]', filled)
-                                if unfilled:
-                                    st.warning(f"⚠️ {len(unfilled)} placeholder(s) still empty: {', '.join(unfilled[:5])}")
-                                st.session_state[f"filled_template_{t['id']}"] = filled
-                                st.success("✅ Draft generated! See below.")
-
-                    # Show filled draft if available
-                    filled_key = f"filled_template_{t.get('id','')}"
-                    if st.session_state.get(filled_key):
-                        filled_draft = st.session_state[filled_key]
-                        st.markdown("##### 📄 Filled Draft")
-                        st.text_area("Review / Edit", filled_draft, height=300, key=f"filled_ta_{t.get('id','')}")
-                        ft_fname = f"LexiAssist_FilledTemplate_{datetime.now():%Y%m%d_%H%M}"
-                        fc1, fc2, fc3 = st.columns(3)
-                        with fc1:
-                            st.download_button(
-                                "📥 TXT", export_txt(filled_draft, t.get("title","")),
-                                f"{ft_fname}.txt", "text/plain", key=f"ft_dl_txt_{t.get('id','')}", use_container_width=True,
-                            )
-                        with fc2:
-                            safe_pdf_download(filled_draft, t.get("title","Template"), ft_fname, f"ft_dl_pdf_{t.get('id','')}")
-                        with fc3:
-                            safe_docx_download(filled_draft, t.get("title","Template"), ft_fname, f"ft_dl_docx_{t.get('id','')}")
-                        if st.button("🧠 Send to AI for Polish", key=f"ft_ai_{t.get('id','')}", use_container_width=True):
-                            with st.spinner("🧠 AI polishing…"):
-                                polish_prompt = (
-                                    "Polish the following Nigerian legal document. "
-                                    "Ensure grammatical correctness, professional tone, "
-                                    "and legal completeness. Do not change the substantive "
-                                    "legal meaning or any specific details. Return the full document:\n\n"
-                                    + filled_draft
-                                )
-                                polished = generate(polish_prompt, IDENTITY_CORE, "standard", "drafting")
-                            st.session_state[filled_key] = polished
-                            st.success("✅ Polished! Scroll up to review.")
-                            st.rerun()   
-            
             with tc3:
+                _fill_active = st.session_state.get("_active_fill_tmpl") == t["id"]
+                _fill_label = "✏️ Close Form" if _fill_active else "✏️ Fill Template"
+                if st.button(_fill_label, key=f"fill_t_{t['id']}", use_container_width=True):
+                    if _fill_active:
+                        st.session_state.pop("_active_fill_tmpl", None)
+                    else:
+                        st.session_state["_active_fill_tmpl"] = t["id"]
+                    st.rerun()
+
+            # ── Phase 4: Placeholder fill form — always rendered from session state, survives reruns ──
+            if st.session_state.get("_active_fill_tmpl") == t["id"]:
+                placeholders = re.findall(r'\[([A-Z][A-Z0-9 _/]+)\]', t["content"])
+                placeholders = list(dict.fromkeys(placeholders))  # dedupe, preserve order
+                if placeholders:
+                    st.info(
+                        f"📋 This template has **{len(placeholders)} placeholder(s)**. "
+                        "Fill them in below to get a ready-to-use draft."
+                    )
+                    with st.expander("✏️ Fill Placeholders", expanded=True):
+                        fill_vals = {}
+                        cols_per_row = 2
+                        ph_rows = [placeholders[i:i+cols_per_row] for i in range(0, len(placeholders), cols_per_row)]
+                        for row in ph_rows:
+                            row_cols = st.columns(len(row))
+                            for col, ph in zip(row_cols, row):
+                                with col:
+                                    fill_vals[ph] = st.text_input(
+                                        ph.replace("_", " ").title(),
+                                        key=f"ph_{t['id']}_{ph}",
+                                        placeholder=f"Enter {ph.lower()}…",
+                                    )
+                        if st.button("⚡ Generate Filled Draft", key=f"fill_btn_{t['id']}", type="primary", use_container_width=True):
+                            filled = t["content"]
+                            for ph, val in fill_vals.items():
+                                if val.strip():
+                                    filled = filled.replace(f"[{ph}]", val.strip())
+                            unfilled = re.findall(r'\[[A-Z][A-Z0-9 _/]+\]', filled)
+                            if unfilled:
+                                st.warning(f"⚠️ {len(unfilled)} placeholder(s) still empty: {', '.join(unfilled[:5])}")
+                            st.session_state[f"filled_template_{t['id']}"] = filled
+                            st.success("✅ Draft generated! See below.")
+                else:
+                    st.info("ℹ️ This template has no placeholders — use 'Load to AI' directly.")
+
+            # Show filled draft if available
+            filled_key = f"filled_template_{t.get('id','')}"
+            if st.session_state.get(filled_key):
+                filled_draft = st.session_state[filled_key]
+                st.markdown("##### 📄 Filled Draft")
+                st.text_area("Review / Edit", filled_draft, height=300, key=f"filled_ta_{t.get('id','')}")
+                ft_fname = f"LexiAssist_FilledTemplate_{datetime.now():%Y%m%d_%H%M}"
+                fc1, fc2, fc3 = st.columns(3)
+                with fc1:
+                    st.download_button(
+                        "📥 TXT", export_txt(filled_draft, t.get("title","")),
+                        f"{ft_fname}.txt", "text/plain", key=f"ft_dl_txt_{t.get('id','')}", use_container_width=True,
+                    )
+                with fc2:
+                    safe_pdf_download(filled_draft, t.get("title","Template"), ft_fname, f"ft_dl_pdf_{t.get('id','')}")
+                with fc3:
+                    safe_docx_download(filled_draft, t.get("title","Template"), ft_fname, f"ft_dl_docx_{t.get('id','')}")
+                if st.button("🧠 Send to AI for Polish", key=f"ft_ai_{t.get('id','')}", use_container_width=True):
+                    with st.spinner("🧠 AI polishing…"):
+                        polish_prompt = (
+                            "Polish the following Nigerian legal document. "
+                            "Ensure grammatical correctness, professional tone, "
+                            "and legal completeness. Do not change the substantive "
+                            "legal meaning or any specific details. Return the full document:\n\n"
+                            + filled_draft
+                        )
+                        polished = generate(polish_prompt, IDENTITY_CORE, "standard", "drafting")
+                    st.session_state[filled_key] = polished
+                    st.success("✅ Polished! Scroll up to review.")
+                    st.rerun()
+
+            # ── Raw download of template (moved from old tc3) ──
+            dl1, dl2, dl3 = st.columns(3)
+            with dl1:
                 st.download_button(
                     "📥 Download", t["content"],
                     f"{t['name'].replace(' ', '_')}.txt", "text/plain",
@@ -10569,6 +10616,7 @@ def render_user_management():
                                     st.error("Min 6 characters.")
                                 else:
                                     db.update_user(uid, {"password_hash": hash_password(new_temp_pw)})
+                                    db.append_audit("PASSWORD_RESET", f"target_user={user['username']}")
                                     st.success(f"✅ Password reset for @{user['username']}.")
 
                 # Delete user
@@ -10578,6 +10626,7 @@ def render_user_management():
                             st.warning(f"Delete @{user['username']}? ALL their data will be permanently erased.")
                             if st.button(f"⚠️ Confirm Delete @{user['username']}",
                                          key=f"um_del_confirm_{uid}", type="primary"):
+                                db.append_audit("USER_DELETED", f"deleted_user={user['username']}")
                                 db.delete_user(uid)
                                 st.success(f"✅ @{user['username']} deleted.")
                                 st.rerun()
@@ -10650,10 +10699,17 @@ def render_user_management():
 
             for r in filtered:
                 action_color = {
-                    "AI_QUERY":     "#6366f1",
-                    "CASE_ADDED":   "#059669",
-                    "CLIENT_ADDED": "#0891b2",
-                    "LOGIN":        "#d97706",
+                    "AI_QUERY":        "#6366f1",
+                    "CASE_ADDED":      "#059669",
+                    "CASE_DELETED":    "#dc2626",
+                    "CLIENT_ADDED":    "#0891b2",
+                    "CLIENT_DELETED":  "#dc2626",
+                    "LOGIN":           "#d97706",
+                    "LOGIN_FAILED":    "#ef4444",
+                    "LOGOUT":          "#64748b",
+                    "PASSWORD_RESET":  "#7c3aed",
+                    "USER_DELETED":    "#dc2626",
+                    "USER_CREATED":    "#059669",
                 }.get(r["action"], "#64748b")
                 uid_txt = f" · @{esc(r.get('user_id',''))}" if is_super_admin else ""
                 st.markdown(
@@ -11037,14 +11093,19 @@ def days_until(d) -> int:
 
 
 def delete_case(cid: str):
+    deleted = next((c for c in st.session_state.cases if c["id"] == cid), {})
     st.session_state.cases = [c for c in st.session_state.cases if c["id"] != cid]
     persist("cases")
-    get_db().delete_case_analyses_for_case(cid)
+    db = get_db()
+    db.delete_case_analyses_for_case(cid)
+    db.append_audit("CASE_DELETED", f"title={deleted.get('title', cid)[:80]}")
 
 
 def delete_client(cid: str):
+    deleted = next((c for c in st.session_state.clients if c["id"] == cid), {})
     st.session_state.clients = [c for c in st.session_state.clients if c["id"] != cid]
     persist("clients")
+    get_db().append_audit("CLIENT_DELETED", f"name={deleted.get('name', cid)[:80]}")
 
 
 def delete_time_entry(eid: str):
