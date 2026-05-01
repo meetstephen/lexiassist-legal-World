@@ -4610,21 +4610,25 @@ def render_home():
             done = steps_done[step["num"]]
             is_current = step["num"] == current_step and not done
             border = "#059669" if done else ("#6366f1" if is_current else "var(--la-border)")
-            bg     = "#f0fdf4"  if done else ("var(--la-card)" if not is_current else "var(--la-card)")
+            # Use theme-aware card background throughout — no hardcoded light colours
+            bg = "var(--la-card)"
+            left_strip = "#059669" if done else ("#6366f1" if is_current else "transparent")
             with col:
                 st.markdown(
                     f'<div style="border:2px solid {border};background:{bg};'
-                    f'border-radius:10px;padding:0.9rem;min-height:170px;">'
+                    f'border-radius:10px;padding:0.9rem;min-height:170px;'
+                    f'border-left:4px solid {left_strip};">'
                     f'<div style="font-size:1.5rem;">{step["icon"]}</div>'
-                    f'<div style="font-weight:700;font-size:0.88rem;margin:.35rem 0 .3rem;">'
+                    f'<div style="font-weight:700;font-size:0.88rem;margin:.35rem 0 .3rem;'
+                    f'color:var(--la-text);">'
                     f'Step {step["num"]}: {esc(step["title"])}</div>'
-                    f'<div style="font-size:0.78rem;color:var(--la-text-secondary);'
+                    f'<div style="font-size:0.78rem;color:var(--la-text2);'
                     f'margin-bottom:0.5rem;">{esc(step["desc"])}</div>'
                     + (
-                        f'<div style="color:#059669;font-size:0.78rem;font-weight:600;">'
+                        f'<div style="color:#4ade80;font-size:0.78rem;font-weight:600;">'
                         f'✅ {esc(step["done_msg"])}</div>'
                         if done else
-                        f'<div style="color:#6366f1;font-size:0.76rem;">'
+                        f'<div style="color:#818cf8;font-size:0.76rem;">'
                         f'👉 {esc(step["action"])}</div>'
                     )
                     + '</div>',
@@ -6329,19 +6333,19 @@ def render_billing():
                     model_df.columns = ["Model", "Calls", "Cost ($)"]
                     st.dataframe(model_df, use_container_width=True, hide_index=True)
 
-            # Log table
-            st.markdown("#### 📜 Call Log")
-            for log in logs[:50]:
-                task_lbl = TASK_TYPES.get(log.get("task", ""), {}).get("label", log.get("task", ""))
-                mode_lbl = RESPONSE_MODES.get(log.get("mode", ""), {}).get("label", log.get("mode", ""))
-                st.markdown(f"""<div class="history-item">
-                    <small>{esc(fmt_date(log.get('timestamp', '')))} ·
-                    {esc(log.get('model', ''))} ·
-                    {esc(task_lbl)} · {esc(mode_lbl)} ·
-                    In: {log.get('input_chars', 0):,}c · Out: {log.get('output_chars', 0):,}c ·
-                    <strong>${log.get('estimated_cost', 0):.5f}</strong></small><br>
-                    <small>{esc(log.get('query_preview', '')[:100])}</small>
-                </div>""", unsafe_allow_html=True)
+            # Log table — collapsed by default to keep page compact
+            with st.expander(f"📜 Call Log ({min(len(logs), 50)} most recent entries)", expanded=False):
+                for log in logs[:50]:
+                    task_lbl = TASK_TYPES.get(log.get("task", ""), {}).get("label", log.get("task", ""))
+                    mode_lbl = RESPONSE_MODES.get(log.get("mode", ""), {}).get("label", log.get("mode", ""))
+                    st.markdown(f"""<div class="history-item">
+                        <small>{esc(fmt_date(log.get('timestamp', '')))} ·
+                        {esc(log.get('model', ''))} ·
+                        {esc(task_lbl)} · {esc(mode_lbl)} ·
+                        In: {log.get('input_chars', 0):,}c · Out: {log.get('output_chars', 0):,}c ·
+                        <strong>${log.get('estimated_cost', 0):.5f}</strong></small><br>
+                        <small>{esc(log.get('query_preview', '')[:100])}</small>
+                    </div>""", unsafe_allow_html=True)
 
             # Export cost logs
             if st.button("📥 Export Cost Logs (CSV)", key="export_cost_csv", use_container_width=True):
@@ -6369,14 +6373,14 @@ def render_tools():
 
     # ── Phase 4: Legal data version banner ──
     ldv = LEGAL_DATA_VERSION
-    vcolor = "#059669"
     st.markdown(
-        f'<div style="background:#f0fdf4;border:1px solid #059669;border-radius:8px;'
-        f'padding:0.6rem 1rem;margin-bottom:1rem;font-size:0.82rem;">'
-        f'📋 <strong>Legal Data {esc(ldv["version"])}</strong> · '
-        f'Last updated: {esc(ldv["updated"])} · '
-        f'{esc(ldv["last_act"])} · '
-        f'<span style="color:#64748b;">{esc(ldv["notes"][:120])}…</span>'
+        f'<div style="background:var(--la-bg2);border:1px solid var(--la-border);'
+        f'border-left:4px solid #059669;border-radius:8px;'
+        f'padding:0.6rem 1rem;margin-bottom:1rem;font-size:0.82rem;color:var(--la-text);">'
+        f'📋 <strong style="color:var(--la-text);">Legal Data {esc(ldv["version"])}</strong>'
+        f'<span style="color:var(--la-text2);"> · Last updated: {esc(ldv["updated"])}'
+        f' · {esc(ldv["last_act"])}</span><br>'
+        f'<span style="color:var(--la-text2);font-size:0.76rem;">{esc(ldv["notes"][:160])}…</span>'
         f'</div>',
         unsafe_allow_html=True,
     )
@@ -9357,13 +9361,21 @@ def render_profile():
             if profile.get("nba_enroll") or profile.get("call_year"):
                 nba_line = f"NBA Enroll. No: {esc(profile.get('nba_enroll',''))} · Called: {esc(profile.get('call_year',''))}<br>"
             branch_line = f"NBA Branch: {esc(profile.get('nba_branch',''))}<br>" if profile.get("nba_branch") else ""
-            st.markdown(f"""<div class="custom-card">
-                <h4>{esc(profile.get('firm_name', ''))}</h4>
-                {esc(profile.get('lawyer_name', ''))}<br>
-                {nba_line}{branch_line}
-                📧 {esc(profile.get('email', ''))} · 📞 {esc(profile.get('phone', ''))}<br>
-                📍 {esc(profile.get('address', ''))}
-            </div>""", unsafe_allow_html=True)
+            st.markdown(
+                f'<div class="custom-card" style="color:var(--la-text);">'
+                f'<h4 style="color:var(--la-text);margin:0 0 0.4rem 0;">'
+                f'{esc(profile.get("firm_name", ""))}</h4>'
+                f'<p style="color:var(--la-text);margin:0 0 0.2rem 0;">'
+                f'{esc(profile.get("lawyer_name", ""))}</p>'
+                + (f'<p style="color:var(--la-text2);margin:0 0 0.2rem 0;font-size:0.84rem;">'
+                   f'{nba_line}{branch_line}</p>' if (nba_line or branch_line) else '')
+                + f'<p style="color:var(--la-text2);margin:0 0 0.2rem 0;font-size:0.84rem;">'
+                f'📧 {esc(profile.get("email", ""))} · 📞 {esc(profile.get("phone", ""))}</p>'
+                f'<p style="color:var(--la-text2);margin:0;font-size:0.84rem;">'
+                f'📍 {esc(profile.get("address", ""))}</p>'
+                f'</div>',
+                unsafe_allow_html=True,
+            )
 
     # ── Notifications ──
     with tab_notif:
@@ -9536,23 +9548,27 @@ def render_profile():
             else:
                 for i, sess in enumerate(sessions):
                     is_current = (sess["token"] == current_token)
-                    badge = '<span style="background:#059669;color:white;font-size:0.72rem;' \
-                            'padding:0.15rem 0.5rem;border-radius:1rem;font-weight:600;">This device</span>' \
-                            if is_current else ""
-                    st.markdown(f"""
-<div style="background:{'#f0fdf4' if is_current else '#f8fafc'};
-border:1px solid {'#059669' if is_current else '#e2e8f0'};
-border-radius:0.6rem;padding:0.8rem 1rem;margin-bottom:0.5rem;
-display:flex;justify-content:space-between;align-items:center;">
-  <div>
-    🖥️ <strong>Session {i+1}</strong> {badge}<br>
-    <small style="color:#64748b;">
-      Created: {esc(fmt_date(sess.get('created_at','')))} ·
-      Last used: {esc(fmt_date(sess.get('last_used','')))} ·
-      Expires: {esc(fmt_date(sess.get('expires_at','')))}
-    </small>
-  </div>
-</div>""", unsafe_allow_html=True)
+                    border_col = "#059669" if is_current else "var(--la-border)"
+                    badge = (
+                        '<span style="background:#059669;color:#ffffff;font-size:0.72rem;'
+                        'padding:0.15rem 0.5rem;border-radius:1rem;font-weight:600;'
+                        'margin-left:0.4rem;">This device</span>'
+                        if is_current else ""
+                    )
+                    st.markdown(
+                        f'<div style="background:var(--la-card);'
+                        f'border:1px solid {border_col};'
+                        f'border-left:4px solid {border_col};'
+                        f'border-radius:0.6rem;padding:0.8rem 1rem;margin-bottom:0.5rem;">'
+                        f'<div style="color:var(--la-text);">'
+                        f'🖥️ <strong style="color:var(--la-text);">Session {i+1}</strong>{badge}</div>'
+                        f'<div style="color:var(--la-text2);font-size:0.8rem;margin-top:0.25rem;">'
+                        f'Created: {esc(fmt_date(sess.get("created_at","")))} · '
+                        f'Last used: {esc(fmt_date(sess.get("last_used","")))} · '
+                        f'Expires: {esc(fmt_date(sess.get("expires_at","")))}'
+                        f'</div></div>',
+                        unsafe_allow_html=True,
+                    )
                     if not is_current:
                         if st.button(f"🚫 Revoke Session {i+1}", key=f"revoke_sess_{i}", use_container_width=True):
                             get_db().revoke_session_token(sess["token"])
@@ -11600,6 +11616,15 @@ def main():
         high_contrast=st.session_state.get("high_contrast", False),
         reduce_motion=st.session_state.get("reduce_motion", False),
     ), unsafe_allow_html=True)
+
+    # ── Hide sidebar completely on login / setup screens ──────────────────
+    if not st.session_state.get("authenticated", False):
+        st.markdown("""<style>
+[data-testid="stSidebar"]{display:none!important;width:0!important;}
+[data-testid="collapsedControl"]{display:none!important;}
+section[data-testid="stSidebarContent"]{display:none!important;}
+.stSidebar{display:none!important;}
+</style>""", unsafe_allow_html=True)
 
     # ── API setup gate ──
     if not st.session_state.api_configured:
