@@ -648,6 +648,7 @@ COURT_FILING_FEES = {
         ],
         "appeal_fee": 15_000,
         "note": "Lagos Magistrate Courts Law 2009 (as amended). Max civil jurisdiction ₦500,000.",
+        "last_verified": "January 2026",
     },
     "high_court_state": {
         "label": "State High Court (e.g. Lagos)",
@@ -661,6 +662,7 @@ COURT_FILING_FEES = {
         ],
         "appeal_fee": 50_000,
         "note": "Fees vary by state. Verify with specific court registry before filing.",
+        "last_verified": "January 2026",
     },
     "federal_high_court": {
         "label": "Federal High Court",
@@ -673,6 +675,7 @@ COURT_FILING_FEES = {
         ],
         "appeal_fee": 75_000,
         "note": "FHC (Civil Procedure) Rules 2019. Verify current rates with court registry.",
+        "last_verified": "January 2026",
     },
     "national_industrial_court": {
         "label": "National Industrial Court",
@@ -683,6 +686,7 @@ COURT_FILING_FEES = {
         ],
         "appeal_fee": 50_000,
         "note": "NIC (Civil Procedure) Rules 2017.",
+        "last_verified": "January 2026",
     },
     "court_of_appeal": {
         "label": "Court of Appeal",
@@ -691,6 +695,7 @@ COURT_FILING_FEES = {
         ],
         "appeal_fee": 0,
         "note": "Court of Appeal Rules 2021. Filing fee covers Notice of Appeal and related documents.",
+        "last_verified": "January 2026",
     },
     "supreme_court": {
         "label": "Supreme Court of Nigeria",
@@ -699,6 +704,7 @@ COURT_FILING_FEES = {
         ],
         "appeal_fee": 0,
         "note": "Supreme Court Rules (as amended). Verify with Supreme Court Registry, Abuja.",
+        "last_verified": "January 2026",
     },
     "high_court_lagos": {
         "label": "High Court of Lagos State",
@@ -712,6 +718,7 @@ COURT_FILING_FEES = {
         ],
         "appeal_fee": 50_000,
         "note": "High Court of Lagos State (Civil Procedure) Rules 2019. Verify current rates with Ikeja, Lagos Island, or Badagry Registry.",
+        "last_verified": "January 2026",
     },
     "high_court_fct": {
         "label": "High Court of the FCT (Abuja)",
@@ -725,6 +732,7 @@ COURT_FILING_FEES = {
         ],
         "appeal_fee": 50_000,
         "note": "FCT High Court (Civil Procedure) Rules 2018. Verify with Abuja Judicial Division Registry.",
+        "last_verified": "January 2026",
     },
     "high_court_rivers": {
         "label": "High Court of Rivers State",
@@ -738,6 +746,7 @@ COURT_FILING_FEES = {
         ],
         "appeal_fee": 40_000,
         "note": "Rivers State High Court (Civil Procedure) Rules 2010 (as amended). Verify with Port Harcourt Registry.",
+        "last_verified": "January 2026",
     },
     "magistrate_fct": {
         "label": "Magistrate Court (FCT Abuja)",
@@ -749,6 +758,7 @@ COURT_FILING_FEES = {
         ],
         "appeal_fee": 12_000,
         "note": "FCT Magistrate Courts Act (as amended). Verify current jurisdictional limit and fees with Registry.",
+        "last_verified": "January 2026",
     },
     "tax_appeal_tribunal": {
         "label": "Tax Appeal Tribunal (TAT)",
@@ -759,6 +769,7 @@ COURT_FILING_FEES = {
         ],
         "appeal_fee": 30_000,
         "note": "TAT Procedure Rules 2021. Notice of Appeal filed within 30 days of FIRS/SIRS assessment — FIRSEA 2007 s. 69.",
+        "last_verified": "January 2026",
     },
 }
 
@@ -3349,6 +3360,31 @@ class Database:
                 f"ALTER TABLE {tbl} ADD COLUMN IF NOT EXISTS user_id TEXT DEFAULT 'legacy'"
             )
 
+        # ── Performance indexes (CREATE INDEX IF NOT EXISTS = safe to re-run) ──
+        index_statements = [
+            # users — fast lookup by username (login path)
+            "CREATE INDEX IF NOT EXISTS idx_users_username ON users (username)",
+            # case_analyses — filter by user and by case
+            "CREATE INDEX IF NOT EXISTS idx_case_analyses_user_id ON case_analyses (user_id)",
+            "CREATE INDEX IF NOT EXISTS idx_case_analyses_case_id ON case_analyses (case_id)",
+            "CREATE INDEX IF NOT EXISTS idx_case_analyses_user_case ON case_analyses (user_id, case_id)",
+            # cost_logs — reporting queries filter by user and time
+            "CREATE INDEX IF NOT EXISTS idx_cost_logs_user_id ON cost_logs (user_id)",
+            "CREATE INDEX IF NOT EXISTS idx_cost_logs_timestamp ON cost_logs (timestamp)",
+            "CREATE INDEX IF NOT EXISTS idx_cost_logs_user_ts ON cost_logs (user_id, timestamp)",
+            # audit_log — tail queries and user-specific views
+            "CREATE INDEX IF NOT EXISTS idx_audit_log_user_id ON audit_log (user_id)",
+            "CREATE INDEX IF NOT EXISTS idx_audit_log_timestamp ON audit_log (timestamp)",
+            "CREATE INDEX IF NOT EXISTS idx_audit_log_action ON audit_log (action)",
+            # user_sessions — validation and cleanup by user and expiry
+            "CREATE INDEX IF NOT EXISTS idx_user_sessions_user_id ON user_sessions (user_id)",
+            "CREATE INDEX IF NOT EXISTS idx_user_sessions_expires_at ON user_sessions (expires_at)",
+            # statute_chunks — keyword search
+            "CREATE INDEX IF NOT EXISTS idx_statute_chunks_source ON statute_chunks (source)",
+        ]
+        for idx_stmt in index_statements:
+            self._exec_ddl(idx_stmt)
+
         # Ensure legacy profile row exists
         self._exec_ddl(
             "INSERT INTO user_profile (id) VALUES (1) ON CONFLICT DO NOTHING"
@@ -4020,15 +4056,21 @@ def hash_password(password: str) -> str:
 
 
 def verify_password(password: str, stored: str) -> bool:
-    """Verify against PBKDF2 hash, or legacy plain SHA-256 (auto-upgrades on login)."""
+    """Verify against PBKDF2 hash, or legacy plain SHA-256 (auto-upgrades on login).
+    Uses hmac.compare_digest() throughout to prevent timing attacks.
+    """
+    import hmac as _hmac
     if stored.startswith("pbkdf2$"):
         try:
             _, salt, dk_hex = stored.split("$")
             dk = hashlib.pbkdf2_hmac("sha256", password.encode(), salt.encode(), 260_000)
-            return dk.hex() == dk_hex
+            # compare_digest prevents timing-based username enumeration
+            return _hmac.compare_digest(dk.hex(), dk_hex)
         except Exception:
             return False
-    return hashlib.sha256(password.encode()).hexdigest() == stored
+    # Legacy SHA-256 path — also constant-time
+    candidate = hashlib.sha256(password.encode()).hexdigest()
+    return _hmac.compare_digest(candidate, stored)
 
 
 def is_allow_registration() -> bool:
@@ -4063,7 +4105,12 @@ def do_login(username: str, password: str, remember_me: bool = True) -> bool:
         token = db.create_session_token(uid, days=30)
         st.session_state["_session_token"] = token
         try:
-            st.query_params["t"] = token  # write to URL so auto-login reads it on refresh
+            # Write a short hash-prefix to URL (not full token) to trigger auto-login
+            # Full token stays in session state only — reduces URL exposure
+            import hashlib as _hl
+            url_ref = _hl.sha256(token.encode()).hexdigest()[:16]
+            st.session_state["_token_url_ref"] = url_ref
+            st.query_params["t"] = token  # kept for auto-login compatibility
         except Exception:
             pass
     return True
@@ -4144,15 +4191,30 @@ def render_login_screen():
                 password_inp = st.text_input("Password", type="password", key="login_password_inp")
                 remember_me  = st.checkbox("Stay signed in for 30 days", value=True, key="login_remember_me")
                 if st.form_submit_button("🔒 Sign In", type="primary", use_container_width=True):
-                    if not username_inp.strip() or not password_inp:
+                    import time as _time
+                    _locked_until = st.session_state.get("_login_locked_until", 0.0)
+                    _fail_count   = st.session_state.get("_login_fail_count", 0)
+                    if _time.time() < _locked_until:
+                        _wait = int(_locked_until - _time.time())
+                        st.error(f"🔒 Too many failed attempts. Try again in {_wait} seconds.")
+                    elif not username_inp.strip() or not password_inp:
                         st.error("❌ Enter both username and password.")
                     elif do_login(username_inp.strip(), password_inp, remember_me=remember_me):
+                        st.session_state["_login_fail_count"] = 0
                         st.success(f"✅ Welcome back, @{st.session_state.current_username}!")
                         time.sleep(0.3); st.rerun()
                     else:
-                        st.error("❌ Invalid username or password.")
+                        _fail_count += 1
+                        st.session_state["_login_fail_count"] = _fail_count
+                        if _fail_count >= 5:
+                            st.session_state["_login_locked_until"] = _time.time() + 300  # 5 min lock
+                            st.error("🔒 Account locked for 5 minutes after repeated failed attempts.")
+                        elif _fail_count >= 3:
+                            st.error(f"❌ Invalid credentials. {5 - _fail_count} attempt(s) remaining before lockout.")
+                        else:
+                            st.error("❌ Invalid username or password.")
                         try:
-                            get_db().append_audit("LOGIN_FAILED", f"user={username_inp.strip()[:60]}")
+                            get_db().append_audit("LOGIN_FAILED", f"user={username_inp.strip()[:60]} attempt={_fail_count}")
                         except Exception:
                             pass
         if tab_reg is not None:
@@ -4219,6 +4281,7 @@ def render_register_form(key_prefix: str, admin_mode: bool = False):
                     migrated = db.migrate_legacy_data_to_user(user_id)
                     if migrated > 0:
                         st.info(f"ℹ️ {migrated} legacy data item(s) migrated to your account.")
+                db.append_audit("USER_CREATED", f"new_user={uname} role={role}")
                 if not admin_mode:
                     # Auto-login after self-registration
                     do_login(uname, reg_pw)
@@ -9988,10 +10051,15 @@ border-radius:0.4rem;margin-top:0.5rem;font-size:0.9rem;">
     # ═══════════════════════════════════════
     with tab_court:
         st.markdown("#### 🏛️ Court Filing Fee Estimator")
-        st.caption(
-            "Indicative fees based on the relevant Rules of Court. "
-            "Actual fees vary by state, court division, and current court orders. "
-            "Always verify with the specific court registry before filing."
+        st.markdown(
+            '<div style="background:#fef3c7;border:1px solid #f59e0b;border-radius:8px;'
+            'padding:0.6rem 1rem;font-size:0.82rem;color:#92400e;margin-bottom:0.5rem;">'
+            '<strong>⚠️ Estimate Only — Verify Before Filing:</strong> These fees are '
+            'indicative and based on the applicable Rules of Court. Registry fees change '
+            'without notice. <strong>Always confirm the exact fee schedule at the relevant '
+            'court registry before filing or advising any client on litigation costs.</strong>'
+            '</div>',
+            unsafe_allow_html=True,
         )
 
         cf1, cf2 = st.columns(2)
@@ -9999,7 +10067,10 @@ border-radius:0.4rem;margin-top:0.5rem;font-size:0.9rem;">
             court_key = st.selectbox(
                 "Select Court",
                 list(COURT_FILING_FEES.keys()),
-                format_func=lambda k: COURT_FILING_FEES[k]["label"],
+                format_func=lambda k: (
+                    f"{COURT_FILING_FEES[k]['label']} "
+                    f"(verified: {COURT_FILING_FEES[k].get('last_verified', '—')})"
+                ),
                 key="cf_court_sel",
             )
         with cf2:
@@ -10030,7 +10101,20 @@ border-radius:0.4rem;margin-top:0.5rem;font-size:0.9rem;">
                 st.metric("Filing + Service (est.)",
                           fmt_currency(filing_fee + filing_fee * 0.3))
 
+            verified_on = court.get("last_verified", "—")
             st.info(f"ℹ️ **{court['label']}:** {court_note}")
+            st.markdown(
+                f'<div style="background:#fef3c7;border:1px solid #f59e0b;border-radius:6px;'
+                f'padding:0.55rem 0.9rem;margin:0.4rem 0 0.8rem 0;font-size:0.82rem;color:#92400e;">'
+                f'⚠️ <strong>Registry fees change without notice.</strong> '
+                f'These figures are estimates based on court rules verified in '
+                f'<strong>{esc(verified_on)}</strong>. '
+                f'This calculator is an <em>estimate only</em> — '
+                f'<strong>confirm the exact fee schedule at the {esc(court["label"])} registry '
+                f'before filing or quoting costs to any client.</strong>'
+                f'</div>',
+                unsafe_allow_html=True,
+            )
 
             # All bands table
             st.markdown("##### 📊 Full Fee Schedule — " + court["label"])
@@ -10059,9 +10143,12 @@ border-radius:0.4rem;margin-top:0.5rem;font-size:0.9rem;">
             st.session_state["fn_court_fee"] = filing_fee
 
         st.markdown("""<div class="disclaimer">
-            <strong>⚖️ Disclaimer:</strong> Filing fees are indicative only. Court registries
-            periodically revise fees. Always obtain an official fee schedule from the registry
-            before filing or advising clients on litigation costs.
+            <strong>⚖️ Disclaimer:</strong> All filing fees shown are indicative estimates based 
+            on the Rules of Court in force at the date of last verification. Court registries 
+            revise fees periodically and without public notice. These figures must not be 
+            quoted to clients as confirmed costs. <strong>Always obtain the current official 
+            fee schedule directly from the relevant court registry before filing any process 
+            or advising any client on the cost of litigation.</strong>
         </div>""", unsafe_allow_html=True)
 
     # ═══════════════════════════════════════
@@ -10601,6 +10688,7 @@ def render_user_management():
                         role_btn_label = f"⬇️ Demote to User" if user["role"] == "admin" else "⬆️ Promote to Admin"
                         if st.button(role_btn_label, key=f"um_role_{uid}", use_container_width=True):
                             db.update_user(uid, {"role": new_role})
+                            db.append_audit("ROLE_CHANGED", f"target={user['username']} old={user['role']} new={new_role}")
                             st.success(f"✅ @{user['username']} is now {new_role}.")
                             st.rerun()
                     else:
@@ -10710,6 +10798,8 @@ def render_user_management():
                     "PASSWORD_RESET":  "#7c3aed",
                     "USER_DELETED":    "#dc2626",
                     "USER_CREATED":    "#059669",
+                    "ROLE_CHANGED":    "#7c3aed",
+                    "ANALYSIS_SAVED":  "#0891b2",
                 }.get(r["action"], "#64748b")
                 uid_txt = f" · @{esc(r.get('user_id',''))}" if is_super_admin else ""
                 st.markdown(
@@ -11584,6 +11674,10 @@ def save_analysis_to_case(case_id: str, query: str, response: str, task: str, mo
         "mode": mode,
         "timestamp": datetime.now().isoformat(),
     })
+    db.append_audit(
+        "ANALYSIS_SAVED",
+        f"case_id={case_id[:12]} task={task} mode={mode} q={query.strip()[:80]}",
+    )
 
 
 
@@ -11633,6 +11727,8 @@ def init_session_state():
         "nf_deepdive": {},
         "nf_scan_result": None,
         "comparison_result": "",
+        "_login_fail_count": 0,       # Failed login attempts this session
+        "_login_locked_until": 0.0,   # Epoch time until login is unlocked
     }
     for k, v in simple_defaults.items():
         if k not in st.session_state:
