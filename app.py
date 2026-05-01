@@ -2295,7 +2295,7 @@ code,pre,.stMarkdown code,.stMarkdown pre{{
 .hero::before{{content:'';position:absolute;inset:0;
   background:repeating-linear-gradient(-45deg,transparent,transparent 40px,
   rgba(255,255,255,0.015) 40px,rgba(255,255,255,0.015) 41px);pointer-events:none;}}
-.hero::after{{content:'\2696';position:absolute;right:1.5rem;top:50%;
+.hero::after{{content:'⚖';position:absolute;right:1.5rem;top:50%;
   transform:translateY(-50%);font-size:11rem;line-height:1;opacity:0.08;
   pointer-events:none;user-select:none;color:#fff;filter:blur(0.5px);}}
 .hero h1{{font-size:3.1rem!important;font-weight:900!important;
@@ -4096,8 +4096,33 @@ def render_login_screen():
 </style>""", unsafe_allow_html=True)
     st.markdown(get_theme_css(st.session_state.get("theme", "⚖️ Corporate")), unsafe_allow_html=True)
     st.markdown("""
-<div class="hero">
-  <h1>⚖️ LexiAssist v8.0</h1>
+<style>
+.lexi-hero {
+    position: relative; overflow: hidden;
+    background: linear-gradient(135deg, #1e3a5f 0%, #0f2440 60%, #162d4a 100%);
+    border-radius: 16px; padding: 2.6rem 2.8rem 2.3rem;
+    margin-bottom: 1.8rem; border: 1px solid rgba(255,255,255,0.08);
+    box-shadow: 0 8px 32px rgba(0,0,0,0.25);
+}
+.lexi-hero-watermark {
+    position: absolute; right: 1.5rem; top: 50%; transform: translateY(-50%);
+    font-size: 11rem; line-height: 1; opacity: 0.07; color: #ffffff;
+    pointer-events: none; user-select: none; filter: blur(1px); font-family: serif;
+}
+.lexi-hero h1 {
+    font-size: 3.4rem !important; font-weight: 900 !important;
+    letter-spacing: -0.04em !important; color: #ffffff !important;
+    margin: 0 0 0.4rem 0 !important; line-height: 1 !important;
+    position: relative; z-index: 1;
+}
+.lexi-hero p {
+    font-size: 1rem !important; color: rgba(255,255,255,0.82) !important;
+    margin: 0 !important; position: relative; z-index: 1; line-height: 1.6;
+}
+</style>
+<div class="lexi-hero">
+  <div class="lexi-hero-watermark">&#9878;</div>
+  <h1>⚖️ LexiAssist</h1>
   <p>Elite AI Legal Engine &nbsp;&middot;&nbsp; Nigerian Law &nbsp;&middot;&nbsp; Built for Practitioners</p>
 </div>""", unsafe_allow_html=True)
     _, col, _ = st.columns([1, 2, 1])
