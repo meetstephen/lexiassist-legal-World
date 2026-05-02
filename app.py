@@ -5253,6 +5253,84 @@ def render_ai():
         with ex4:
             safe_docx_download(response, "Legal Analysis", fname, "resp_dl_docx")
 
+        # ── Structured output: Verified Law / Analysis / To Confirm ──
+        with st.expander("🗂️ Structured Output — Law · Analysis · To Verify", expanded=False):
+            st.caption(
+                "LexiAssist automatically categorises output into three sections. "
+                "Always verify 'To Confirm' items before advising any client."
+            )
+            _struct_prompt = f"""
+Analyse this legal response and extract content into exactly three JSON sections.
+Respond ONLY in this JSON format, nothing else:
+{{
+  "verified_law": [
+    {{"item": "CAMA 2020 s. 141 — minimum share capital for private companies", "type": "Statute"}},
+    {{"item": "Madukolu v Nkemdilim (1962) — jurisdiction test", "type": "Case"}}
+  ],
+  "analysis": [
+    {{"item": "Based on CAMA 2020, the company has failed to comply with minimum capital requirements"}}
+  ],
+  "to_confirm": [
+    {{"item": "Current Lagos High Court filing fees — verify at registry", "reason": "Fees change without notice"}},
+    {{"item": "Recent Court of Appeal decision on similar facts", "reason": "AI may not have latest authority"}}
+  ]
+}}
+
+Rules:
+- verified_law: only confirmed Nigerian statutes, regulations, and well-known case authorities explicitly cited
+- analysis: the substantive legal reasoning, strategy, or advice drawn from the law
+- to_confirm: anything requiring independent verification — fees, recent cases, uncertain facts, state-specific rules
+
+RESPONSE TO ANALYSE:
+{response[:5000]}
+"""
+            if st.button("⚡ Generate Structured View", key="struct_view_btn", type="primary"):
+                with st.spinner("Extracting structured sections…"):
+                    _struct_raw = generate(_struct_prompt, IDENTITY_CORE, "brief", "analysis")
+                try:
+                    _s = json.loads(_struct_raw.strip().replace("```json","").replace("```","").strip())
+                    st.session_state["_struct_output"] = _s
+                except Exception:
+                    st.warning("Could not parse structured output. Try again.")
+            _struct = st.session_state.get("_struct_output", {})
+            if _struct:
+                sc1, sc2, sc3 = st.columns(3)
+                with sc1:
+                    st.markdown("##### ✅ Verified Law")
+                    for _it in _struct.get("verified_law", []):
+                        _badge = "🏛️" if _it.get("type") == "Case" else "📜"
+                        st.markdown(
+                            f'<div style="background:#f0fdf4;border-left:3px solid #16a34a;'
+                            f'border-radius:6px;padding:0.4rem 0.7rem;margin-bottom:0.4rem;'
+                            f'font-size:0.82rem;">{_badge} {esc(_it.get("item",""))}</div>',
+                            unsafe_allow_html=True,
+                        )
+                    if not _struct.get("verified_law"):
+                        st.caption("No specific authorities extracted.")
+                with sc2:
+                    st.markdown("##### 🧠 Analysis")
+                    for _it in _struct.get("analysis", []):
+                        st.markdown(
+                            f'<div style="background:var(--la-bg2);border-left:3px solid #6366f1;'
+                            f'border-radius:6px;padding:0.4rem 0.7rem;margin-bottom:0.4rem;'
+                            f'font-size:0.82rem;">{esc(_it.get("item",""))}</div>',
+                            unsafe_allow_html=True,
+                        )
+                    if not _struct.get("analysis"):
+                        st.caption("No analysis points extracted.")
+                with sc3:
+                    st.markdown("##### ⚠️ To Confirm")
+                    for _it in _struct.get("to_confirm", []):
+                        st.markdown(
+                            f'<div style="background:#fef9c3;border-left:3px solid #f59e0b;'
+                            f'border-radius:6px;padding:0.4rem 0.7rem;margin-bottom:0.4rem;'
+                            f'font-size:0.82rem;"><strong>{esc(_it.get("item",""))}</strong>'
+                            f'<br><small style="color:#92400e;">{esc(_it.get("reason",""))}</small></div>',
+                            unsafe_allow_html=True,
+                        )
+                    if not _struct.get("to_confirm"):
+                        st.caption("Nothing flagged for verification.")
+
         st.markdown(f'<div class="response-box">{esc(response)}</div>', unsafe_allow_html=True)
 
         # ── Copy to clipboard (iframe-safe fallback) ──
@@ -5741,7 +5819,22 @@ def render_cases():
     with tab_list:
         cases = st.session_state.cases
         if not cases:
-            st.info("No cases yet. Add one in the ➕ Add Case tab.")
+            st.markdown(
+                '<div style="text-align:center;padding:2.5rem 1rem;border:2px dashed '
+                'var(--la-border);border-radius:12px;margin-top:1rem;">'
+                '<div style="font-size:3rem;margin-bottom:0.6rem;">📁</div>'
+                '<h3 style="margin:0 0 0.4rem 0;">No Cases Yet</h3>'
+                '<p style="color:var(--la-text2);margin:0 0 1rem 0;max-width:360px;'
+                'margin-left:auto;margin-right:auto;">Track your matters, hearings, deadlines '
+                'and AI analyses all in one place.</p>'
+                '<p style="font-size:0.82rem;color:var(--la-text2);">'
+                '<strong>Example:</strong> <em>ABC Ltd v XYZ Ltd — Debt Recovery · '
+                'Federal High Court Lagos · Suit No: FHC/L/CS/001/2026</em></p>'
+                '<p style="font-size:0.82rem;color:var(--la-text2);">'
+                '👆 Click the <strong>➕ Add Case</strong> tab above to get started.'
+                '</p></div>',
+                unsafe_allow_html=True,
+            )
             return
 
         fc1, fc2 = st.columns([1, 2])
@@ -6198,7 +6291,22 @@ def render_clients():
     with tab_list:
         clients = st.session_state.clients
         if not clients:
-            st.info("No clients yet. Add one in the ➕ Add Client tab.")
+            st.markdown(
+                '<div style="text-align:center;padding:2.5rem 1rem;border:2px dashed '
+                'var(--la-border);border-radius:12px;margin-top:1rem;">'
+                '<div style="font-size:3rem;margin-bottom:0.6rem;">👥</div>'
+                '<h3 style="margin:0 0 0.4rem 0;">No Clients Yet</h3>'
+                '<p style="color:var(--la-text2);margin:0 0 1rem 0;max-width:360px;'
+                'margin-left:auto;margin-right:auto;">Build your client database — link clients '
+                'to cases and track billables automatically.</p>'
+                '<p style="font-size:0.82rem;color:var(--la-text2);">'
+                '<strong>Example:</strong> <em>Adekunle Adeyemi (Individual) · '
+                '07012345678 · Lagos Island — debt recovery matter</em></p>'
+                '<p style="font-size:0.82rem;color:var(--la-text2);">'
+                '👆 Click the <strong>➕ Add Client</strong> tab above to get started.'
+                '</p></div>',
+                unsafe_allow_html=True,
+            )
             return
 
         search = st.text_input("🔍 Search clients", key="cl_search_inp", placeholder="Name, email, type…")
@@ -6518,8 +6626,8 @@ def render_tools():
         unsafe_allow_html=True,
     )
 
-    tab_lim, tab_calc, tab_court, tab_maxim, tab_aml = st.tabs(
-        ["⏳ Limitation Periods", "🧮 Deadline Calculator", "🏛️ Court Hierarchy", "📜 Legal Maxims", "🛡️ AML / SCUML"]
+    tab_lim, tab_calc, tab_court, tab_maxim, tab_aml, tab_checklist = st.tabs(
+        ["⏳ Limitation Periods", "🧮 Deadline Calculator", "🏛️ Court Hierarchy", "📜 Legal Maxims", "🛡️ AML / SCUML", "📋 Court Process Checklist"]
     )
 
     # ── Limitation Periods (editable) ──
@@ -7170,6 +7278,272 @@ MATTER FACTS: {aml_facts}
 
             except Exception:
                 st.markdown(aml_raw)
+
+
+    # ══════════════════════════════════════════════════════
+    # TAB: COURT PROCESS CHECKLIST
+    # ══════════════════════════════════════════════════════
+    with tab_checklist:
+        st.markdown("""<div class="page-header" style="margin-bottom:1rem;">
+            <h2>📋 Court Process Checklist</h2>
+            <p>Generate a step-by-step Nigerian court filing checklist for any matter type</p>
+        </div>""", unsafe_allow_html=True)
+
+        st.markdown(
+            '<div style="background:#eff6ff;border:1px solid #bfdbfe;border-radius:8px;'
+            'padding:0.7rem 1rem;margin-bottom:1rem;font-size:0.83rem;color:#1e40af;">'
+            '📌 <strong>How to use:</strong> Select the court, matter type and briefly describe the facts. '
+            'LexiAssist will generate a step-by-step checklist covering jurisdiction basis, '
+            'pre-action requirements, documents, filing steps, frontloading, service and common defects.'
+            '</div>',
+            unsafe_allow_html=True,
+        )
+
+        ch1, ch2 = st.columns(2)
+        with ch1:
+            chk_court = st.selectbox(
+                "Court *",
+                [
+                    "Supreme Court of Nigeria",
+                    "Court of Appeal",
+                    "Federal High Court",
+                    "High Court of Lagos State",
+                    "High Court of Abuja (FCT)",
+                    "High Court of Rivers State",
+                    "High Court of Kano State",
+                    "High Court of Ogun State",
+                    "Magistrate Court (Lagos)",
+                    "National Industrial Court",
+                    "Investment & Securities Tribunal",
+                    "Tax Appeal Tribunal",
+                    "Customary Court",
+                ],
+                key="chk_court_sel",
+            )
+            chk_matter = st.selectbox(
+                "Matter Type *",
+                [
+                    "Debt Recovery / Money Claim",
+                    "General Contract Dispute",
+                    "Fundamental Rights Enforcement",
+                    "Land / Property Dispute",
+                    "Defamation",
+                    "Employment / Wrongful Termination",
+                    "Company / Insolvency Matter",
+                    "Criminal Defence",
+                    "Election Petition",
+                    "Appeal (Civil)",
+                    "Appeal (Criminal)",
+                    "Judicial Review",
+                    "Interlocutory Application",
+                    "Matrimonial Causes",
+                    "Probate / Administration of Estate",
+                ],
+                key="chk_matter_sel",
+            )
+        with ch2:
+            chk_party = st.selectbox(
+                "Acting for",
+                ["Claimant / Applicant / Plaintiff", "Defendant / Respondent", "Appellant", "Both parties (advising generally)"],
+                key="chk_party_sel",
+            )
+            chk_state = st.selectbox(
+                "Applicable State Rules",
+                ["Lagos", "FCT / Abuja", "Rivers", "Kano", "Ogun", "Oyo", "Anambra", "Enugu", "Delta", "Cross River", "Federal (FHC Rules)"],
+                key="chk_state_sel",
+            )
+
+        chk_facts = st.text_area(
+            "Brief Facts (optional but recommended)",
+            height=120,
+            key="chk_facts_ta",
+            placeholder="E.g. Client is owed N15 million under a written contract. Debtor has refused to pay. No pre-action notice sent yet. Client is a company registered in Lagos.",
+        )
+
+        if st.button("📋 Generate Court Process Checklist", type="primary", key="chk_gen_btn", use_container_width=True):
+            chk_facts_clean = chk_facts.strip() or "Not provided — generate based on typical matter of this type."
+            chk_prompt = (
+                "You are an elite Nigerian litigator generating a Court Process Checklist.\n\n"
+                f"COURT: {chk_court}\n"
+                f"MATTER TYPE: {chk_matter}\n"
+                f"ACTING FOR: {chk_party}\n"
+                f"APPLICABLE STATE RULES: {chk_state}\n"
+                f"FACTS: {chk_facts_clean}\n\n"
+                "Generate a comprehensive step-by-step checklist. Respond ONLY in this JSON format:\n"
+                '{\n'
+                '  "summary": "One sentence describing the filing task",\n'
+                '  "jurisdiction_basis": "Specific section of law conferring jurisdiction",\n'
+                '  "pre_action": [\n'
+                '    {"step": "Send Pre-Action Notice", "detail": "30 days — Order 13 Rule 14, Lagos HCCPR 2019", "mandatory": true}\n'
+                '  ],\n'
+                '  "documents_to_file": [\n'
+                '    {"doc": "Writ of Summons", "copies": 3, "notes": "Signed by counsel — Order 3 Rule 2"}\n'
+                '  ],\n'
+                '  "filing_steps": [\n'
+                '    {"step": "File at the registry", "detail": "Pay filing fees, obtain suit number", "deadline": "Before hearing date"}\n'
+                '  ],\n'
+                '  "frontloading": [\n'
+                '    {"item": "Witness Statement on Oath", "notes": "All witnesses — Order 32 Rule 1"}\n'
+                '  ],\n'
+                '  "service": {"method": "Personal service", "timeframe": "Not less than 5 days before hearing", "authority": "Order 9 Rule 1"},\n'
+                '  "common_defects": [\n'
+                '    {"defect": "Missing pre-action notice", "consequence": "Suit may be struck out for non-compliance"}\n'
+                '  ],\n'
+                '  "estimated_timeline": "4-8 weeks to first hearing",\n'
+                '  "warnings": [\n'
+                f'    "Verify current filing fees at {chk_court} registry before filing"\n'
+                '  ]\n'
+                '}\n'
+                f"Be specific to {chk_court} and {chk_state} rules. Every step must cite the applicable rule, order or statute."
+            )
+            with st.spinner(f"📋 Generating {chk_matter} checklist for {chk_court}…"):
+                chk_raw = generate(chk_prompt, IDENTITY_CORE, "standard", "analysis")
+            try:
+                chk_data = json.loads(chk_raw.strip().replace("```json", "").replace("```", "").strip())
+                st.session_state["_last_checklist"] = chk_data
+                st.session_state["_last_checklist_meta"] = f"{chk_matter} — {chk_court} ({chk_state})"
+                st.session_state["_last_checklist_raw"] = ""
+            except Exception:
+                st.session_state["_last_checklist"] = None
+                st.session_state["_last_checklist_raw"] = chk_raw
+
+        chk_data = st.session_state.get("_last_checklist")
+        chk_raw_fb = st.session_state.get("_last_checklist_raw", "")
+        chk_meta = st.session_state.get("_last_checklist_meta", "")
+
+        if chk_data:
+            st.markdown("---")
+            st.markdown(f"### 📋 {esc(chk_meta)}")
+            st.markdown(
+                f'<div style="background:var(--la-bg2);border-left:4px solid #6366f1;'
+                f'border-radius:8px;padding:0.6rem 1rem;margin-bottom:1rem;font-size:0.9rem;">'
+                f'<strong>{esc(chk_data.get("summary", ""))}</strong><br>'
+                f'<small>Jurisdiction: {esc(chk_data.get("jurisdiction_basis", ""))}</small>'
+                f'</div>',
+                unsafe_allow_html=True,
+            )
+
+            for w in chk_data.get("warnings", []):
+                st.warning(f"⚠️ {w}")
+
+            col_a, col_b = st.columns(2)
+            with col_a:
+                if chk_data.get("pre_action"):
+                    st.markdown("#### 📨 Pre-Action Requirements")
+                    for i, s in enumerate(chk_data["pre_action"], 1):
+                        mand = "🔴 MANDATORY" if s.get("mandatory") else "🟡 Recommended"
+                        st.markdown(
+                            f'<div style="background:var(--la-bg2);border:1px solid var(--la-border);'
+                            f'border-radius:6px;padding:0.5rem 0.8rem;margin-bottom:0.4rem;">'
+                            f'<strong>{i}. {esc(s.get("step", ""))}</strong> '
+                            f'<span style="font-size:0.75rem;color:#64748b;">{mand}</span><br>'
+                            f'<small>{esc(s.get("detail", ""))}</small></div>',
+                            unsafe_allow_html=True,
+                        )
+
+                if chk_data.get("documents_to_file"):
+                    st.markdown("#### 📄 Documents to File")
+                    for d in chk_data["documents_to_file"]:
+                        st.markdown(
+                            f'<div style="background:#f0fdf4;border:1px solid #bbf7d0;'
+                            f'border-radius:6px;padding:0.5rem 0.8rem;margin-bottom:0.4rem;">'
+                            f'📄 <strong>{esc(d.get("doc", ""))}</strong> — {esc(str(d.get("copies", "")))} copies<br>'
+                            f'<small>{esc(d.get("notes", ""))}</small></div>',
+                            unsafe_allow_html=True,
+                        )
+
+                if chk_data.get("frontloading"):
+                    st.markdown("#### 📎 Frontloading Requirements")
+                    for f in chk_data["frontloading"]:
+                        st.markdown(
+                            f'<div style="background:#fdf4ff;border:1px solid #e9d5ff;'
+                            f'border-radius:6px;padding:0.5rem 0.8rem;margin-bottom:0.4rem;">'
+                            f'📎 <strong>{esc(f.get("item", ""))}</strong><br>'
+                            f'<small>{esc(f.get("notes", ""))}</small></div>',
+                            unsafe_allow_html=True,
+                        )
+
+            with col_b:
+                if chk_data.get("filing_steps"):
+                    st.markdown("#### 🗂️ Filing Steps")
+                    for i, s in enumerate(chk_data["filing_steps"], 1):
+                        deadline_txt = f" · ⏰ {esc(s['deadline'])}" if s.get("deadline") else ""
+                        st.markdown(
+                            f'<div style="background:var(--la-bg2);border:1px solid var(--la-border);'
+                            f'border-radius:6px;padding:0.5rem 0.8rem;margin-bottom:0.4rem;">'
+                            f'<strong>{i}. {esc(s.get("step", ""))}</strong><br>'
+                            f'<small>{esc(s.get("detail", ""))}{deadline_txt}</small></div>',
+                            unsafe_allow_html=True,
+                        )
+
+                if chk_data.get("service"):
+                    srv = chk_data["service"]
+                    st.markdown("#### 📬 Service Requirements")
+                    st.markdown(
+                        f'<div style="background:#eff6ff;border:1px solid #bfdbfe;'
+                        f'border-radius:6px;padding:0.6rem 0.9rem;margin-bottom:0.6rem;">'
+                        f'<strong>{esc(srv.get("method", ""))}</strong><br>'
+                        f'<small>⏰ {esc(srv.get("timeframe", ""))} · {esc(srv.get("authority", ""))}</small>'
+                        f'</div>',
+                        unsafe_allow_html=True,
+                    )
+
+                if chk_data.get("common_defects"):
+                    st.markdown("#### 🚨 Common Filing Defects")
+                    for d in chk_data["common_defects"]:
+                        st.markdown(
+                            f'<div style="background:#fef2f2;border:1px solid #fecaca;'
+                            f'border-radius:6px;padding:0.5rem 0.8rem;margin-bottom:0.4rem;">'
+                            f'🚨 <strong>{esc(d.get("defect", ""))}</strong><br>'
+                            f'<small style="color:#dc2626;">{esc(d.get("consequence", ""))}</small></div>',
+                            unsafe_allow_html=True,
+                        )
+
+                if chk_data.get("estimated_timeline"):
+                    st.markdown("#### ⏱️ Estimated Timeline")
+                    st.info(f"⏱️ {chk_data['estimated_timeline']}")
+
+            # Export to TXT
+            chk_export = f"COURT PROCESS CHECKLIST\n{chk_meta}\n{'='*50}\n\n"
+            chk_export += f"SUMMARY: {chk_data.get('summary', '')}\n"
+            chk_export += f"JURISDICTION: {chk_data.get('jurisdiction_basis', '')}\n\n"
+            for section, label, key1, key2 in [
+                ("pre_action", "PRE-ACTION REQUIREMENTS", "step", "detail"),
+                ("documents_to_file", "DOCUMENTS TO FILE", "doc", "notes"),
+                ("filing_steps", "FILING STEPS", "step", "detail"),
+                ("frontloading", "FRONTLOADING", "item", "notes"),
+                ("common_defects", "COMMON FILING DEFECTS", "defect", "consequence"),
+            ]:
+                items = chk_data.get(section, [])
+                if items:
+                    chk_export += f"\n{label}\n{'-'*40}\n"
+                    for it in items:
+                        chk_export += f"  • {it.get(key1, '')}: {it.get(key2, '')}\n"
+            if chk_data.get("service"):
+                srv = chk_data["service"]
+                chk_export += f"\nSERVICE\n{'-'*40}\n  Method: {srv.get('method','')}\n  Timeframe: {srv.get('timeframe','')}\n  Authority: {srv.get('authority','')}\n"
+            if chk_data.get("warnings"):
+                chk_export += f"\nWARNINGS\n{'-'*40}\n"
+                for w in chk_data["warnings"]:
+                    chk_export += f"  ⚠️  {w}\n"
+            chk_export += f"\n{'='*50}\nGenerated by LexiAssist · {datetime.now():%d %B %Y %H:%M}\n"
+            chk_export += "⚠️ AI-generated. Verify all steps against current court rules before filing.\n"
+
+            st.markdown("---")
+            st.download_button(
+                "📥 Download Checklist (TXT)",
+                chk_export,
+                f"LexiAssist_CourtChecklist_{datetime.now():%Y%m%d_%H%M}.txt",
+                "text/plain",
+                key="chk_dl_txt",
+                use_container_width=True,
+            )
+            st.caption("⚠️ AI-generated checklist. Verify all steps and fees against current court rules before filing.")
+
+        elif chk_raw_fb:
+            st.markdown("---")
+            st.markdown(f'<div class="response-box">{esc(chk_raw_fb)}</div>', unsafe_allow_html=True)
+
 
 # ═══════════════════════════════════════════════════════
 # PHASE 3 — GLOBAL SEARCH
