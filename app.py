@@ -4036,6 +4036,7 @@ def load_user_data():
     st.session_state.cases = db.load_list("cases") or []
     st.session_state.clients = db.load_list("clients") or []
     st.session_state.time_entries = db.load_list("time_entries") or []
+    st.session_state.tasks = db.load_list("tasks") or []
     st.session_state.invoices = db.load_list("invoices") or []
     st.session_state.chat_history = db.load_list("chat_history") or []
     st.session_state.custom_templates = db.load_list("custom_templates") or []
@@ -4546,6 +4547,213 @@ def render_sidebar(group_names=None):
             st.info("ℹ️ **NBA APC:** Renewal opens January. Deadline: 31 March.")
 
 
+
+def render_tasks():
+    st.markdown("""<div class="page-header">
+        <h2>✅ Task Manager</h2>
+        <p>Track deadlines, assignments and matter actions — never miss a filing date</p>
+    </div>""", unsafe_allow_html=True)
+
+    PRIORITY_COLOURS = {"High": "#dc2626", "Medium": "#d97706", "Low": "#16a34a"}
+    STATUS_COLOURS   = {"Pending": "#6366f1", "In Progress": "#d97706", "Done": "#16a34a", "Overdue": "#dc2626"}
+
+    tasks = st.session_state.get("tasks", [])
+
+    # ── Overdue auto-flag ──
+    today_str = date.today().isoformat()
+    for t in tasks:
+        if t.get("due_date") and t.get("status") not in ("Done",) and t["due_date"] < today_str:
+            t["status"] = "Overdue"
+
+    tab_list, tab_add = st.tabs(["📋 All Tasks", "➕ Add Task"])
+
+    # ══════════════════════════
+    # TAB: ADD TASK
+    # ══════════════════════════
+    with tab_add:
+        st.markdown("#### ➕ Create New Task")
+        ta1, ta2 = st.columns(2)
+        with ta1:
+            t_title = st.text_input("Task Title *", key="t_title", placeholder="E.g. File Statement of Defence")
+            t_due   = st.date_input("Due Date *", key="t_due", min_value=date.today())
+            t_prio  = st.selectbox("Priority", ["High", "Medium", "Low"], key="t_prio")
+            t_status = st.selectbox("Status", ["Pending", "In Progress"], key="t_status_new")
+        with ta2:
+            case_options = {c["id"]: c.get("title", "Untitled") for c in st.session_state.get("cases", [])}
+            case_options[""] = "— None —"
+            t_case = st.selectbox(
+                "Linked Case",
+                options=[""] + list({c["id"]: c for c in st.session_state.get("cases", [])}.keys()),
+                format_func=lambda k: case_options.get(k, k),
+                key="t_case_sel",
+            )
+            t_assigned = st.text_input("Assigned To", key="t_assigned", placeholder="Barr. Chidi or leave blank")
+            t_notes = st.text_area("Notes", key="t_notes", height=100, placeholder="Optional — additional context or instructions")
+
+        if st.button("✅ Save Task", type="primary", key="t_save_btn", use_container_width=True):
+            if not t_title.strip():
+                st.error("❌ Task title is required.")
+            else:
+                new_task = {
+                    "id": new_id(),
+                    "title": t_title.strip(),
+                    "due_date": t_due.isoformat(),
+                    "priority": t_prio,
+                    "status": t_status,
+                    "linked_case_id": t_case,
+                    "assigned_to": t_assigned.strip(),
+                    "notes": t_notes.strip(),
+                    "created_at": datetime.now().isoformat(),
+                }
+                st.session_state.tasks.append(new_task)
+                persist("tasks")
+                get_db().append_audit("TASK_CREATED", f"title={t_title.strip()[:80]} due={t_due.isoformat()} priority={t_prio}")
+                st.success(f"✅ Task '{t_title.strip()}' saved.")
+                st.rerun()
+
+    # ══════════════════════════
+    # TAB: ALL TASKS
+    # ══════════════════════════
+    with tab_list:
+        if not tasks:
+            st.markdown(
+                '<div style="text-align:center;padding:2.5rem 1rem;border:2px dashed '
+                'var(--la-border);border-radius:12px;margin-top:1rem;">'
+                '<div style="font-size:3rem;margin-bottom:0.6rem;">✅</div>'
+                '<h3 style="margin:0 0 0.4rem 0;">No Tasks Yet</h3>'
+                '<p style="color:var(--la-text2);margin:0 0 1rem 0;max-width:360px;'
+                'margin-left:auto;margin-right:auto;">Stay on top of every deadline, '
+                'filing and assignment in one place.</p>'
+                '<p style="font-size:0.82rem;color:var(--la-text2);">'
+                '<strong>Example:</strong> <em>File Statement of Defence · Due: 14 May 2026 · '
+                'High Priority · ABC Ltd v XYZ Ltd</em></p>'
+                '<p style="font-size:0.82rem;color:var(--la-text2);">'
+                '👆 Click <strong>➕ Add Task</strong> above to get started.'
+                '</p></div>',
+                unsafe_allow_html=True,
+            )
+            return
+
+        # ── Summary badges ──
+        n_over  = sum(1 for t in tasks if t.get("status") == "Overdue")
+        n_high  = sum(1 for t in tasks if t.get("priority") == "High" and t.get("status") != "Done")
+        n_today = sum(1 for t in tasks if t.get("due_date") == today_str and t.get("status") != "Done")
+        n_done  = sum(1 for t in tasks if t.get("status") == "Done")
+
+        sm1, sm2, sm3, sm4 = st.columns(4)
+        for col, label, val, colour in [
+            (sm1, "Overdue",    n_over,  "#dc2626"),
+            (sm2, "Due Today",  n_today, "#d97706"),
+            (sm3, "High Prio",  n_high,  "#7c3aed"),
+            (sm4, "Completed",  n_done,  "#16a34a"),
+        ]:
+            with col:
+                col.markdown(
+                    f'<div style="background:var(--la-card);border:1px solid var(--la-border);'
+                    f'border-radius:8px;padding:0.7rem 0.9rem;text-align:center;">'
+                    f'<div style="font-size:1.6rem;font-weight:800;color:{colour};">{val}</div>'
+                    f'<div style="font-size:0.75rem;color:var(--la-text2);">{label}</div></div>',
+                    unsafe_allow_html=True,
+                )
+
+        st.markdown("")
+
+        # ── Filters ──
+        fl1, fl2, fl3 = st.columns(3)
+        with fl1:
+            f_status = st.multiselect("Filter by Status", ["Pending","In Progress","Overdue","Done"], default=["Pending","In Progress","Overdue"], key="t_f_status")
+        with fl2:
+            f_prio = st.multiselect("Filter by Priority", ["High","Medium","Low"], default=["High","Medium","Low"], key="t_f_prio")
+        with fl3:
+            case_names = {c["id"]: c.get("title","Untitled") for c in st.session_state.get("cases",[])}
+            f_case = st.selectbox("Filter by Case", ["All"] + list(case_names.values()), key="t_f_case")
+
+        filtered = [
+            t for t in tasks
+            if (not f_status or t.get("status","Pending") in f_status)
+            and (not f_prio   or t.get("priority","Medium") in f_prio)
+            and (f_case == "All" or case_names.get(t.get("linked_case_id",""),"") == f_case)
+        ]
+
+        # ── Sort: overdue first, then by due_date, then priority weight ──
+        prio_w = {"High": 0, "Medium": 1, "Low": 2}
+        filtered.sort(key=lambda t: (
+            0 if t.get("status") == "Overdue" else 1,
+            t.get("due_date", "9999"),
+            prio_w.get(t.get("priority", "Medium"), 1),
+        ))
+
+        st.markdown(f"**{len(filtered)} task(s) shown**")
+        st.markdown("")
+
+        for task in filtered:
+            tid      = task["id"]
+            pcolour  = PRIORITY_COLOURS.get(task.get("priority","Medium"), "#64748b")
+            scolour  = STATUS_COLOURS.get(task.get("status","Pending"), "#64748b")
+            due_str  = task.get("due_date","—")
+            is_overdue = task.get("status") == "Overdue"
+            border_c = "#dc2626" if is_overdue else "var(--la-border)"
+            linked_case_title = case_names.get(task.get("linked_case_id",""), "")
+
+            with st.container():
+                st.markdown(
+                    f'<div style="background:var(--la-card);border:1px solid {border_c};'
+                    f'border-left:4px solid {pcolour};border-radius:8px;'
+                    f'padding:0.75rem 1rem;margin-bottom:0.5rem;">'
+                    f'<div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:0.4rem;">'
+                    f'<div>'
+                    f'<strong style="font-size:0.95rem;">{esc(task.get("title",""))}</strong>'
+                    f'{"<br><small style=\'color:#dc2626;font-weight:600;\'>⚠️ OVERDUE</small>" if is_overdue else ""}'
+                    f'{"<br><small style=\'color:var(--la-text2);\'>📁 " + esc(linked_case_title) + "</small>" if linked_case_title else ""}'
+                    f'{"<br><small style=\'color:var(--la-text2);\'>👤 " + esc(task.get("assigned_to","")) + "</small>" if task.get("assigned_to") else ""}'
+                    f'</div>'
+                    f'<div style="display:flex;flex-direction:column;align-items:flex-end;gap:0.25rem;">'
+                    f'<span style="background:{scolour}22;color:{scolour};border:1px solid {scolour}44;'
+                    f'border-radius:999px;padding:0.15rem 0.6rem;font-size:0.72rem;font-weight:600;">'
+                    f'{esc(task.get("status","Pending"))}</span>'
+                    f'<span style="background:{pcolour}22;color:{pcolour};border:1px solid {pcolour}44;'
+                    f'border-radius:999px;padding:0.15rem 0.6rem;font-size:0.72rem;font-weight:600;">'
+                    f'{esc(task.get("priority","Medium"))}</span>'
+                    f'<span style="font-size:0.78rem;color:var(--la-text2);">📅 {esc(due_str)}</span>'
+                    f'</div></div>'
+                    f'{"<div style=\'margin-top:0.4rem;font-size:0.82rem;color:var(--la-text2);\'>" + esc(task.get("notes","")) + "</div>" if task.get("notes") else ""}'
+                    f'</div>',
+                    unsafe_allow_html=True,
+                )
+
+                # Action row
+                ac1, ac2, ac3, ac4 = st.columns([2, 2, 2, 1])
+                with ac1:
+                    new_status = st.selectbox(
+                        "Status",
+                        ["Pending", "In Progress", "Done", "Overdue"],
+                        index=["Pending","In Progress","Done","Overdue"].index(task.get("status","Pending")),
+                        key=f"t_st_{tid}",
+                        label_visibility="collapsed",
+                    )
+                with ac2:
+                    new_prio = st.selectbox(
+                        "Priority",
+                        ["High","Medium","Low"],
+                        index=["High","Medium","Low"].index(task.get("priority","Medium")),
+                        key=f"t_pr_{tid}",
+                        label_visibility="collapsed",
+                    )
+                with ac3:
+                    if st.button("💾 Update", key=f"t_upd_{tid}", use_container_width=True):
+                        task["status"]   = new_status
+                        task["priority"] = new_prio
+                        persist("tasks")
+                        get_db().append_audit("TASK_UPDATED", f"title={task['title'][:60]} status={new_status}")
+                        st.rerun()
+                with ac4:
+                    if st.button("🗑️", key=f"t_del_{tid}", use_container_width=True, help="Delete task"):
+                        st.session_state.tasks = [t for t in st.session_state.tasks if t["id"] != tid]
+                        persist("tasks")
+                        get_db().append_audit("TASK_DELETED", f"title={task['title'][:60]}")
+                        st.rerun()
+
+
 def render_home():
     # ── Beta verification banner ──
     st.markdown(
@@ -4624,7 +4832,11 @@ def render_home():
 
     # Stats row
     cost_summary = get_db().get_cost_summary()
-    c1, c2, c3, c4, c5 = st.columns([1, 1, 1, 1, 1], gap="small")
+    _today = date.today().isoformat()
+    _tasks_all = st.session_state.get("tasks", [])
+    _overdue_n = sum(1 for t in _tasks_all if t.get("due_date","") < _today and t.get("status") != "Done")
+    _pending_n = sum(1 for t in _tasks_all if t.get("status") in ("Pending","In Progress"))
+    c1, c2, c3, c4, c5, c6 = st.columns([1,1,1,1,1,1], gap="small")
     with c1:
         st.markdown(f'<div class="stat-card"><div class="stat-value">{len(st.session_state.cases)}</div><div class="stat-label">Total Cases</div></div>', unsafe_allow_html=True)
     with c2:
@@ -4634,9 +4846,82 @@ def render_home():
     with c4:
         st.markdown(f'<div class="stat-card"><div class="stat-value">{total_hours():.1f}h</div><div class="stat-label">Billable Hours</div></div>', unsafe_allow_html=True)
     with c5:
-        st.markdown(f'<div class="stat-card"><div class="stat-value">{len(st.session_state.chat_history)}</div><div class="stat-label">AI Sessions</div></div>', unsafe_allow_html=True)
+        _ov_colour = "#dc2626" if _overdue_n else "inherit"
+        st.markdown(f'<div class="stat-card"><div class="stat-value" style="color:{_ov_colour};">{_overdue_n}</div><div class="stat-label">Overdue Tasks</div></div>', unsafe_allow_html=True)
+    with c6:
+        st.markdown(f'<div class="stat-card"><div class="stat-value">{_pending_n}</div><div class="stat-label">Open Tasks</div></div>', unsafe_allow_html=True)
 
     st.markdown("")
+
+    # ── Upcoming Tasks & Hearings panel ──────────────────────────────────────
+    from datetime import timedelta
+    _lookahead = (date.today() + timedelta(days=7)).isoformat()
+    _upcoming_tasks = [
+        t for t in _tasks_all
+        if t.get("due_date","") and _today <= t.get("due_date","") <= _lookahead
+        and t.get("status") not in ("Done",)
+    ]
+    _upcoming_tasks.sort(key=lambda t: t.get("due_date","9999"))
+
+    _upcoming_hearings = [
+        c for c in st.session_state.get("cases",[])
+        if c.get("next_hearing") and _today <= c.get("next_hearing","") <= _lookahead
+    ]
+    _upcoming_hearings.sort(key=lambda c: c.get("next_hearing","9999"))
+
+    if _upcoming_tasks or _upcoming_hearings or _overdue_n:
+        st.markdown("### 📅 Next 7 Days")
+        up1, up2 = st.columns(2)
+
+        with up1:
+            st.markdown("##### ✅ Upcoming Tasks")
+            if _overdue_n:
+                st.markdown(
+                    f'<div style="background:#fef2f2;border:1px solid #fecaca;'
+                    f'border-radius:8px;padding:0.5rem 0.9rem;margin-bottom:0.4rem;">'
+                    f'<strong style="color:#dc2626;">⚠️ {_overdue_n} overdue task(s)</strong>'
+                    f' — go to ✅ Tasks to review.</div>',
+                    unsafe_allow_html=True,
+                )
+            if _upcoming_tasks:
+                for _t in _upcoming_tasks[:5]:
+                    _days_left = (date.fromisoformat(_t["due_date"]) - date.today()).days
+                    _days_label = "Today" if _days_left == 0 else f"in {_days_left}d"
+                    _pc = {"High":"#dc2626","Medium":"#d97706","Low":"#16a34a"}.get(_t.get("priority","Medium"),"#64748b")
+                    st.markdown(
+                        f'<div style="background:var(--la-card);border:1px solid var(--la-border);'
+                        f'border-left:3px solid {_pc};border-radius:6px;'
+                        f'padding:0.45rem 0.8rem;margin-bottom:0.3rem;font-size:0.85rem;">'
+                        f'<strong>{esc(_t.get("title",""))}</strong>'
+                        f'<span style="float:right;font-size:0.75rem;color:var(--la-text2);">📅 {esc(_days_label)}</span>'
+                        f'</div>',
+                        unsafe_allow_html=True,
+                    )
+                if len(_upcoming_tasks) > 5:
+                    st.caption(f"+ {len(_upcoming_tasks)-5} more — see ✅ Tasks tab")
+            elif not _overdue_n:
+                st.caption("No tasks due in the next 7 days. ✅")
+
+        with up2:
+            st.markdown("##### 🏛️ Upcoming Hearings")
+            if _upcoming_hearings:
+                for _h in _upcoming_hearings[:5]:
+                    _hdays = (date.fromisoformat(_h["next_hearing"]) - date.today()).days
+                    _hlabel = "Today" if _hdays == 0 else f"in {_hdays}d"
+                    st.markdown(
+                        f'<div style="background:var(--la-card);border:1px solid var(--la-border);'
+                        f'border-left:3px solid #6366f1;border-radius:6px;'
+                        f'padding:0.45rem 0.8rem;margin-bottom:0.3rem;font-size:0.85rem;">'
+                        f'🏛️ <strong>{esc(_h.get("title","Untitled"))}</strong>'
+                        f'<span style="float:right;font-size:0.75rem;color:var(--la-text2);">📅 {esc(_hlabel)}</span>'
+                        f'<br><small style="color:var(--la-text2);">{esc(_h.get("court",""))}</small>'
+                        f'</div>',
+                        unsafe_allow_html=True,
+                    )
+            else:
+                st.caption("No hearings scheduled in the next 7 days.")
+
+        st.markdown("")
 
    # ── Onboarding Wizard — shown until all 4 steps complete ────────────
     is_new_user = (
@@ -6626,8 +6911,8 @@ def render_tools():
         unsafe_allow_html=True,
     )
 
-    tab_lim, tab_calc, tab_court, tab_maxim, tab_aml, tab_checklist = st.tabs(
-        ["⏳ Limitation Periods", "🧮 Deadline Calculator", "🏛️ Court Hierarchy", "📜 Legal Maxims", "🛡️ AML / SCUML", "📋 Court Process Checklist"]
+    tab_lim, tab_calc, tab_court, tab_maxim, tab_aml, tab_checklist, tab_authority = st.tabs(
+        ["⏳ Limitation Periods", "🧮 Deadline Calculator", "🏛️ Court Hierarchy", "📜 Legal Maxims", "🛡️ AML / SCUML", "📋 Court Process Checklist", "🔍 Authority Verification"]
     )
 
     # ── Limitation Periods (editable) ──
@@ -7543,6 +7828,212 @@ MATTER FACTS: {aml_facts}
         elif chk_raw_fb:
             st.markdown("---")
             st.markdown(f'<div class="response-box">{esc(chk_raw_fb)}</div>', unsafe_allow_html=True)
+
+
+
+    # ══════════════════════════════════════════════════════
+    # TAB: AUTHORITY VERIFICATION MODE
+    # ══════════════════════════════════════════════════════
+    with tab_authority:
+        st.markdown("""<div class="page-header" style="margin-bottom:1rem;">
+            <h2>🔍 Authority Verification Mode</h2>
+            <p>Paste any AI-generated legal argument — LexiAssist will check every citation</p>
+        </div>""", unsafe_allow_html=True)
+
+        st.markdown(
+            '<div style="background:#eff6ff;border:1px solid #bfdbfe;border-radius:8px;'
+            'padding:0.7rem 1rem;margin-bottom:1rem;font-size:0.83rem;color:#1e40af;">'
+            '🔍 <strong>How it works:</strong> Paste AI-generated text or a legal argument. '
+            'LexiAssist extracts every statute, case, and rule cited, then checks each one against '
+            'its verified Nigerian legal database and flags hallucinations, repealed laws, and unverified authorities.'
+            '</div>',
+            unsafe_allow_html=True,
+        )
+
+        av_text = st.text_area(
+            "Paste AI output or legal argument to verify *",
+            height=220,
+            key="av_input_text",
+            placeholder=(
+                "Paste any legal text here — e.g. an AI-generated analysis, a draft pleading, "
+                "a research memo, or any text containing case names, statutes, or rules you want verified...\n\n"
+                "Example:\n"
+                "The applicant relies on Madukolu v Nkemdilim (1962) for the jurisdiction test. "
+                "See also CAMA 2020 s. 394. The Companies Act 1990 applies to winding-up proceedings. "
+                "Per Donoghue v Stevenson (1932), a duty of care arises..."
+            ),
+        )
+
+        if st.button("🔍 Verify All Authorities", type="primary", key="av_verify_btn", use_container_width=True):
+            if not av_text.strip():
+                st.error("❌ Please paste some text to verify.")
+            else:
+                # Build the verified cases reference for context
+                _known_cases = "\n".join(
+                    f"- {name}: {info.get('citation','')} ({info.get('court','')}, {info.get('year','')})"
+                    for name, info in list(VERIFIED_NIGERIAN_CASES.items())[:80]
+                )
+
+                av_prompt = (
+                    "You are a Nigerian legal citation verification expert.\n\n"
+                    "Extract EVERY legal authority from the text below — cases, statutes, regulations, rules, "
+                    "constitutional provisions — and verify each one.\n\n"
+                    "VERIFIED NIGERIAN CASES IN DATABASE:\n"
+                    f"{_known_cases}\n\n"
+                    "For each authority found, return this JSON array:\n"
+                    '[\n'
+                    '  {\n'
+                    '    "authority": "Madukolu v Nkemdilim",\n'
+                    '    "type": "Case",\n'
+                    '    "status": "Verified",\n'
+                    '    "problem": "",\n'
+                    '    "fix": "Good citation — use as stated",\n'
+                    '    "confidence": 95\n'
+                    '  },\n'
+                    '  {\n'
+                    '    "authority": "Companies Act 1990",\n'
+                    '    "type": "Statute",\n'
+                    '    "status": "Repealed",\n'
+                    '    "problem": "Repealed and replaced by CAMA 2020",\n'
+                    '    "fix": "Replace with CAMA 2020 and cite the specific section",\n'
+                    '    "confidence": 98\n'
+                    '  },\n'
+                    '  {\n'
+                    '    "authority": "Donoghue v Stevenson (1932)",\n'
+                    '    "type": "Case",\n'
+                    '    "status": "Foreign",\n'
+                    '    "problem": "English case — persuasive only, not binding in Nigerian courts",\n'
+                    '    "fix": "Find Nigerian equivalent or use as persuasive authority with caveat",\n'
+                    '    "confidence": 99\n'
+                    '  }\n'
+                    ']\n\n'
+                    'Status options: "Verified" | "Unverified" | "Possible Hallucination" | "Repealed" | '
+                    '"Foreign" | "Needs Section Number" | "Check Spelling"\n\n'
+                    'Respond ONLY with the JSON array. No preamble.\n\n'
+                    f'TEXT TO VERIFY:\n{av_text[:6000]}'
+                )
+
+                with st.spinner("🔍 Extracting and verifying authorities…"):
+                    av_raw = generate(av_prompt, IDENTITY_CORE, "brief", "analysis")
+
+                try:
+                    av_results = json.loads(
+                        av_raw.strip().replace("```json", "").replace("```", "").strip()
+                    )
+                    st.session_state["_av_results"] = av_results
+                    st.session_state["_av_source_text"] = av_text.strip()
+                except Exception:
+                    st.session_state["_av_results"] = None
+                    st.session_state["_av_raw"] = av_raw
+
+        av_results = st.session_state.get("_av_results")
+        av_raw_fb  = st.session_state.get("_av_raw", "")
+
+        if av_results:
+            st.markdown("---")
+
+            # Summary counts
+            counts = {"Verified": 0, "Repealed": 0, "Foreign": 0,
+                      "Unverified": 0, "Possible Hallucination": 0, "Other": 0}
+            for r in av_results:
+                s = r.get("status", "Other")
+                if s in counts:
+                    counts[s] += 1
+                else:
+                    counts["Other"] += 1
+
+            total = len(av_results)
+            st.markdown(f"### 🔍 Verification Results — {total} authorit{'y' if total == 1 else 'ies'} found")
+
+            sc1, sc2, sc3, sc4, sc5 = st.columns(5)
+            for col, label, key, colour in [
+                (sc1, "✅ Verified",     "Verified",               "#16a34a"),
+                (sc2, "⚠️ Unverified",  "Unverified",             "#d97706"),
+                (sc3, "🚨 Hallucinated","Possible Hallucination",  "#dc2626"),
+                (sc4, "🗑️ Repealed",   "Repealed",               "#7c3aed"),
+                (sc5, "🌍 Foreign",     "Foreign",                 "#0891b2"),
+            ]:
+                with col:
+                    col.markdown(
+                        f'<div style="background:var(--la-card);border:1px solid var(--la-border);'
+                        f'border-radius:8px;padding:0.6rem;text-align:center;">'
+                        f'<div style="font-size:1.4rem;font-weight:800;color:{colour};">{counts[key]}</div>'
+                        f'<div style="font-size:0.72rem;color:var(--la-text2);">{label}</div></div>',
+                        unsafe_allow_html=True,
+                    )
+
+            st.markdown("")
+
+            # Status colours and icons
+            STATUS_META = {
+                "Verified":               ("#16a34a", "#f0fdf4", "#bbf7d0", "✅"),
+                "Unverified":             ("#d97706", "#fffbeb", "#fde68a", "⚠️"),
+                "Possible Hallucination": ("#dc2626", "#fef2f2", "#fecaca", "🚨"),
+                "Repealed":               ("#7c3aed", "#fdf4ff", "#e9d5ff", "🗑️"),
+                "Foreign":                ("#0891b2", "#ecfeff", "#a5f3fc", "🌍"),
+                "Needs Section Number":   ("#d97706", "#fffbeb", "#fde68a", "📌"),
+                "Check Spelling":         ("#f59e0b", "#fffbeb", "#fde68a", "✏️"),
+            }
+            DEFAULT_META = ("#64748b", "var(--la-bg2)", "var(--la-border)", "❓")
+
+            for r in av_results:
+                status = r.get("status", "Unverified")
+                colour, bg, border_c, icon = STATUS_META.get(status, DEFAULT_META)
+                conf = r.get("confidence", 0)
+
+                st.markdown(
+                    f'<div style="background:{bg};border:1px solid {border_c};'
+                    f'border-left:4px solid {colour};border-radius:8px;'
+                    f'padding:0.75rem 1rem;margin-bottom:0.5rem;">'
+                    f'<div style="display:flex;justify-content:space-between;'
+                    f'align-items:flex-start;flex-wrap:wrap;gap:0.3rem;">'
+                    f'<div>'
+                    f'<strong>{icon} {esc(r.get("authority",""))}</strong>'
+                    f' <span style="font-size:0.75rem;color:{colour};font-weight:600;">'
+                    f'[{esc(r.get("type",""))}] — {esc(status)}</span>'
+                    f'{"<br><span style=\'color:#dc2626;font-size:0.82rem;\'>⚠️ " + esc(r.get("problem","")) + "</span>" if r.get("problem") else ""}'
+                    f'{"<br><span style=\'color:#16a34a;font-size:0.82rem;\'>💡 " + esc(r.get("fix","")) + "</span>" if r.get("fix") else ""}'
+                    f'</div>'
+                    f'<div style="font-size:0.75rem;color:var(--la-text2);white-space:nowrap;">'
+                    f'Confidence: <strong style="color:{colour};">{conf}%</strong>'
+                    f'</div></div></div>',
+                    unsafe_allow_html=True,
+                )
+
+            # Export report
+            av_export = "AUTHORITY VERIFICATION REPORT\n"
+            av_export += f"Generated: {datetime.now():%d %B %Y %H:%M}\n"
+            av_export += f"Total authorities checked: {total}\n"
+            av_export += f"Verified: {counts['Verified']} | Unverified: {counts['Unverified']} | "
+            av_export += f"Repealed: {counts['Repealed']} | Hallucinated: {counts['Possible Hallucination']} | Foreign: {counts['Foreign']}\n"
+            av_export += "=" * 60 + "\n\n"
+            for r in av_results:
+                av_export += f"AUTHORITY: {r.get('authority','')}\n"
+                av_export += f"  Type:       {r.get('type','')}\n"
+                av_export += f"  Status:     {r.get('status','')}\n"
+                av_export += f"  Confidence: {r.get('confidence',0)}%\n"
+                if r.get("problem"):
+                    av_export += f"  Problem:    {r['problem']}\n"
+                if r.get("fix"):
+                    av_export += f"  Fix:        {r['fix']}\n"
+                av_export += "\n"
+            av_export += "=" * 60 + "\n"
+            av_export += "⚠️ AI-generated verification. Always independently confirm before relying in court.\n"
+
+            st.markdown("---")
+            st.download_button(
+                "📥 Download Verification Report (TXT)",
+                av_export,
+                f"LexiAssist_AuthVerification_{datetime.now():%Y%m%d_%H%M}.txt",
+                "text/plain",
+                key="av_dl_btn",
+                use_container_width=True,
+            )
+            st.caption("⚠️ AI-generated verification. Always independently confirm all authorities before relying on them in any court filing or client advice.")
+
+        elif av_raw_fb:
+            st.markdown("---")
+            st.markdown(f'<div class="response-box">{esc(av_raw_fb)}</div>', unsafe_allow_html=True)
 
 
 # ═══════════════════════════════════════════════════════
@@ -11174,6 +11665,9 @@ def render_user_management():
                     "USER_CREATED":    "#059669",
                     "ROLE_CHANGED":    "#7c3aed",
                     "ANALYSIS_SAVED":  "#0891b2",
+                    "TASK_CREATED":    "#059669",
+                    "TASK_UPDATED":    "#0891b2",
+                    "TASK_DELETED":    "#dc2626",
                 }.get(r["action"], "#64748b")
                 uid_txt = f" · @{esc(r.get('user_id',''))}" if is_super_admin else ""
                 st.markdown(
@@ -12101,6 +12595,7 @@ def init_session_state():
         "nf_deepdive": {},
         "nf_scan_result": None,
         "comparison_result": "",
+        "tasks": [],                  # Task management list
         "_login_fail_count": 0,       # Failed login attempts this session
         "_login_locked_until": 0.0,   # Epoch time until login is unlocked
     }
@@ -12236,6 +12731,7 @@ def main():
         ],
         "📁 Matters": [
             ("📁 Cases",           render_cases),
+            ("✅ Tasks",           render_tasks),
             ("⚡ Lifecycle",       render_lifecycle),
             ("📜 Pleadings",       render_pleadings),
             ("📅 Calendar",        render_calendar),
