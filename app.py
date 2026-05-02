@@ -4222,7 +4222,7 @@ def render_login_screen():
             with tab_reg: render_register_form("reg_self")
         st.markdown("</div>", unsafe_allow_html=True)
         st.markdown(
-            "<div style='text-align:center;margin-top:1.2rem;color:#64748b;font-size:0.82rem;'>"
+            "<div style='text-align:center;margin-top:1.2rem;color:var(--la-text2);font-size:0.82rem;'>"
             "Contact your firm administrator to create an account.</div>",
             unsafe_allow_html=True)
 
@@ -4373,6 +4373,12 @@ def render_setup_screen():
 def render_sidebar(group_names=None):
     if group_names is None:
         group_names = []
+    # ── Override any login-screen CSS that hid the sidebar ──────────────
+    st.markdown("""<style>
+[data-testid="stSidebar"]{display:flex!important;visibility:visible!important;}
+[data-testid="collapsedControl"]{display:flex!important;visibility:visible!important;}
+section[data-testid="stSidebarContent"]{display:flex!important;}
+</style>""", unsafe_allow_html=True)
     with st.sidebar:
         firm = get_firm_name()
         corp = (st.session_state.get("theme", "⚖️ Corporate") == "⚖️ Corporate")
@@ -4431,7 +4437,7 @@ def render_sidebar(group_names=None):
             format_func=lambda x: RESPONSE_MODES[x]["label"],
             key="sidebar_mode_radio", label_visibility="collapsed")
         if mode != st.session_state.response_mode:
-            st.session_state.response_mode = mode; st.rerun()
+            st.session_state.response_mode = mode
         sel = RESPONSE_MODES[st.session_state.response_mode]
         st.caption(sel["desc"]); st.caption(f"Token limit: {sel['tokens']:,}")
         st.divider()
@@ -4443,7 +4449,7 @@ def render_sidebar(group_names=None):
             key="sidebar_theme_sel", label_visibility="collapsed",
             help=THEMES[theme_names[cur_t]]["description"])
         if theme != st.session_state.theme:
-            st.session_state.theme = theme; st.rerun()
+            st.session_state.theme = theme
         # ── Accessibility controls ────────────────────────────────
         with st.expander("♿ Accessibility", expanded=False):
             fss = st.slider(
@@ -4451,19 +4457,19 @@ def render_sidebar(group_names=None):
                 key="sidebar_font_scale",
                 help="Scale all text up or down")
             if fss != st.session_state.font_size_scale:
-                st.session_state.font_size_scale = fss; st.rerun()
+                st.session_state.font_size_scale = fss
             hc = st.checkbox(
                 "High contrast", value=st.session_state.high_contrast,
                 key="sidebar_high_contrast",
                 help="Maximise text/background contrast")
             if hc != st.session_state.high_contrast:
-                st.session_state.high_contrast = hc; st.rerun()
+                st.session_state.high_contrast = hc
             rm = st.checkbox(
                 "Reduce motion", value=st.session_state.reduce_motion,
                 key="sidebar_reduce_motion",
                 help="Disable all CSS animations and transitions")
             if rm != st.session_state.reduce_motion:
-                st.session_state.reduce_motion = rm; st.rerun()
+                st.session_state.reduce_motion = rm
         st.divider()
         st.markdown("**🤖 AI Engine**")
         if st.session_state.api_configured:
@@ -4757,12 +4763,14 @@ def render_tasks():
 def render_home():
     # ── Beta verification banner ──
     st.markdown(
-        '<div style="background:#fffbeb;border:1px solid #f59e0b;border-radius:8px;'
-        'padding:0.55rem 1rem;margin-bottom:0.8rem;font-size:0.8rem;color:#92400e;'
-        'display:flex;align-items:center;gap:0.5rem;">'
-        '<strong>🔬 Private Beta</strong> — AI-generated output. '
+        '<div style="background:var(--la-bg2);border:1px solid var(--la-border);'
+        'border-left:4px solid #f59e0b;border-radius:8px;'
+        'padding:0.55rem 1rem;margin-bottom:0.8rem;font-size:0.8rem;'
+        'color:var(--la-text);display:flex;align-items:center;gap:0.5rem;">'
+        '<strong style="color:var(--la-text);">🔬 Private Beta</strong>'
+        '<span style="color:var(--la-text2);"> — AI-generated output. '
         'All authorities, limitation periods, and legal positions must be '
-        'independently verified before advising any client.'
+        'independently verified before advising any client.</span>'
         '</div>',
         unsafe_allow_html=True,
     )
@@ -9863,7 +9871,7 @@ display:inline-block;font-size:0.9rem;color:var(--la-text);">
                         # ── Deep Dive result ──
                         if dd_result:
                             st.markdown(f"""
-<div style="margin-top:1rem;background:#f8fafc;border:1px solid #cbd5e1;
+<div style="margin-top:1rem;background:var(--la-card);border:1px solid var(--la-border);
 border-radius:0.75rem;padding:1.4rem;">
   <h5 style="margin:0 0 0.8rem 0;color:#1e293b;">🔬 Full Legal Analysis</h5>
   <div style="white-space:pre-wrap;font-size:0.92rem;line-height:1.75;">{esc(dd_result)}</div>
@@ -11298,18 +11306,21 @@ XYZ claims ABC refused to pay the last instalment of ₦10M. ABC disputes this."
                 "⚠️ Litigation Risk",
             ])
             tab_configs = [
-                (t1, sec1, "#f0fdf4", "#059669"),
-                (t2, sec2, "#eff6ff", "#3b82f6"),
-                (t3, sec3, "#f5f3ff", "#7c3aed"),
-                (t4, sec4, "#fffbeb", "#f59e0b"),
-                (t5, sec5, "#fef2f2", "#dc2626"),
+                (t1, sec1, "#059669"),
+                (t2, sec2, "#3b82f6"),
+                (t3, sec3, "#7c3aed"),
+                (t4, sec4, "#f59e0b"),
+                (t5, sec5, "#dc2626"),
             ]
-            for tab, content, bg, border in tab_configs:
+            for tab, content, border in tab_configs:
                 with tab:
-                    st.markdown(f"""
-<div style="background:{bg};border-left:4px solid {border};border-radius:0.75rem;
-padding:1.5rem;line-height:1.8;white-space:pre-wrap;font-size:0.95rem;">
-{esc(content)}</div>""", unsafe_allow_html=True)
+                    st.markdown(
+                        f'<div style="background:var(--la-card);border-left:4px solid {border};'
+                        f'border-radius:0.75rem;padding:1.5rem;line-height:1.8;'
+                        f'white-space:pre-wrap;font-size:0.95rem;color:var(--la-text);">'
+                        f'{esc(content)}</div>',
+                        unsafe_allow_html=True,
+                    )
         else:
             st.markdown(f'<div class="response-box">{esc(result)}</div>', unsafe_allow_html=True)
 
@@ -11351,6 +11362,181 @@ padding:1.5rem;line-height:1.8;white-space:pre-wrap;font-size:0.95rem;">
             All without-prejudice communications must be reviewed by counsel before transmission.
             Counsel remains professionally responsible for all advice and negotiations.
         </div>""", unsafe_allow_html=True)
+
+    # ── Firm Admin Settings (admin only) ──────────────────────────────────
+    if _is_admin and tab_firm_admin is not None:
+        with tab_firm_admin:
+            st.markdown("#### ⚙️ Firm-Wide Admin Settings")
+            st.caption("These settings apply across the whole firm deployment. Visible to admins only.")
+
+            firm_cfg = st.session_state.profile.get("firm_config", {})
+
+            fa1, fa2 = st.columns(2)
+
+            with fa1:
+                st.markdown("##### 💰 Default Billing Rates")
+                default_hourly = st.number_input(
+                    "Default Hourly Rate (₦)",
+                    min_value=0, max_value=5_000_000,
+                    value=int(firm_cfg.get("default_hourly_rate", 50000)),
+                    step=5000, key="fa_hourly_rate",
+                    help="Used as the default when creating new time entries",
+                )
+                default_currency = st.selectbox(
+                    "Billing Currency",
+                    ["NGN (₦)", "USD ($)", "GBP (£)", "EUR (€)"],
+                    index=["NGN (₦)", "USD ($)", "GBP (£)", "EUR (€)"].index(
+                        firm_cfg.get("billing_currency", "NGN (₦)")
+                    ),
+                    key="fa_currency",
+                )
+                vat_rate = st.number_input(
+                    "VAT Rate (%)", min_value=0.0, max_value=30.0,
+                    value=float(firm_cfg.get("vat_rate", 7.5)),
+                    step=0.5, format="%.1f", key="fa_vat_rate",
+                    help="Applied to invoices (Nigeria standard VAT is 7.5%)",
+                )
+                wht_rate = st.number_input(
+                    "WHT Rate (%) — Withholding Tax",
+                    min_value=0.0, max_value=20.0,
+                    value=float(firm_cfg.get("wht_rate", 5.0)),
+                    step=0.5, format="%.1f", key="fa_wht_rate",
+                    help="Withholding Tax rate for professional services (typically 5% or 10%)",
+                )
+                st.markdown("##### 🏛️ Default Jurisdictions")
+                _courts = [
+                    "Federal High Court", "High Court of Lagos State",
+                    "High Court of Abuja (FCT)", "High Court of Rivers State",
+                    "High Court of Kano State", "Court of Appeal",
+                    "Supreme Court of Nigeria", "National Industrial Court", "Magistrate Court",
+                ]
+                default_court = st.selectbox(
+                    "Default Court", _courts,
+                    index=_courts.index(firm_cfg["default_court"])
+                          if firm_cfg.get("default_court") in _courts else 0,
+                    key="fa_default_court",
+                )
+                _states = [
+                    "Lagos", "FCT / Abuja", "Rivers", "Kano", "Ogun", "Oyo",
+                    "Anambra", "Enugu", "Delta", "Cross River", "Federal",
+                ]
+                default_state = st.selectbox(
+                    "Default State / Jurisdiction", _states,
+                    index=_states.index(firm_cfg["default_state"])
+                          if firm_cfg.get("default_state") in _states else 0,
+                    key="fa_default_state",
+                )
+
+            with fa2:
+                st.markdown("##### 🤖 AI & Monthly Budget")
+                monthly_ai_budget = st.number_input(
+                    "Monthly AI Budget (₦)",
+                    min_value=0, max_value=10_000_000,
+                    value=int(firm_cfg.get("monthly_ai_budget", 0)),
+                    step=1000, key="fa_ai_budget",
+                    help="Set to 0 for no limit. Alerts when 80% is reached.",
+                )
+                allowed_models = st.multiselect(
+                    "Allowed AI Models",
+                    SUPPORTED_MODELS,
+                    default=[m for m in firm_cfg.get("allowed_models", SUPPORTED_MODELS)
+                             if m in SUPPORTED_MODELS],
+                    key="fa_allowed_models",
+                )
+                st.markdown("##### 📋 Letterhead & Exports")
+                letterhead_footer = st.text_area(
+                    "Default Letterhead Footer",
+                    value=firm_cfg.get("letterhead_footer", ""),
+                    height=80, key="fa_lh_footer",
+                    placeholder="e.g. Solicitors & Advocates · RC No. 123456",
+                )
+                bank_name = st.text_input(
+                    "Bank Name (for invoices)",
+                    value=firm_cfg.get("bank_name", ""), key="fa_bank_name",
+                    placeholder="e.g. First Bank of Nigeria",
+                )
+                bank_account = st.text_input(
+                    "Account Number",
+                    value=firm_cfg.get("bank_account", ""), key="fa_bank_acct",
+                    placeholder="e.g. 1234567890",
+                )
+                bank_sort_code = st.text_input(
+                    "Sort Code / Account Name",
+                    value=firm_cfg.get("bank_sort_code", ""), key="fa_bank_sort",
+                    placeholder="e.g. Adekunle & Associates",
+                )
+                st.markdown("##### 🔐 User Permissions")
+                allow_self_register = st.toggle(
+                    "Allow self-registration",
+                    value=firm_cfg.get("allow_self_register", True),
+                    key="fa_self_reg",
+                )
+                require_admin_approval = st.toggle(
+                    "Require admin approval for new accounts",
+                    value=firm_cfg.get("require_admin_approval", False),
+                    key="fa_admin_approval",
+                )
+                allow_user_api_key = st.toggle(
+                    "Allow users to set their own API key",
+                    value=firm_cfg.get("allow_user_api_key", True),
+                    key="fa_user_api_key",
+                )
+
+            st.markdown("---")
+            if st.button("💾 Save Firm Admin Settings", type="primary",
+                         key="fa_save_btn", use_container_width=True):
+                st.session_state.profile["firm_config"] = {
+                    "default_hourly_rate":    default_hourly,
+                    "billing_currency":       default_currency,
+                    "vat_rate":               vat_rate,
+                    "wht_rate":               wht_rate,
+                    "default_court":          default_court,
+                    "default_state":          default_state,
+                    "monthly_ai_budget":      monthly_ai_budget,
+                    "allowed_models":         allowed_models,
+                    "letterhead_footer":      letterhead_footer.strip(),
+                    "bank_name":              bank_name.strip(),
+                    "bank_account":           bank_account.strip(),
+                    "bank_sort_code":         bank_sort_code.strip(),
+                    "allow_self_register":    allow_self_register,
+                    "require_admin_approval": require_admin_approval,
+                    "allow_user_api_key":     allow_user_api_key,
+                }
+                persist_profile()
+                get_db().append_audit(
+                    "FIRM_SETTINGS_UPDATED",
+                    f"admin={st.session_state.get('current_username','')}",
+                )
+                st.success("✅ Firm admin settings saved.")
+                st.rerun()
+
+            # Billing preview
+            st.markdown("---")
+            st.markdown("##### 💰 Billing Preview")
+            _currency_sym = {"NGN (₦)": "₦", "USD ($)": "$",
+                             "GBP (£)": "£", "EUR (€)": "€"}.get(
+                firm_cfg.get("billing_currency", "NGN (₦)"), "₦"
+            )
+            _sample_hours = 5.0
+            _subtotal = _sample_hours * firm_cfg.get("default_hourly_rate", 50000)
+            _vat_amt  = _subtotal * (firm_cfg.get("vat_rate", 7.5) / 100)
+            _wht_amt  = _subtotal * (firm_cfg.get("wht_rate", 5.0) / 100)
+            _total    = _subtotal + _vat_amt - _wht_amt
+            st.markdown(
+                f'<div style="background:var(--la-bg2);border:1px solid var(--la-border);'
+                f'border-radius:8px;padding:0.9rem 1.2rem;font-size:0.86rem;color:var(--la-text);">'
+                f'<strong>Sample Invoice — 5 hours @ '
+                f'{_currency_sym}{firm_cfg.get("default_hourly_rate", 50000):,.0f}/hr</strong><br><br>'
+                f'Subtotal: <strong>{_currency_sym}{_subtotal:,.2f}</strong><br>'
+                f'VAT ({firm_cfg.get("vat_rate", 7.5)}%): '
+                f'<strong>{_currency_sym}{_vat_amt:,.2f}</strong><br>'
+                f'WHT ({firm_cfg.get("wht_rate", 5.0)}%): '
+                f'<strong>−{_currency_sym}{_wht_amt:,.2f}</strong><br>'
+                f'<hr style="margin:0.4rem 0;border-color:var(--la-border);">'
+                f'<strong>Total Payable: {_currency_sym}{_total:,.2f}</strong>'
+                f'</div>',
+                unsafe_allow_html=True,
+            )
 
 
 # ═══════════════════════════════════════════════════════
@@ -11454,11 +11640,11 @@ is a company with 3 directors. No prior relationship with vendor.""",
         st.markdown("---")
         st.markdown(f"### 🔎 {esc(dd_label)}")
 
-        # Render with colored block
-        st.markdown(f"""
-<div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:0.85rem;
-padding:1.8rem;line-height:1.85;white-space:pre-wrap;font-size:0.93rem;">
-{esc(result)}</div>""", unsafe_allow_html=True)
+        # Render with themed response box
+        st.markdown(
+            f'<div class="response-box">{esc(result)}</div>',
+            unsafe_allow_html=True,
+        )
 
         # Save to case
         cases = st.session_state.cases
@@ -11501,199 +11687,6 @@ padding:1.8rem;line-height:1.85;white-space:pre-wrap;font-size:0.93rem;">
             inspection, official searches, or independent legal advice. All searches must be
             conducted at the relevant registries before advising clients to proceed.
         </div>""", unsafe_allow_html=True)
-
-
-    # ── Firm Admin Settings (admin only) ──────────────────────────────────
-    if _is_admin and tab_firm_admin is not None:
-        with tab_firm_admin:
-            st.markdown("#### ⚙️ Firm-Wide Admin Settings")
-            st.caption("These settings apply across the whole firm deployment. Visible to admins only.")
-
-            firm_cfg = st.session_state.profile.get("firm_config", {})
-
-            fa1, fa2 = st.columns(2)
-
-            with fa1:
-                st.markdown("##### 💰 Default Billing Rates")
-                default_hourly = st.number_input(
-                    "Default Hourly Rate (₦)",
-                    min_value=0, max_value=5_000_000,
-                    value=int(firm_cfg.get("default_hourly_rate", 50000)),
-                    step=5000,
-                    key="fa_hourly_rate",
-                    help="Used as the default when creating new time entries",
-                )
-                default_currency = st.selectbox(
-                    "Billing Currency",
-                    ["NGN (₦)", "USD ($)", "GBP (£)", "EUR (€)"],
-                    index=["NGN (₦)", "USD ($)", "GBP (£)", "EUR (€)"].index(
-                        firm_cfg.get("billing_currency", "NGN (₦)")
-                    ),
-                    key="fa_currency",
-                )
-                vat_rate = st.number_input(
-                    "VAT Rate (%)",
-                    min_value=0.0, max_value=30.0,
-                    value=float(firm_cfg.get("vat_rate", 7.5)),
-                    step=0.5,
-                    format="%.1f",
-                    key="fa_vat_rate",
-                    help="Applied to invoices (Nigeria standard VAT is 7.5%)",
-                )
-                wht_rate = st.number_input(
-                    "WHT Rate (%) — Withholding Tax",
-                    min_value=0.0, max_value=20.0,
-                    value=float(firm_cfg.get("wht_rate", 5.0)),
-                    step=0.5,
-                    format="%.1f",
-                    key="fa_wht_rate",
-                    help="Withholding Tax rate for professional services (typically 5% or 10%)",
-                )
-
-                st.markdown("##### 🏛️ Default Jurisdictions")
-                default_court = st.selectbox(
-                    "Default Court",
-                    [
-                        "Federal High Court",
-                        "High Court of Lagos State",
-                        "High Court of Abuja (FCT)",
-                        "High Court of Rivers State",
-                        "High Court of Kano State",
-                        "Court of Appeal",
-                        "Supreme Court of Nigeria",
-                        "National Industrial Court",
-                        "Magistrate Court",
-                    ],
-                    index=0 if not firm_cfg.get("default_court") else max(0, [
-                        "Federal High Court","High Court of Lagos State","High Court of Abuja (FCT)",
-                        "High Court of Rivers State","High Court of Kano State","Court of Appeal",
-                        "Supreme Court of Nigeria","National Industrial Court","Magistrate Court",
-                    ].index(firm_cfg["default_court"]) if firm_cfg.get("default_court") in [
-                        "Federal High Court","High Court of Lagos State","High Court of Abuja (FCT)",
-                        "High Court of Rivers State","High Court of Kano State","Court of Appeal",
-                        "Supreme Court of Nigeria","National Industrial Court","Magistrate Court",
-                    ] else 0),
-                    key="fa_default_court",
-                )
-                default_state = st.selectbox(
-                    "Default State / Jurisdiction",
-                    ["Lagos","FCT / Abuja","Rivers","Kano","Ogun","Oyo","Anambra","Enugu","Delta","Cross River","Federal"],
-                    index=0 if not firm_cfg.get("default_state") else max(0, [
-                        "Lagos","FCT / Abuja","Rivers","Kano","Ogun","Oyo","Anambra","Enugu","Delta","Cross River","Federal"
-                    ].index(firm_cfg["default_state"]) if firm_cfg.get("default_state") in [
-                        "Lagos","FCT / Abuja","Rivers","Kano","Ogun","Oyo","Anambra","Enugu","Delta","Cross River","Federal"
-                    ] else 0),
-                    key="fa_default_state",
-                )
-
-            with fa2:
-                st.markdown("##### 🤖 AI & Monthly Budget")
-                monthly_ai_budget = st.number_input(
-                    "Monthly AI Budget (₦)",
-                    min_value=0, max_value=10_000_000,
-                    value=int(firm_cfg.get("monthly_ai_budget", 0)),
-                    step=1000,
-                    key="fa_ai_budget",
-                    help="Set to 0 for no limit. Alerts when 80% is reached.",
-                )
-                allowed_models = st.multiselect(
-                    "Allowed AI Models",
-                    ["gemini-2.0-flash", "gemini-2.0-flash-lite", "gemini-1.5-pro", "gemini-1.5-flash"],
-                    default=firm_cfg.get("allowed_models", ["gemini-2.0-flash", "gemini-2.0-flash-lite"]),
-                    key="fa_allowed_models",
-                )
-
-                st.markdown("##### 📋 Letterhead & Exports")
-                letterhead_footer = st.text_area(
-                    "Default Letterhead Footer",
-                    value=firm_cfg.get("letterhead_footer", ""),
-                    height=80,
-                    key="fa_lh_footer",
-                    placeholder="e.g. Solicitors & Advocates · RC No. 123456 · Licensed by the Nigerian Bar Association",
-                )
-                bank_name = st.text_input(
-                    "Bank Name (for invoices)",
-                    value=firm_cfg.get("bank_name", ""),
-                    key="fa_bank_name",
-                    placeholder="e.g. First Bank of Nigeria",
-                )
-                bank_account = st.text_input(
-                    "Account Number",
-                    value=firm_cfg.get("bank_account", ""),
-                    key="fa_bank_acct",
-                    placeholder="e.g. 1234567890",
-                )
-                bank_sort_code = st.text_input(
-                    "Sort Code / Account Name",
-                    value=firm_cfg.get("bank_sort_code", ""),
-                    key="fa_bank_sort",
-                    placeholder="e.g. Adekunle & Associates",
-                )
-
-                st.markdown("##### 🔐 User Permissions")
-                allow_self_register = st.toggle(
-                    "Allow self-registration (non-admin users can sign up)",
-                    value=firm_cfg.get("allow_self_register", True),
-                    key="fa_self_reg",
-                )
-                require_admin_approval = st.toggle(
-                    "Require admin approval for new accounts",
-                    value=firm_cfg.get("require_admin_approval", False),
-                    key="fa_admin_approval",
-                )
-                allow_user_api_key = st.toggle(
-                    "Allow users to set their own API key",
-                    value=firm_cfg.get("allow_user_api_key", True),
-                    key="fa_user_api_key",
-                )
-
-            st.markdown("---")
-            if st.button("💾 Save Firm Admin Settings", type="primary", key="fa_save_btn", use_container_width=True):
-                st.session_state.profile["firm_config"] = {
-                    "default_hourly_rate":    default_hourly,
-                    "billing_currency":       default_currency,
-                    "vat_rate":               vat_rate,
-                    "wht_rate":               wht_rate,
-                    "default_court":          default_court,
-                    "default_state":          default_state,
-                    "monthly_ai_budget":      monthly_ai_budget,
-                    "allowed_models":         allowed_models,
-                    "letterhead_footer":      letterhead_footer.strip(),
-                    "bank_name":              bank_name.strip(),
-                    "bank_account":           bank_account.strip(),
-                    "bank_sort_code":         bank_sort_code.strip(),
-                    "allow_self_register":    allow_self_register,
-                    "require_admin_approval": require_admin_approval,
-                    "allow_user_api_key":     allow_user_api_key,
-                }
-                persist_profile()
-                get_db().append_audit("FIRM_SETTINGS_UPDATED", f"admin={st.session_state.get('current_username','')}")
-                st.success("✅ Firm admin settings saved. Changes take effect on next login.")
-                st.rerun()
-
-            # Preview billing settings
-            st.markdown("---")
-            st.markdown("##### 💰 Billing Preview")
-            _currency_sym = {"NGN (₦)":"₦","USD ($)":"$","GBP (£)":"£","EUR (€)":"€"}.get(
-                firm_cfg.get("billing_currency","NGN (₦)"), "₦"
-            )
-            _sample_hours = 5.0
-            _subtotal = _sample_hours * firm_cfg.get("default_hourly_rate", 50000)
-            _vat_amt  = _subtotal * (firm_cfg.get("vat_rate", 7.5) / 100)
-            _wht_amt  = _subtotal * (firm_cfg.get("wht_rate", 5.0) / 100)
-            _total    = _subtotal + _vat_amt - _wht_amt
-            st.markdown(
-                f'<div style="background:var(--la-bg2);border:1px solid var(--la-border);'
-                f'border-radius:8px;padding:0.9rem 1.2rem;font-size:0.86rem;">'
-                f'<strong>Sample Invoice — 5 hours @ {_currency_sym}{firm_cfg.get("default_hourly_rate",50000):,.0f}/hr</strong><br><br>'
-                f'Subtotal: <strong>{_currency_sym}{_subtotal:,.2f}</strong><br>'
-                f'VAT ({firm_cfg.get("vat_rate",7.5)}%): <strong>{_currency_sym}{_vat_amt:,.2f}</strong><br>'
-                f'WHT ({firm_cfg.get("wht_rate",5.0)}%): <strong>−{_currency_sym}{_wht_amt:,.2f}</strong><br>'
-                f'<hr style="margin:0.4rem 0;">'
-                f'<strong>Total Payable: {_currency_sym}{_total:,.2f}</strong>'
-                f'</div>',
-                unsafe_allow_html=True,
-            )
 
 
 
@@ -12996,22 +12989,23 @@ def main():
     if is_admin:
         GROUPS["👤 Account"].append(("🛡️ Admin", render_user_management))
 
-    # Navigation is now rendered inside render_sidebar(), right after branding
+    # ── Navigation ───────────────────────────────────────────────────────
     group_names = list(GROUPS.keys())
     render_sidebar(group_names)
-    selected_group = st.session_state.get("_selected_nav_group", group_names[0])
+    selected_group = st.session_state.get("nav_group", group_names[0])
+    if selected_group not in GROUPS:
+        selected_group = group_names[0]
 
-    # Page tabs within the selected group
     group_pages = GROUPS[selected_group]
     page_labels = [p[0] for p in group_pages]
     page_fns    = [p[1] for p in group_pages]
 
     if len(page_labels) == 1:
-        # Single page in group — no tabs needed
         page_fns[0]()
     else:
+        # Tab position remembered per group via session state key
         tabs = st.tabs(page_labels)
-        for tab, fn in zip(tabs, page_fns):
+        for i, (tab, fn) in enumerate(zip(tabs, page_fns)):
             with tab:
                 fn()
 
@@ -13024,9 +13018,9 @@ def main():
     ldv = LEGAL_DATA_VERSION
     st.markdown(
         f"""
-    <div style="text-align:center;font-size:0.82rem;color:#64748b;
+    <div style="text-align:center;font-size:0.82rem;color:var(--la-text2);
                 margin-top:1.5rem;padding:1rem 1rem 0.5rem;
-                border-top:1px solid #e2e8f0;">
+                border-top:1px solid var(--la-border);">
         <span style="color:#ef4444;font-weight:700;font-size:0.85rem;">
             ⚠️ AI-Generated Analysis — Not Legal Advice
         </span><br>
