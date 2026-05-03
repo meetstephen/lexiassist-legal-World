@@ -2891,24 +2891,28 @@ iframe[height="0"],iframe[style*="height: 0"]{{
 /* ══════════════════════════════════════════════════════
    FIX 1 — SIDEBAR: always scrollable, never vanishes
    ══════════════════════════════════════════════════════ */
-/* Ensure the sidebar panel itself is always rendered and scrollable */
+/* Outer sidebar panel: fixed frame — must NOT scroll itself */
 section[data-testid="stSidebar"] {{
   display: flex !important;
+  flex-direction: column !important;
   visibility: visible !important;
-  overflow-y: auto !important;
-  overflow-x: hidden !important;
+  overflow: hidden !important;       /* frame only — inner content scrolls */
   height: 100vh !important;
   min-height: 100vh !important;
+  position: fixed !important;
 }}
-/* The inner content wrapper must also scroll freely */
+/* Inner content wrapper: the ONE element that scrolls */
 section[data-testid="stSidebarContent"] {{
   display: flex !important;
   flex-direction: column !important;
-  overflow-y: auto !important;
+  flex: 1 1 auto !important;         /* fill the outer frame */
+  overflow-y: auto !important;       /* scroll here only */
   overflow-x: hidden !important;
   height: 100% !important;
-  min-height: 0 !important;          /* critical: allows flex children to shrink */
-  padding-bottom: 2rem !important;   /* breathing room at the bottom */
+  min-height: 0 !important;          /* allows flex child to shrink & scroll */
+  padding-bottom: 3rem !important;   /* breathing room at the bottom */
+  -webkit-overflow-scrolling: touch !important; /* smooth on iOS/Safari */
+  scrollbar-width: thin !important;  /* Firefox */
 }}
 /* The collapse toggle button: always visible and clickable */
 [data-testid="collapsedControl"] {{
@@ -4445,9 +4449,26 @@ def render_sidebar(group_names=None):
         group_names = []
     # ── Override any login-screen CSS that hid the sidebar ──────────────
     st.markdown("""<style>
-[data-testid="stSidebar"]{display:flex!important;visibility:visible!important;overflow-y:auto!important;overflow-x:hidden!important;height:100vh!important;min-height:100vh!important;}
-[data-testid="collapsedControl"]{display:flex!important;visibility:visible!important;z-index:9999!important;}
-section[data-testid="stSidebarContent"]{display:flex!important;flex-direction:column!important;overflow-y:auto!important;overflow-x:hidden!important;height:100%!important;min-height:0!important;padding-bottom:2rem!important;}
+/* Outer sidebar: fixed frame, NOT scrollable */
+section[data-testid="stSidebar"]{
+  display:flex!important;flex-direction:column!important;
+  visibility:visible!important;
+  overflow:hidden!important;
+  height:100vh!important;min-height:100vh!important;
+  position:fixed!important;
+}
+/* Inner content: the ONE scrollable element */
+section[data-testid="stSidebarContent"]{
+  display:flex!important;flex-direction:column!important;
+  flex:1 1 auto!important;
+  overflow-y:auto!important;overflow-x:hidden!important;
+  height:100%!important;min-height:0!important;
+  padding-bottom:3rem!important;
+  -webkit-overflow-scrolling:touch!important;
+}
+[data-testid="collapsedControl"]{
+  display:flex!important;visibility:visible!important;z-index:9999!important;
+}
 </style>""", unsafe_allow_html=True)
     with st.sidebar:
         firm = get_firm_name()
