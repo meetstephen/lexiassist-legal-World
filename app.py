@@ -1491,7 +1491,7 @@ def render_citation_audit(audit: dict) -> str:
             html += (f'<div style="padding:0.4rem 0; border-bottom:1px solid #e2e8f0;">'
                      f'<strong>{esc(vc["name"])}</strong> '
                      f'<code style="background:#f0fdf4; padding:0.1rem 0.4rem; border-radius:3px;">{esc(vc["citation"])}</code><br>'
-                     f'<small style="color:#475569;">{esc(vc["court"])} · {vc["year"]} · {esc(vc["principle"])}</small>'
+                     f'<small style="color:var(--la-text2);">{esc(vc["court"])} · {vc["year"]} · {esc(vc["principle"])}</small>'
                      f'</div>')
         html += '</div></details>'
 
@@ -2883,121 +2883,42 @@ section[data-testid="stSidebar"] .stRadio{{
   padding:.1rem 0!important;margin-bottom:.5rem!important;}}
 section[data-testid="stSidebar"] [data-testid="stWidgetLabel"] p{{
   color:{sb_text}!important;}}
+/* ── Sidebar scroll: smooth and full-height ── */
+section[data-testid="stSidebar"]{{
+  scroll-behavior:smooth!important;
+  overflow-y:auto!important;
+  overflow-x:hidden!important;
+}}
+section[data-testid="stSidebarContent"]{{
+  scroll-behavior:smooth!important;
+  overflow-y:auto!important;
+  padding-bottom:3rem!important;
+}}
+/* ── Sidebar auto-collapse: on mobile, clicking main content closes sidebar ── */
+@media (max-width: 768px){{
+  /* When sidebar is open, the main block shifts right.
+     Clicking the main area fires the collapse button via JS overlay. */
+  .main .block-container{{
+    cursor:pointer;
+  }}
+}}
+/* ── Tab list scroll: smooth horizontal swipe ── */
+div[data-testid="stTabs"] [role="tablist"]{{
+  overflow-x:auto!important;
+  overflow-y:hidden!important;
+  flex-wrap:nowrap!important;
+  -webkit-overflow-scrolling:touch!important;
+  scroll-behavior:smooth!important;
+  scrollbar-width:thin!important;
+}}
+div[data-testid="stTabs"] [role="tablist"] button{{
+  flex-shrink:0!important;
+  white-space:nowrap!important;
+}}
 /* Hide zero-height keep-alive iframe cleanly */
 iframe[height="0"],iframe[style*="height: 0"]{{
   display:none!important;height:0!important;min-height:0!important;
   padding:0!important;margin:0!important;border:none!important;}}
-
-/* ══════════════════════════════════════════════════════
-   SIDEBAR — always visible, always scrollable
-   Root causes fixed:
-   1. Streamlit white header bar hidden (was overlaying scrollbar)
-   2. Outer sidebar = overflow:hidden frame only
-   3. Inner stSidebarContent = the ONE scrollable element
-   4. z-index layering prevents header from intercepting clicks
-   ══════════════════════════════════════════════════════ */
-
-/* 1. Hide the built-in Streamlit white header bar entirely */
-header[data-testid="stHeader"] {{
-  display: none !important;
-  height: 0 !important;
-  min-height: 0 !important;
-  visibility: hidden !important;
-  pointer-events: none !important;
-}}
-/* Also kill the top decoration bar */
-[data-testid="stDecoration"] {{
-  display: none !important;
-  height: 0 !important;
-}}
-/* Remove top padding that Streamlit adds for its header */
-.stApp > .main > .block-container,
-.block-container {{
-  padding-top: 1rem !important;
-}}
-.stApp {{
-  margin-top: 0 !important;
-  padding-top: 0 !important;
-}}
-
-/* 2. Outer sidebar: rigid frame — must NOT scroll itself */
-section[data-testid="stSidebar"] {{
-  display: flex !important;
-  flex-direction: column !important;
-  visibility: visible !important;
-  overflow: hidden !important;
-  height: 100vh !important;
-  min-height: 100vh !important;
-  position: fixed !important;
-  top: 0 !important;
-  left: 0 !important;
-  z-index: 100 !important;
-}}
-
-/* 3. Inner content wrapper: the ONE element that scrolls */
-section[data-testid="stSidebarContent"] {{
-  display: flex !important;
-  flex-direction: column !important;
-  flex: 1 1 auto !important;
-  overflow-y: auto !important;
-  overflow-x: hidden !important;
-  height: 100vh !important;
-  min-height: 0 !important;
-  padding-bottom: 4rem !important;
-  -webkit-overflow-scrolling: touch !important;
-  scrollbar-width: thin !important;
-}}
-
-/* 4. Collapse toggle: above everything, always clickable */
-[data-testid="collapsedControl"],
-[data-testid="stSidebarCollapseButton"] {{
-  display: flex !important;
-  visibility: visible !important;
-  z-index: 9999 !important;
-  pointer-events: all !important;
-}}
-
-/* 5. Sidebar radio labels: wrap properly on narrow screens */
-section[data-testid="stSidebar"] .stRadio label {{
-  white-space: normal !important;
-  word-break: break-word !important;
-}}
-
-/* ══════════════════════════════════════════════════════
-   FIX 3 — MAIN CONTENT: restore horizontal tab scrollbar
-   ══════════════════════════════════════════════════════ */
-/* The tab button list must scroll horizontally when tabs overflow */
-div[data-testid="stTabs"] [role="tablist"] {{
-  overflow-x: auto !important;
-  overflow-y: hidden !important;
-  flex-wrap: nowrap !important;        /* keep all tabs on one row */
-  -webkit-overflow-scrolling: touch !important;  /* smooth on iOS */
-  scrollbar-width: thin !important;   /* Firefox: thin scrollbar */
-  scrollbar-color: {border} transparent !important;
-  padding-bottom: 2px !important;     /* room for scrollbar on some browsers */
-}}
-/* Webkit (Chrome/Safari/Edge) horizontal scrollbar on the tab list */
-div[data-testid="stTabs"] [role="tablist"]::-webkit-scrollbar {{
-  height: 4px !important;
-}}
-div[data-testid="stTabs"] [role="tablist"]::-webkit-scrollbar-track {{
-  background: transparent !important;
-}}
-div[data-testid="stTabs"] [role="tablist"]::-webkit-scrollbar-thumb {{
-  background: {border} !important;
-  border-radius: 4px !important;
-}}
-/* Individual tab buttons: never shrink, never wrap */
-div[data-testid="stTabs"] [role="tablist"] button {{
-  flex-shrink: 0 !important;
-  white-space: nowrap !important;
-}}
-/* Main block container: ensure it doesn't clip content */
-.main .block-container,
-div[data-testid="stMainBlockContainer"] {{
-  overflow-x: visible !important;
-  max-width: 100% !important;
-}}
 </style>"""
 
 # ═══════════════════════════════════════════════════════
@@ -3295,9 +3216,9 @@ def export_html(text: str, title: str = "LexiAssist Analysis") -> str:
             f"<title>{html_mod.escape(title)}</title>"
             f"<style>body{{font-family:Calibri,Arial,sans-serif;max-width:900px;margin:2rem auto;"
             f"padding:0 1.5rem;color:#1a2e4a;}} h1{{color:#1a2e4a;border-bottom:3px solid #c9a84c;"
-            f"padding-bottom:.5rem;}} .meta{{color:#6b7280;font-size:.9rem;margin-bottom:1.5rem;}}"
+            f"padding-bottom:.5rem;}} .meta{{color:var(--la-text2);font-size:.9rem;margin-bottom:1.5rem;}}"
             f".body{{line-height:1.75;white-space:pre-wrap;}}"
-            f".footer{{margin-top:2rem;padding-top:1rem;border-top:1px solid #e2e8f0;"
+            f".footer{{margin-top:2rem;padding-top:1rem;border-top:1px solid var(--la-border);"
             f"color:#9ca3af;font-size:.8rem;}}</style></head>"
             f"<body><h1>{html_mod.escape(title)}</h1>"
             f"<div class='meta'>{meta_str}</div>"
@@ -4485,75 +4406,11 @@ def render_sidebar(group_names=None):
     if group_names is None:
         group_names = []
     # ── Override any login-screen CSS that hid the sidebar ──────────────
-    # ── Enforce sidebar visibility + scrollability on every rerun ──────────
     st.markdown("""<style>
-header[data-testid="stHeader"]{display:none!important;height:0!important;visibility:hidden!important;pointer-events:none!important;}
-[data-testid="stDecoration"]{display:none!important;height:0!important;}
-section[data-testid="stSidebar"]{display:flex!important;flex-direction:column!important;visibility:visible!important;overflow:hidden!important;height:100vh!important;min-height:100vh!important;position:fixed!important;top:0!important;left:0!important;z-index:100!important;}
-section[data-testid="stSidebarContent"]{display:flex!important;flex-direction:column!important;flex:1 1 auto!important;overflow-y:auto!important;overflow-x:hidden!important;height:100vh!important;min-height:0!important;padding-bottom:4rem!important;-webkit-overflow-scrolling:touch!important;}
-[data-testid="collapsedControl"],[data-testid="stSidebarCollapseButton"]{display:flex!important;visibility:visible!important;z-index:9999!important;pointer-events:all!important;}
+[data-testid="stSidebar"]{display:flex!important;visibility:visible!important;}
+[data-testid="collapsedControl"]{display:flex!important;visibility:visible!important;}
+section[data-testid="stSidebarContent"]{display:flex!important;}
 </style>""", unsafe_allow_html=True)
-    # ── JS guardian: enforces sidebar scroll on every DOM mutation ───────────
-    st.components.v1.html("""
-<script>
-(function() {
-  function fixSidebar() {
-    // Hide the Streamlit white header bar
-    var hdr = document.querySelector('header[data-testid="stHeader"]');
-    if (hdr) { hdr.style.cssText = 'display:none!important;height:0!important;'; }
-
-    // Outer sidebar: rigid frame, NOT scrollable
-    var sb = document.querySelector('section[data-testid="stSidebar"]');
-    if (sb) {
-      sb.style.setProperty('display', 'flex', 'important');
-      sb.style.setProperty('visibility', 'visible', 'important');
-      sb.style.setProperty('overflow', 'hidden', 'important');
-      sb.style.setProperty('height', '100vh', 'important');
-      sb.style.setProperty('position', 'fixed', 'important');
-      sb.style.setProperty('top', '0', 'important');
-      sb.style.setProperty('left', '0', 'important');
-      sb.style.setProperty('z-index', '100', 'important');
-    }
-
-    // Inner content wrapper: the ONE scrollable element
-    var sc = document.querySelector('section[data-testid="stSidebarContent"]');
-    if (sc) {
-      sc.style.setProperty('display', 'flex', 'important');
-      sc.style.setProperty('flex-direction', 'column', 'important');
-      sc.style.setProperty('flex', '1 1 auto', 'important');
-      sc.style.setProperty('overflow-y', 'auto', 'important');
-      sc.style.setProperty('overflow-x', 'hidden', 'important');
-      sc.style.setProperty('height', '100vh', 'important');
-      sc.style.setProperty('min-height', '0', 'important');
-      sc.style.setProperty('-webkit-overflow-scrolling', 'touch', 'important');
-    }
-  }
-
-  // Run immediately
-  fixSidebar();
-
-  // Run again after a short delay (Streamlit may redraw)
-  setTimeout(fixSidebar, 300);
-  setTimeout(fixSidebar, 800);
-
-  // Watch for any DOM changes and re-apply (survives reruns)
-  var observer = new MutationObserver(function(mutations) {
-    for (var m of mutations) {
-      if (m.addedNodes.length || m.attributeName) {
-        fixSidebar();
-        break;
-      }
-    }
-  });
-  observer.observe(document.body, {
-    childList: true,
-    subtree: true,
-    attributes: true,
-    attributeFilter: ['style', 'class']
-  });
-})();
-</script>
-""", height=0)
     with st.sidebar:
         firm = get_firm_name()
         corp = (st.session_state.get("theme", "⚖️ Corporate") == "⚖️ Corporate")
@@ -4726,6 +4583,45 @@ section[data-testid="stSidebarContent"]{display:flex!important;flex-direction:co
                 )
         elif today.month == 12:
             st.info("ℹ️ **NBA APC:** Renewal opens January. Deadline: 31 March.")
+
+    # ── JS: close sidebar when user clicks the main content area (mobile) ──
+    # This restores the original Streamlit behaviour where clicking outside
+    # the sidebar on mobile auto-collapses it without requiring a button tap.
+    st.components.v1.html("""
+<script>
+(function() {
+  function tryAttach() {
+    var main = window.parent.document.querySelector(
+      '.main, [data-testid="stMainBlockContainer"], section.main'
+    );
+    var collapseBtn = window.parent.document.querySelector(
+      '[data-testid="collapsedControl"] button, button[aria-label="Close sidebar"]'
+    );
+    if (!main || !collapseBtn) { return; }
+
+    main.addEventListener('click', function(e) {
+      // Only close if sidebar is currently open (on mobile widths)
+      var sidebar = window.parent.document.querySelector(
+        '[data-testid="stSidebar"]'
+      );
+      if (!sidebar) return;
+      var sidebarW = sidebar.getBoundingClientRect().width;
+      // If sidebar is open (width > 50px) and screen is narrow (<=768px)
+      if (sidebarW > 50 && window.parent.innerWidth <= 768) {
+        collapseBtn.click();
+      }
+    }, false);
+  }
+  // Retry until the DOM is ready
+  var attempts = 0;
+  var interval = setInterval(function() {
+    tryAttach();
+    attempts++;
+    if (attempts > 20) clearInterval(interval);
+  }, 400);
+})();
+</script>
+""", height=0)
 
 
 
@@ -5060,7 +4956,7 @@ def render_home():
             st.markdown("##### ✅ Upcoming Tasks")
             if _overdue_n:
                 st.markdown(
-                    f'<div style="background:#fef2f2;border:1px solid #fecaca;'
+                    f'<div style="background:var(--la-card);border:1px solid var(--la-border);border-left:4px solid #dc2626;'
                     f'border-radius:8px;padding:0.5rem 0.9rem;margin-bottom:0.4rem;">'
                     f'<strong style="color:#dc2626;">⚠️ {_overdue_n} overdue task(s)</strong>'
                     f' — go to ✅ Tasks to review.</div>',
@@ -5577,7 +5473,7 @@ def render_ai():
                     '.diff_header{background:#1e3a5f;color:#fff;padding:2px 6px;font-size:0.78rem;}'
                     '.diff_next{background:#374151;color:#fff;}'
                     'td.diff_add{background:#d1fae5;}'
-                    'td.diff_chg{background:#fef3c7;}'
+                    'td.diff_chg{background:var(--la-bg2);}'
                     'td.diff_sub{background:#fee2e2;}'
                     '.diff table{font-size:0.75rem;font-family:monospace;width:100%;}'
                     '</style>'
@@ -5793,7 +5689,7 @@ RESPONSE TO ANALYSE:
                             f'<div style="background:var(--la-bg2);border-left:3px solid #f59e0b;'
                             f'border-radius:6px;padding:0.4rem 0.7rem;margin-bottom:0.4rem;'
                             f'font-size:0.82rem;"><strong>{esc(_it.get("item",""))}</strong>'
-                            f'<br><small style="color:#92400e;">{esc(_it.get("reason",""))}</small></div>',
+                            f'<br><small style="color:var(--la-text);">{esc(_it.get("reason",""))}</small></div>',
                             unsafe_allow_html=True,
                         )
                     if not _struct.get("to_confirm"):
@@ -7527,15 +7423,40 @@ border-radius:0.5rem;padding:1rem;margin-bottom:0.8rem;">
             {"level": 5, "name": "National Information Technology Development Agency (NITDA) Tribunal", "desc": "Data protection and IT regulatory disputes under the Nigeria Data Protection Act 2023.", "icon": "💻"},
         ]
         level_label_map = {1: "APEX", 2: "APPELLATE", 3: "SUPERIOR COURT", 4: "LOWER COURT", 5: "TRIBUNAL"}
-        for c in FULL_HIERARCHY:
-            indent = "&nbsp;&nbsp;&nbsp;&nbsp;" * max(0, c["level"] - 1)
-            level_label = level_label_map.get(c["level"], "")
-            badge_cls = "badge-err" if c["level"]==1 else ("badge-warn" if c["level"]==2 else ("badge-ok" if c["level"]==3 else "badge-info"))
-            st.markdown(f"""<div class="tool-card">
-                {indent}{c['icon']} <strong>{esc(c['name'])}</strong>
-                <span class="badge {badge_cls}">{level_label}</span><br>
-                {indent}&nbsp;&nbsp;&nbsp;&nbsp;<small>{esc(c['desc'])}</small>
-            </div>""", unsafe_allow_html=True)
+        level_colors    = {1: "#dc2626", 2: "#d97706", 3: "#059669", 4: "#3b82f6", 5: "#7c3aed"}
+
+        # Group courts by level for expanders
+        from itertools import groupby
+        by_level = {}
+        for court in FULL_HIERARCHY:
+            by_level.setdefault(court["level"], []).append(court)
+
+        level_titles = {
+            1: "🔴 Level 1 — Apex Court",
+            2: "🟡 Level 2 — Appellate Court",
+            3: "🟢 Level 3 — Superior Courts of Record",
+            4: "🔵 Level 4 — Lower Courts",
+            5: "🟣 Level 5 — Specialised Tribunals",
+        }
+
+        for lvl in sorted(by_level.keys()):
+            courts_in_level = by_level[lvl]
+            col = level_colors.get(lvl, "#64748b")
+            with st.expander(level_titles[lvl], expanded=(lvl <= 2)):
+                for c in courts_in_level:
+                    st.markdown(
+                        f'<div style="background:var(--la-card);border-left:4px solid {col};'
+                        f'border-radius:8px;padding:0.8rem 1rem;margin-bottom:0.6rem;">'
+                        f'<strong style="color:var(--la-text);">{c["icon"]} {esc(c["name"])}</strong>'
+                        f'<span style="font-size:0.72rem;font-weight:700;color:{col};'
+                        f'background:transparent;border:1px solid {col};border-radius:1rem;'
+                        f'padding:0.1rem 0.5rem;margin-left:0.5rem;">'
+                        f'{level_label_map.get(lvl,"")}</span><br>'
+                        f'<small style="color:var(--la-text2);line-height:1.6;">'
+                        f'{esc(c["desc"])}</small>'
+                        f'</div>',
+                        unsafe_allow_html=True,
+                    )
 
     # ── Legal Maxims (editable) ──
     with tab_maxim:
@@ -7758,8 +7679,9 @@ MATTER FACTS: {aml_facts}
         </div>""", unsafe_allow_html=True)
 
         st.markdown(
-            '<div style="background:#eff6ff;border:1px solid #bfdbfe;border-radius:8px;'
-            'padding:0.7rem 1rem;margin-bottom:1rem;font-size:0.83rem;color:#1e40af;">'
+            '<div style="background:var(--la-bg2);border:1px solid var(--la-border);'
+            'border-left:4px solid #3b82f6;border-radius:8px;'
+            'padding:0.7rem 1rem;margin-bottom:1rem;font-size:0.83rem;color:var(--la-text);">'
             '📌 <strong>How to use:</strong> Select the court, matter type and briefly describe the facts. '
             'LexiAssist will generate a step-by-step checklist covering jurisdiction basis, '
             'pre-action requirements, documents, filing steps, frontloading, service and common defects.'
@@ -7904,7 +7826,7 @@ MATTER FACTS: {aml_facts}
                             f'<div style="background:var(--la-bg2);border:1px solid var(--la-border);'
                             f'border-radius:6px;padding:0.5rem 0.8rem;margin-bottom:0.4rem;">'
                             f'<strong>{i}. {esc(s.get("step", ""))}</strong> '
-                            f'<span style="font-size:0.75rem;color:#64748b;">{mand}</span><br>'
+                            f'<span style="font-size:0.75rem;color:var(--la-text2);">{mand}</span><br>'
                             f'<small>{esc(s.get("detail", ""))}</small></div>',
                             unsafe_allow_html=True,
                         )
@@ -7913,7 +7835,7 @@ MATTER FACTS: {aml_facts}
                     st.markdown("#### 📄 Documents to File")
                     for d in chk_data["documents_to_file"]:
                         st.markdown(
-                            f'<div style="background:#f0fdf4;border:1px solid #bbf7d0;'
+                            f'<div style="background:var(--la-card);border:1px solid var(--la-border);border-left:4px solid #059669;'
                             f'border-radius:6px;padding:0.5rem 0.8rem;margin-bottom:0.4rem;">'
                             f'📄 <strong>{esc(d.get("doc", ""))}</strong> — {esc(str(d.get("copies", "")))} copies<br>'
                             f'<small>{esc(d.get("notes", ""))}</small></div>',
@@ -7948,7 +7870,7 @@ MATTER FACTS: {aml_facts}
                     srv = chk_data["service"]
                     st.markdown("#### 📬 Service Requirements")
                     st.markdown(
-                        f'<div style="background:#eff6ff;border:1px solid #bfdbfe;'
+                        f'<div style="background:var(--la-bg2);border:1px solid var(--la-border);border-left:4px solid #3b82f6;'
                         f'border-radius:6px;padding:0.6rem 0.9rem;margin-bottom:0.6rem;">'
                         f'<strong>{esc(srv.get("method", ""))}</strong><br>'
                         f'<small>⏰ {esc(srv.get("timeframe", ""))} · {esc(srv.get("authority", ""))}</small>'
@@ -7960,7 +7882,7 @@ MATTER FACTS: {aml_facts}
                     st.markdown("#### 🚨 Common Filing Defects")
                     for d in chk_data["common_defects"]:
                         st.markdown(
-                            f'<div style="background:#fef2f2;border:1px solid #fecaca;'
+                            f'<div style="background:var(--la-card);border:1px solid var(--la-border);border-left:4px solid #dc2626;'
                             f'border-radius:6px;padding:0.5rem 0.8rem;margin-bottom:0.4rem;">'
                             f'🚨 <strong>{esc(d.get("defect", ""))}</strong><br>'
                             f'<small style="color:#dc2626;">{esc(d.get("consequence", ""))}</small></div>',
@@ -8024,8 +7946,9 @@ MATTER FACTS: {aml_facts}
         </div>""", unsafe_allow_html=True)
 
         st.markdown(
-            '<div style="background:#eff6ff;border:1px solid #bfdbfe;border-radius:8px;'
-            'padding:0.7rem 1rem;margin-bottom:1rem;font-size:0.83rem;color:#1e40af;">'
+            '<div style="background:var(--la-bg2);border:1px solid var(--la-border);'
+            'border-left:4px solid #3b82f6;border-radius:8px;'
+            'padding:0.7rem 1rem;margin-bottom:1rem;font-size:0.83rem;color:var(--la-text);">'
             '🔍 <strong>How it works:</strong> Paste AI-generated text or a legal argument. '
             'LexiAssist extracts every statute, case, and rule cited, then checks each one against '
             'its verified Nigerian legal database and flags hallucinations, repealed laws, and unverified authorities.'
@@ -9335,7 +9258,7 @@ border-radius:0.75rem;padding:1.2rem;">
   <p>{esc(stage.get('description', ''))}</p>
   <p><strong>⏱️ Duration:</strong> {esc(stage.get('duration_estimate', ''))} &nbsp;|&nbsp;
   <strong>📅 Trigger:</strong> {esc(stage.get('deadline_trigger', ''))}</p>
-  {f'<div style="background:var(--la-bg2);border-left:3px solid #f59e0b;padding:0.6rem;border-radius:0.3rem;margin-top:0.5rem;color:var(--la-text);"><strong>⚠️ Warning:</strong> {esc(stage.get("warning",""))}</div>' if stage.get("warning") else ""}
+  {f'<div style="background:var(--la-bg2);border-left:3px solid #f59e0b;padding:0.6rem;border-radius:0.3rem;margin-top:0.5rem;"><strong>⚠️ Warning:</strong> {esc(stage.get("warning",""))}</div>' if stage.get("warning") else ""}
 </div>""", unsafe_allow_html=True)
 
             dc1, dc2 = st.columns(2)
@@ -9597,7 +9520,7 @@ padding:1.5rem;line-height:1.8;">
 <div style="background:#eff6ff;border-left:4px solid #3b82f6;border-radius:0.6rem;
 padding:0.9rem 1.2rem;margin-bottom:1rem;">
   <strong style="color:#1d4ed8;">↩️ Re-Examination Questions</strong><br>
-  <small style="color:#475569;">Generated from the cross-examination attack points above.
+  <small style="color:var(--la-text2);">Generated from the cross-examination attack points above.
   Re-examination is limited to matters arising from cross-examination (Evidence Act 2011, s.215).</small>
 </div>""", unsafe_allow_html=True)
 
@@ -10666,7 +10589,7 @@ def render_profile():
       <span style="color:#dc2626;font-weight:bold;">{days_until(h['date'])} day(s)</span>
     </p>
   </div>
-  <p style="background:#fff8e1;padding:10px;border-radius:6px;color:#5a4000;border-left:4px solid #f59e0b;">
+  <p style="background:var(--la-bg2);padding:10px;border-radius:6px;">
     ⚠️ Please ensure all court processes, briefs, and appearances
     are prepared well in advance.
   </p>
@@ -10741,52 +10664,52 @@ def render_profile():
                     st.metric("Last Login", fmt_date(user_rec.get("last_login", "")))
 
         st.markdown("---")
-        st.markdown("##### 📱 Active Sessions")
-        st.caption("These are all devices and browsers where you are currently signed in.")
-        current_token = st.session_state.get("_session_token", "")
-        if uid:
-            sessions = get_db().get_user_sessions(uid)
-            if not sessions:
-                st.info("No active sessions found.")
-            else:
-                for i, sess in enumerate(sessions):
-                    is_current = (sess["token"] == current_token)
-                    border_col = "#059669" if is_current else "var(--la-border)"
-                    badge = (
-                        '<span style="background:#059669;color:#ffffff;font-size:0.72rem;'
-                        'padding:0.15rem 0.5rem;border-radius:1rem;font-weight:600;'
-                        'margin-left:0.4rem;">This device</span>'
-                        if is_current else ""
-                    )
-                    st.markdown(
-                        f'<div style="background:var(--la-card);'
-                        f'border:1px solid {border_col};'
-                        f'border-left:4px solid {border_col};'
-                        f'border-radius:0.6rem;padding:0.8rem 1rem;margin-bottom:0.5rem;">'
-                        f'<div style="color:var(--la-text);">'
-                        f'🖥️ <strong style="color:var(--la-text);">Session {i+1}</strong>{badge}</div>'
-                        f'<div style="color:var(--la-text2);font-size:0.8rem;margin-top:0.25rem;">'
-                        f'Created: {esc(fmt_date(sess.get("created_at","")))} · '
-                        f'Last used: {esc(fmt_date(sess.get("last_used","")))} · '
-                        f'Expires: {esc(fmt_date(sess.get("expires_at","")))}'
-                        f'</div></div>',
-                        unsafe_allow_html=True,
-                    )
-                    if not is_current:
-                        if st.button(f"🚫 Revoke Session {i+1}", key=f"revoke_sess_{i}", use_container_width=True):
-                            get_db().revoke_session_token(sess["token"])
-                            st.success("✅ Session revoked.")
-                            st.rerun()
+        with st.expander("📱 Active Sessions", expanded=False):
+            st.caption("These are all devices and browsers where you are currently signed in.")
+            current_token = st.session_state.get("_session_token", "")
+            if uid:
+                sessions = get_db().get_user_sessions(uid)
+                if not sessions:
+                    st.info("No active sessions found.")
+                else:
+                    for i, sess in enumerate(sessions):
+                        is_current = (sess["token"] == current_token)
+                        border_col = "#059669" if is_current else "var(--la-border)"
+                        badge = (
+                            '<span style="background:#059669;color:#ffffff;font-size:0.72rem;'
+                            'padding:0.15rem 0.5rem;border-radius:1rem;font-weight:600;'
+                            'margin-left:0.4rem;">This device</span>'
+                            if is_current else ""
+                        )
+                        st.markdown(
+                            f'<div style="background:var(--la-card);'
+                            f'border:1px solid {border_col};'
+                            f'border-left:4px solid {border_col};'
+                            f'border-radius:0.6rem;padding:0.8rem 1rem;margin-bottom:0.5rem;">'
+                            f'<div style="color:var(--la-text);">'
+                            f'🖥️ <strong style="color:var(--la-text);">Session {i+1}</strong>{badge}</div>'
+                            f'<div style="color:var(--la-text2);font-size:0.8rem;margin-top:0.25rem;">'
+                            f'Created: {esc(fmt_date(sess.get("created_at","")))} · '
+                            f'Last used: {esc(fmt_date(sess.get("last_used","")))} · '
+                            f'Expires: {esc(fmt_date(sess.get("expires_at","")))}'
+                            f'</div></div>',
+                            unsafe_allow_html=True,
+                        )
+                        if not is_current:
+                            if st.button(f"🚫 Revoke Session {i+1}", key=f"revoke_sess_{i}", use_container_width=True):
+                                get_db().revoke_session_token(sess["token"])
+                                st.success("✅ Session revoked.")
+                                st.rerun()
 
-            st.markdown("")
-            if st.button("🚫 Sign Out All Other Devices", key="revoke_all_others", use_container_width=True):
-                db2 = get_db()
-                all_sess = db2.get_user_sessions(uid)
-                for sess in all_sess:
-                    if sess["token"] != current_token:
-                        db2.revoke_session_token(sess["token"])
-                st.success("✅ All other sessions revoked.")
-                st.rerun()
+                st.markdown("")
+                if st.button("🚫 Sign Out All Other Devices", key="revoke_all_others", use_container_width=True):
+                    db2 = get_db()
+                    all_sess = db2.get_user_sessions(uid)
+                    for sess in all_sess:
+                        if sess["token"] != current_token:
+                            db2.revoke_session_token(sess["token"])
+                    st.success("✅ All other sessions revoked.")
+                    st.rerun()
 
         st.markdown("---")
         st.markdown("##### 🚪 Sign Out")
@@ -10903,6 +10826,180 @@ def render_profile():
                 st.session_state.research_results = ""
                 st.success("✅ All data reset. Profile and password preserved.")
                 st.rerun()
+
+    # ── Firm Admin Settings — CORRECT SCOPE (inside render_profile) ───────
+    if _is_admin and tab_firm_admin is not None:
+        with tab_firm_admin:
+            st.markdown("#### ⚙️ Firm-Wide Admin Settings")
+            st.caption(
+                "These settings apply across the whole firm deployment. "
+                "Visible to admins only."
+            )
+            firm_cfg = st.session_state.profile.get("firm_config", {})
+            fa1, fa2 = st.columns(2)
+
+            with fa1:
+                st.markdown("##### 💰 Default Billing Rates")
+                default_hourly = st.number_input(
+                    "Default Hourly Rate (₦)",
+                    min_value=0, max_value=5_000_000,
+                    value=int(firm_cfg.get("default_hourly_rate", 50000)),
+                    step=5000, key="fa_hourly_rate",
+                    help="Used as the default when creating new time entries",
+                )
+                default_currency = st.selectbox(
+                    "Billing Currency",
+                    ["NGN (₦)", "USD ($)", "GBP (£)", "EUR (€)"],
+                    index=["NGN (₦)", "USD ($)", "GBP (£)", "EUR (€)"].index(
+                        firm_cfg.get("billing_currency", "NGN (₦)")
+                    ),
+                    key="fa_currency",
+                )
+                vat_rate = st.number_input(
+                    "VAT Rate (%)", min_value=0.0, max_value=30.0,
+                    value=float(firm_cfg.get("vat_rate", 7.5)),
+                    step=0.5, format="%.1f", key="fa_vat_rate",
+                    help="Applied to invoices (Nigeria standard VAT is 7.5%)",
+                )
+                wht_rate = st.number_input(
+                    "WHT Rate (%) — Withholding Tax",
+                    min_value=0.0, max_value=20.0,
+                    value=float(firm_cfg.get("wht_rate", 5.0)),
+                    step=0.5, format="%.1f", key="fa_wht_rate",
+                    help="Withholding Tax (typically 5% or 10%)",
+                )
+                st.markdown("##### 🏛️ Default Jurisdictions")
+                _courts = [
+                    "Federal High Court", "High Court of Lagos State",
+                    "High Court of Abuja (FCT)", "High Court of Rivers State",
+                    "High Court of Kano State", "Court of Appeal",
+                    "Supreme Court of Nigeria", "National Industrial Court",
+                    "Magistrate Court",
+                ]
+                default_court = st.selectbox(
+                    "Default Court", _courts,
+                    index=_courts.index(firm_cfg["default_court"])
+                          if firm_cfg.get("default_court") in _courts else 0,
+                    key="fa_default_court",
+                )
+                _states = [
+                    "Lagos", "FCT / Abuja", "Rivers", "Kano", "Ogun", "Oyo",
+                    "Anambra", "Enugu", "Delta", "Cross River", "Federal",
+                ]
+                default_state = st.selectbox(
+                    "Default State / Jurisdiction", _states,
+                    index=_states.index(firm_cfg["default_state"])
+                          if firm_cfg.get("default_state") in _states else 0,
+                    key="fa_default_state",
+                )
+
+            with fa2:
+                st.markdown("##### 🤖 AI & Monthly Budget")
+                monthly_ai_budget = st.number_input(
+                    "Monthly AI Budget (₦)",
+                    min_value=0, max_value=10_000_000,
+                    value=int(firm_cfg.get("monthly_ai_budget", 0)),
+                    step=1000, key="fa_ai_budget",
+                    help="Set to 0 for no limit.",
+                )
+                allowed_models = st.multiselect(
+                    "Allowed AI Models", SUPPORTED_MODELS,
+                    default=[m for m in firm_cfg.get("allowed_models", SUPPORTED_MODELS)
+                             if m in SUPPORTED_MODELS],
+                    key="fa_allowed_models",
+                )
+                st.markdown("##### 📋 Letterhead & Exports")
+                letterhead_footer = st.text_area(
+                    "Default Letterhead Footer",
+                    value=firm_cfg.get("letterhead_footer", ""),
+                    height=80, key="fa_lh_footer",
+                    placeholder="e.g. Solicitors & Advocates · RC No. 123456",
+                )
+                bank_name = st.text_input(
+                    "Bank Name (for invoices)",
+                    value=firm_cfg.get("bank_name", ""), key="fa_bank_name",
+                    placeholder="e.g. First Bank of Nigeria",
+                )
+                bank_account = st.text_input(
+                    "Account Number",
+                    value=firm_cfg.get("bank_account", ""), key="fa_bank_acct",
+                    placeholder="e.g. 1234567890",
+                )
+                bank_sort_code = st.text_input(
+                    "Sort Code / Account Name",
+                    value=firm_cfg.get("bank_sort_code", ""), key="fa_bank_sort",
+                    placeholder="e.g. Adekunle & Associates",
+                )
+                st.markdown("##### 🔐 User Permissions")
+                allow_self_register = st.toggle(
+                    "Allow self-registration",
+                    value=firm_cfg.get("allow_self_register", True),
+                    key="fa_self_reg",
+                )
+                require_admin_approval = st.toggle(
+                    "Require admin approval for new accounts",
+                    value=firm_cfg.get("require_admin_approval", False),
+                    key="fa_admin_approval",
+                )
+                allow_user_api_key = st.toggle(
+                    "Allow users to set their own API key",
+                    value=firm_cfg.get("allow_user_api_key", True),
+                    key="fa_user_api_key",
+                )
+
+            st.markdown("---")
+            if st.button(
+                "💾 Save Firm Admin Settings", type="primary",
+                key="fa_save_btn", use_container_width=True,
+            ):
+                st.session_state.profile["firm_config"] = {
+                    "default_hourly_rate":    default_hourly,
+                    "billing_currency":       default_currency,
+                    "vat_rate":               vat_rate,
+                    "wht_rate":               wht_rate,
+                    "default_court":          default_court,
+                    "default_state":          default_state,
+                    "monthly_ai_budget":      monthly_ai_budget,
+                    "allowed_models":         allowed_models,
+                    "letterhead_footer":      letterhead_footer.strip(),
+                    "bank_name":              bank_name.strip(),
+                    "bank_account":           bank_account.strip(),
+                    "bank_sort_code":         bank_sort_code.strip(),
+                    "allow_self_register":    allow_self_register,
+                    "require_admin_approval": require_admin_approval,
+                    "allow_user_api_key":     allow_user_api_key,
+                }
+                persist_profile()
+                get_db().append_audit(
+                    "FIRM_SETTINGS_UPDATED",
+                    f"admin={st.session_state.get('current_username', '')}",
+                )
+                st.success("✅ Firm admin settings saved.")
+                st.rerun()
+
+            st.markdown("---")
+            st.markdown("##### 💰 Billing Preview")
+            _sym = {"NGN (₦)": "₦", "USD ($)": "$",
+                    "GBP (£)": "£", "EUR (€)": "€"}.get(
+                firm_cfg.get("billing_currency", "NGN (₦)"), "₦"
+            )
+            _sub = 5.0 * firm_cfg.get("default_hourly_rate", 50000)
+            _vat = _sub * (firm_cfg.get("vat_rate", 7.5) / 100)
+            _wht = _sub * (firm_cfg.get("wht_rate", 5.0) / 100)
+            _tot = _sub + _vat - _wht
+            st.markdown(
+                f'<div style="background:var(--la-bg2);border:1px solid var(--la-border);'
+                f'border-radius:8px;padding:0.9rem 1.2rem;font-size:0.86rem;color:var(--la-text);">'
+                f'<strong>Sample Invoice — 5 hrs @ {_sym}'
+                f'{firm_cfg.get("default_hourly_rate", 50000):,.0f}/hr</strong><br><br>'
+                f'Subtotal: <strong>{_sym}{_sub:,.2f}</strong><br>'
+                f'VAT ({firm_cfg.get("vat_rate",7.5)}%): <strong>{_sym}{_vat:,.2f}</strong><br>'
+                f'WHT ({firm_cfg.get("wht_rate",5.0)}%): <strong>−{_sym}{_wht:,.2f}</strong><br>'
+                f'<hr style="margin:0.4rem 0;border-color:var(--la-border);">'
+                f'<strong>Total Payable: {_sym}{_tot:,.2f}</strong>'
+                f'</div>',
+                unsafe_allow_html=True,
+            )
 
 
 
@@ -11106,8 +11203,7 @@ border-radius:0.4rem;margin-top:0.5rem;font-size:0.9rem;">
     with tab_court:
         st.markdown("#### 🏛️ Court Filing Fee Estimator")
         st.markdown(
-            '<div style="background:var(--la-bg2);border:1px solid var(--la-border);'
-            'border-left:4px solid #f59e0b;border-radius:8px;'
+            '<div style="background:var(--la-bg2);border:1px solid #f59e0b;border-radius:8px;'
             'padding:0.6rem 1rem;font-size:0.82rem;color:var(--la-text);margin-bottom:0.5rem;">'
             '<strong>⚠️ Estimate Only — Verify Before Filing:</strong> These fees are '
             'indicative and based on the applicable Rules of Court. Registry fees change '
@@ -11159,8 +11255,7 @@ border-radius:0.4rem;margin-top:0.5rem;font-size:0.9rem;">
             verified_on = court.get("last_verified", "—")
             st.info(f"ℹ️ **{court['label']}:** {court_note}")
             st.markdown(
-                f'<div style="background:var(--la-bg2);border:1px solid var(--la-border);'
-                f'border-left:4px solid #f59e0b;border-radius:6px;'
+                f'<div style="background:var(--la-bg2);border:1px solid #f59e0b;border-radius:6px;'
                 f'padding:0.55rem 0.9rem;margin:0.4rem 0 0.8rem 0;font-size:0.82rem;color:var(--la-text);">'
                 f'⚠️ <strong>Registry fees change without notice.</strong> '
                 f'These figures are estimates based on court rules verified in '
@@ -11539,181 +11634,9 @@ XYZ claims ABC refused to pay the last instalment of ₦10M. ABC disputes this."
             All without-prejudice communications must be reviewed by counsel before transmission.
             Counsel remains professionally responsible for all advice and negotiations.
         </div>""", unsafe_allow_html=True)
+    # ← render_settlement_advisor ends here — firm admin block removed from this scope
 
-    # ── Firm Admin Settings (admin only) ──────────────────────────────────
-    if _is_admin and tab_firm_admin is not None:
-        with tab_firm_admin:
-            st.markdown("#### ⚙️ Firm-Wide Admin Settings")
-            st.caption("These settings apply across the whole firm deployment. Visible to admins only.")
 
-            firm_cfg = st.session_state.profile.get("firm_config", {})
-
-            fa1, fa2 = st.columns(2)
-
-            with fa1:
-                st.markdown("##### 💰 Default Billing Rates")
-                default_hourly = st.number_input(
-                    "Default Hourly Rate (₦)",
-                    min_value=0, max_value=5_000_000,
-                    value=int(firm_cfg.get("default_hourly_rate", 50000)),
-                    step=5000, key="fa_hourly_rate",
-                    help="Used as the default when creating new time entries",
-                )
-                default_currency = st.selectbox(
-                    "Billing Currency",
-                    ["NGN (₦)", "USD ($)", "GBP (£)", "EUR (€)"],
-                    index=["NGN (₦)", "USD ($)", "GBP (£)", "EUR (€)"].index(
-                        firm_cfg.get("billing_currency", "NGN (₦)")
-                    ),
-                    key="fa_currency",
-                )
-                vat_rate = st.number_input(
-                    "VAT Rate (%)", min_value=0.0, max_value=30.0,
-                    value=float(firm_cfg.get("vat_rate", 7.5)),
-                    step=0.5, format="%.1f", key="fa_vat_rate",
-                    help="Applied to invoices (Nigeria standard VAT is 7.5%)",
-                )
-                wht_rate = st.number_input(
-                    "WHT Rate (%) — Withholding Tax",
-                    min_value=0.0, max_value=20.0,
-                    value=float(firm_cfg.get("wht_rate", 5.0)),
-                    step=0.5, format="%.1f", key="fa_wht_rate",
-                    help="Withholding Tax rate for professional services (typically 5% or 10%)",
-                )
-                st.markdown("##### 🏛️ Default Jurisdictions")
-                _courts = [
-                    "Federal High Court", "High Court of Lagos State",
-                    "High Court of Abuja (FCT)", "High Court of Rivers State",
-                    "High Court of Kano State", "Court of Appeal",
-                    "Supreme Court of Nigeria", "National Industrial Court", "Magistrate Court",
-                ]
-                default_court = st.selectbox(
-                    "Default Court", _courts,
-                    index=_courts.index(firm_cfg["default_court"])
-                          if firm_cfg.get("default_court") in _courts else 0,
-                    key="fa_default_court",
-                )
-                _states = [
-                    "Lagos", "FCT / Abuja", "Rivers", "Kano", "Ogun", "Oyo",
-                    "Anambra", "Enugu", "Delta", "Cross River", "Federal",
-                ]
-                default_state = st.selectbox(
-                    "Default State / Jurisdiction", _states,
-                    index=_states.index(firm_cfg["default_state"])
-                          if firm_cfg.get("default_state") in _states else 0,
-                    key="fa_default_state",
-                )
-
-            with fa2:
-                st.markdown("##### 🤖 AI & Monthly Budget")
-                monthly_ai_budget = st.number_input(
-                    "Monthly AI Budget (₦)",
-                    min_value=0, max_value=10_000_000,
-                    value=int(firm_cfg.get("monthly_ai_budget", 0)),
-                    step=1000, key="fa_ai_budget",
-                    help="Set to 0 for no limit. Alerts when 80% is reached.",
-                )
-                allowed_models = st.multiselect(
-                    "Allowed AI Models",
-                    SUPPORTED_MODELS,
-                    default=[m for m in firm_cfg.get("allowed_models", SUPPORTED_MODELS)
-                             if m in SUPPORTED_MODELS],
-                    key="fa_allowed_models",
-                )
-                st.markdown("##### 📋 Letterhead & Exports")
-                letterhead_footer = st.text_area(
-                    "Default Letterhead Footer",
-                    value=firm_cfg.get("letterhead_footer", ""),
-                    height=80, key="fa_lh_footer",
-                    placeholder="e.g. Solicitors & Advocates · RC No. 123456",
-                )
-                bank_name = st.text_input(
-                    "Bank Name (for invoices)",
-                    value=firm_cfg.get("bank_name", ""), key="fa_bank_name",
-                    placeholder="e.g. First Bank of Nigeria",
-                )
-                bank_account = st.text_input(
-                    "Account Number",
-                    value=firm_cfg.get("bank_account", ""), key="fa_bank_acct",
-                    placeholder="e.g. 1234567890",
-                )
-                bank_sort_code = st.text_input(
-                    "Sort Code / Account Name",
-                    value=firm_cfg.get("bank_sort_code", ""), key="fa_bank_sort",
-                    placeholder="e.g. Adekunle & Associates",
-                )
-                st.markdown("##### 🔐 User Permissions")
-                allow_self_register = st.toggle(
-                    "Allow self-registration",
-                    value=firm_cfg.get("allow_self_register", True),
-                    key="fa_self_reg",
-                )
-                require_admin_approval = st.toggle(
-                    "Require admin approval for new accounts",
-                    value=firm_cfg.get("require_admin_approval", False),
-                    key="fa_admin_approval",
-                )
-                allow_user_api_key = st.toggle(
-                    "Allow users to set their own API key",
-                    value=firm_cfg.get("allow_user_api_key", True),
-                    key="fa_user_api_key",
-                )
-
-            st.markdown("---")
-            if st.button("💾 Save Firm Admin Settings", type="primary",
-                         key="fa_save_btn", use_container_width=True):
-                st.session_state.profile["firm_config"] = {
-                    "default_hourly_rate":    default_hourly,
-                    "billing_currency":       default_currency,
-                    "vat_rate":               vat_rate,
-                    "wht_rate":               wht_rate,
-                    "default_court":          default_court,
-                    "default_state":          default_state,
-                    "monthly_ai_budget":      monthly_ai_budget,
-                    "allowed_models":         allowed_models,
-                    "letterhead_footer":      letterhead_footer.strip(),
-                    "bank_name":              bank_name.strip(),
-                    "bank_account":           bank_account.strip(),
-                    "bank_sort_code":         bank_sort_code.strip(),
-                    "allow_self_register":    allow_self_register,
-                    "require_admin_approval": require_admin_approval,
-                    "allow_user_api_key":     allow_user_api_key,
-                }
-                persist_profile()
-                get_db().append_audit(
-                    "FIRM_SETTINGS_UPDATED",
-                    f"admin={st.session_state.get('current_username','')}",
-                )
-                st.success("✅ Firm admin settings saved.")
-                st.rerun()
-
-            # Billing preview
-            st.markdown("---")
-            st.markdown("##### 💰 Billing Preview")
-            _currency_sym = {"NGN (₦)": "₦", "USD ($)": "$",
-                             "GBP (£)": "£", "EUR (€)": "€"}.get(
-                firm_cfg.get("billing_currency", "NGN (₦)"), "₦"
-            )
-            _sample_hours = 5.0
-            _subtotal = _sample_hours * firm_cfg.get("default_hourly_rate", 50000)
-            _vat_amt  = _subtotal * (firm_cfg.get("vat_rate", 7.5) / 100)
-            _wht_amt  = _subtotal * (firm_cfg.get("wht_rate", 5.0) / 100)
-            _total    = _subtotal + _vat_amt - _wht_amt
-            st.markdown(
-                f'<div style="background:var(--la-bg2);border:1px solid var(--la-border);'
-                f'border-radius:8px;padding:0.9rem 1.2rem;font-size:0.86rem;color:var(--la-text);">'
-                f'<strong>Sample Invoice — 5 hours @ '
-                f'{_currency_sym}{firm_cfg.get("default_hourly_rate", 50000):,.0f}/hr</strong><br><br>'
-                f'Subtotal: <strong>{_currency_sym}{_subtotal:,.2f}</strong><br>'
-                f'VAT ({firm_cfg.get("vat_rate", 7.5)}%): '
-                f'<strong>{_currency_sym}{_vat_amt:,.2f}</strong><br>'
-                f'WHT ({firm_cfg.get("wht_rate", 5.0)}%): '
-                f'<strong>−{_currency_sym}{_wht_amt:,.2f}</strong><br>'
-                f'<hr style="margin:0.4rem 0;border-color:var(--la-border);">'
-                f'<strong>Total Payable: {_currency_sym}{_total:,.2f}</strong>'
-                f'</div>',
-                unsafe_allow_html=True,
-            )
 
 
 # ═══════════════════════════════════════════════════════
@@ -12732,7 +12655,7 @@ def render_confidence_panel(scores: dict) -> str:
         return f"""
 <div style="margin-bottom:0.45rem;">
   <div style="display:flex;justify-content:space-between;font-size:0.78rem;margin-bottom:2px;">
-    <span style="color:#475569;font-weight:500;">{esc(name)}</span>
+    <span style="color:var(--la-text2);font-weight:500;">{esc(name)}</span>
     <span style="color:{ax_color};font-weight:700;">{score}/10</span>
   </div>
   <div style="background:#e5e7eb;border-radius:999px;height:6px;">
