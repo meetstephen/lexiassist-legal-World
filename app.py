@@ -1490,8 +1490,8 @@ def render_citation_audit(audit: dict) -> str:
         for vc in audit["verified_cases"]:
             html += (f'<div style="padding:0.4rem 0; border-bottom:1px solid #e2e8f0;">'
                      f'<strong>{esc(vc["name"])}</strong> '
-                     f'<code style="background:var(--la-bg2); padding:0.1rem 0.4rem; border-radius:3px;color:var(--la-text);">{esc(vc["citation"])}</code><br>'
-                     f'<small style="color:var(--la-text2);">{esc(vc["court"])} · {vc["year"]} · {esc(vc["principle"])}</small>'
+                     f'<code style="background:#f0fdf4; padding:0.1rem 0.4rem; border-radius:3px;">{esc(vc["citation"])}</code><br>'
+                     f'<small style="color:#475569;">{esc(vc["court"])} · {vc["year"]} · {esc(vc["principle"])}</small>'
                      f'</div>')
         html += '</div></details>'
 
@@ -2887,6 +2887,76 @@ section[data-testid="stSidebar"] [data-testid="stWidgetLabel"] p{{
 iframe[height="0"],iframe[style*="height: 0"]{{
   display:none!important;height:0!important;min-height:0!important;
   padding:0!important;margin:0!important;border:none!important;}}
+
+/* ══════════════════════════════════════════════════════
+   FIX 1 — SIDEBAR: always scrollable, never vanishes
+   ══════════════════════════════════════════════════════ */
+/* Ensure the sidebar panel itself is always rendered and scrollable */
+section[data-testid="stSidebar"] {{
+  display: flex !important;
+  visibility: visible !important;
+  overflow-y: auto !important;
+  overflow-x: hidden !important;
+  height: 100vh !important;
+  min-height: 100vh !important;
+}}
+/* The inner content wrapper must also scroll freely */
+section[data-testid="stSidebarContent"] {{
+  display: flex !important;
+  flex-direction: column !important;
+  overflow-y: auto !important;
+  overflow-x: hidden !important;
+  height: 100% !important;
+  min-height: 0 !important;          /* critical: allows flex children to shrink */
+  padding-bottom: 2rem !important;   /* breathing room at the bottom */
+}}
+/* The collapse toggle button: always visible and clickable */
+[data-testid="collapsedControl"] {{
+  display: flex !important;
+  visibility: visible !important;
+  z-index: 9999 !important;
+}}
+/* Sidebar nav radio labels: don't clip on small screens */
+section[data-testid="stSidebar"] .stRadio label {{
+  white-space: normal !important;
+  word-break: break-word !important;
+}}
+
+/* ══════════════════════════════════════════════════════
+   FIX 3 — MAIN CONTENT: restore horizontal tab scrollbar
+   ══════════════════════════════════════════════════════ */
+/* The tab button list must scroll horizontally when tabs overflow */
+div[data-testid="stTabs"] [role="tablist"] {{
+  overflow-x: auto !important;
+  overflow-y: hidden !important;
+  flex-wrap: nowrap !important;        /* keep all tabs on one row */
+  -webkit-overflow-scrolling: touch !important;  /* smooth on iOS */
+  scrollbar-width: thin !important;   /* Firefox: thin scrollbar */
+  scrollbar-color: {border} transparent !important;
+  padding-bottom: 2px !important;     /* room for scrollbar on some browsers */
+}}
+/* Webkit (Chrome/Safari/Edge) horizontal scrollbar on the tab list */
+div[data-testid="stTabs"] [role="tablist"]::-webkit-scrollbar {{
+  height: 4px !important;
+}}
+div[data-testid="stTabs"] [role="tablist"]::-webkit-scrollbar-track {{
+  background: transparent !important;
+}}
+div[data-testid="stTabs"] [role="tablist"]::-webkit-scrollbar-thumb {{
+  background: {border} !important;
+  border-radius: 4px !important;
+}}
+/* Individual tab buttons: never shrink, never wrap */
+div[data-testid="stTabs"] [role="tablist"] button {{
+  flex-shrink: 0 !important;
+  white-space: nowrap !important;
+}}
+/* Main block container: ensure it doesn't clip content */
+.main .block-container,
+div[data-testid="stMainBlockContainer"] {{
+  overflow-x: visible !important;
+  max-width: 100% !important;
+}}
 </style>"""
 
 # ═══════════════════════════════════════════════════════
@@ -4375,9 +4445,9 @@ def render_sidebar(group_names=None):
         group_names = []
     # ── Override any login-screen CSS that hid the sidebar ──────────────
     st.markdown("""<style>
-[data-testid="stSidebar"]{display:flex!important;visibility:visible!important;}
-[data-testid="collapsedControl"]{display:flex!important;visibility:visible!important;}
-section[data-testid="stSidebarContent"]{display:flex!important;}
+[data-testid="stSidebar"]{display:flex!important;visibility:visible!important;overflow-y:auto!important;overflow-x:hidden!important;height:100vh!important;min-height:100vh!important;}
+[data-testid="collapsedControl"]{display:flex!important;visibility:visible!important;z-index:9999!important;}
+section[data-testid="stSidebarContent"]{display:flex!important;flex-direction:column!important;overflow-y:auto!important;overflow-x:hidden!important;height:100%!important;min-height:0!important;padding-bottom:2rem!important;}
 </style>""", unsafe_allow_html=True)
     with st.sidebar:
         firm = get_firm_name()
@@ -4885,8 +4955,7 @@ def render_home():
             st.markdown("##### ✅ Upcoming Tasks")
             if _overdue_n:
                 st.markdown(
-                    f'<div style="background:var(--la-card);border:1px solid #dc2626;'
-                    f'border-left:4px solid #dc2626;'
+                    f'<div style="background:#fef2f2;border:1px solid #fecaca;'
                     f'border-radius:8px;padding:0.5rem 0.9rem;margin-bottom:0.4rem;">'
                     f'<strong style="color:#dc2626;">⚠️ {_overdue_n} overdue task(s)</strong>'
                     f' — go to ✅ Tasks to review.</div>',
@@ -5594,9 +5663,9 @@ RESPONSE TO ANALYSE:
                     for _it in _struct.get("verified_law", []):
                         _badge = "🏛️" if _it.get("type") == "Case" else "📜"
                         st.markdown(
-                            f'<div style="background:var(--la-card);border-left:3px solid #16a34a;'
+                            f'<div style="background:#f0fdf4;border-left:3px solid #16a34a;'
                             f'border-radius:6px;padding:0.4rem 0.7rem;margin-bottom:0.4rem;'
-                            f'font-size:0.82rem;color:var(--la-text);">{_badge} {esc(_it.get("item",""))}</div>',
+                            f'font-size:0.82rem;">{_badge} {esc(_it.get("item",""))}</div>',
                             unsafe_allow_html=True,
                         )
                     if not _struct.get("verified_law"):
@@ -5607,7 +5676,7 @@ RESPONSE TO ANALYSE:
                         st.markdown(
                             f'<div style="background:var(--la-bg2);border-left:3px solid #6366f1;'
                             f'border-radius:6px;padding:0.4rem 0.7rem;margin-bottom:0.4rem;'
-                            f'font-size:0.82rem;color:var(--la-text);">{esc(_it.get("item",""))}</div>',
+                            f'font-size:0.82rem;">{esc(_it.get("item",""))}</div>',
                             unsafe_allow_html=True,
                         )
                     if not _struct.get("analysis"):
@@ -5616,10 +5685,10 @@ RESPONSE TO ANALYSE:
                     st.markdown("##### ⚠️ To Confirm")
                     for _it in _struct.get("to_confirm", []):
                         st.markdown(
-                            f'<div style="background:var(--la-card);border-left:3px solid #f59e0b;'
+                            f'<div style="background:var(--la-bg2);border-left:3px solid #f59e0b;'
                             f'border-radius:6px;padding:0.4rem 0.7rem;margin-bottom:0.4rem;'
-                            f'font-size:0.82rem;color:var(--la-text);"><strong>{esc(_it.get("item",""))}</strong>'
-                            f'<br><small style="color:var(--la-text2);">{esc(_it.get("reason",""))}</small></div>',
+                            f'font-size:0.82rem;"><strong>{esc(_it.get("item",""))}</strong>'
+                            f'<br><small style="color:#92400e;">{esc(_it.get("reason",""))}</small></div>',
                             unsafe_allow_html=True,
                         )
                     if not _struct.get("to_confirm"):
@@ -5697,7 +5766,7 @@ ANALYSIS:
   <div style="background:#e5e7eb;border-radius:999px;height:14px;">
     <div style="width:{strength}%;background:{color};height:14px;border-radius:999px;"></div>
   </div>
-  <small style="color:#6b7280;">{esc(p.get('reason',''))}</small>
+  <small style="color:var(--la-text2);">{esc(p.get('reason',''))}</small>
 </div>"""
                             st.markdown(bar_html, unsafe_allow_html=True)
                         st.markdown(f"**Complexity:** `{data.get('overall_complexity','—')}`")
@@ -5991,7 +6060,7 @@ LEGAL ISSUE: {prec_query}
     📖 <code>{esc(case.get('citation',''))}</code> · 📅 {esc(case.get('year',''))}
   </div>
   <div><strong>Ratio:</strong> {esc(case.get('ratio',''))}</div>
-  <div style="color:#6b7280;">
+  <div style="color:var(--la-text2);">
     <strong>Why relevant:</strong> {esc(case.get('relevance',''))}
   </div>
 </div>""", unsafe_allow_html=True)
@@ -7074,7 +7143,7 @@ margin-bottom:1rem;border:1px solid #e5e7eb;">
                 st.error(f"🚨 Most Urgent: **{data.get('most_urgent', '')}**")
                 st.warning(f"⚡ Immediate Action: {data.get('immediate_action', '')}")
                 st.markdown(
-                    '<div style="background:var(--la-bg2);border:1px solid #f59e0b;border-left:4px solid #f59e0b;border-radius:8px;'
+                    '<div style="background:var(--la-bg2);border:1px solid #fde047;border-radius:8px;'
                     'padding:0.8rem 1rem;margin-top:1rem;font-size:0.83rem;color:#713f12;">'
                     '<strong>⚠️ Important — Verify Before Relying:</strong> These deadlines are '
                     'AI-computed estimates. Limitation periods vary by jurisdiction, cause of action, '
@@ -7584,8 +7653,8 @@ MATTER FACTS: {aml_facts}
         </div>""", unsafe_allow_html=True)
 
         st.markdown(
-            '<div style="background:var(--la-bg2);border:1px solid var(--la-border);border-left:4px solid #3b82f6;border-radius:8px;'
-            'padding:0.7rem 1rem;margin-bottom:1rem;font-size:0.83rem;color:var(--la-text);">'
+            '<div style="background:#eff6ff;border:1px solid #bfdbfe;border-radius:8px;'
+            'padding:0.7rem 1rem;margin-bottom:1rem;font-size:0.83rem;color:#1e40af;">'
             '📌 <strong>How to use:</strong> Select the court, matter type and briefly describe the facts. '
             'LexiAssist will generate a step-by-step checklist covering jurisdiction basis, '
             'pre-action requirements, documents, filing steps, frontloading, service and common defects.'
@@ -7730,7 +7799,7 @@ MATTER FACTS: {aml_facts}
                             f'<div style="background:var(--la-bg2);border:1px solid var(--la-border);'
                             f'border-radius:6px;padding:0.5rem 0.8rem;margin-bottom:0.4rem;">'
                             f'<strong>{i}. {esc(s.get("step", ""))}</strong> '
-                            f'<span style="font-size:0.75rem;color:var(--la-text2);">{mand}</span><br>'
+                            f'<span style="font-size:0.75rem;color:#64748b;">{mand}</span><br>'
                             f'<small>{esc(s.get("detail", ""))}</small></div>',
                             unsafe_allow_html=True,
                         )
@@ -7739,7 +7808,7 @@ MATTER FACTS: {aml_facts}
                     st.markdown("#### 📄 Documents to File")
                     for d in chk_data["documents_to_file"]:
                         st.markdown(
-                            f'<div style="background:var(--la-card);border:1px solid #16a34a;'
+                            f'<div style="background:#f0fdf4;border:1px solid #bbf7d0;'
                             f'border-radius:6px;padding:0.5rem 0.8rem;margin-bottom:0.4rem;">'
                             f'📄 <strong>{esc(d.get("doc", ""))}</strong> — {esc(str(d.get("copies", "")))} copies<br>'
                             f'<small>{esc(d.get("notes", ""))}</small></div>',
@@ -7774,7 +7843,7 @@ MATTER FACTS: {aml_facts}
                     srv = chk_data["service"]
                     st.markdown("#### 📬 Service Requirements")
                     st.markdown(
-                        f'<div style="background:var(--la-card);border:1px solid #3b82f6;'
+                        f'<div style="background:#eff6ff;border:1px solid #bfdbfe;'
                         f'border-radius:6px;padding:0.6rem 0.9rem;margin-bottom:0.6rem;">'
                         f'<strong>{esc(srv.get("method", ""))}</strong><br>'
                         f'<small>⏰ {esc(srv.get("timeframe", ""))} · {esc(srv.get("authority", ""))}</small>'
@@ -7786,7 +7855,7 @@ MATTER FACTS: {aml_facts}
                     st.markdown("#### 🚨 Common Filing Defects")
                     for d in chk_data["common_defects"]:
                         st.markdown(
-                            f'<div style="background:var(--la-card);border:1px solid #dc2626;'
+                            f'<div style="background:#fef2f2;border:1px solid #fecaca;'
                             f'border-radius:6px;padding:0.5rem 0.8rem;margin-bottom:0.4rem;">'
                             f'🚨 <strong>{esc(d.get("defect", ""))}</strong><br>'
                             f'<small style="color:#dc2626;">{esc(d.get("consequence", ""))}</small></div>',
@@ -7850,8 +7919,8 @@ MATTER FACTS: {aml_facts}
         </div>""", unsafe_allow_html=True)
 
         st.markdown(
-            '<div style="background:var(--la-bg2);border:1px solid var(--la-border);border-left:4px solid #3b82f6;border-radius:8px;'
-            'padding:0.7rem 1rem;margin-bottom:1rem;font-size:0.83rem;color:var(--la-text);">'
+            '<div style="background:#eff6ff;border:1px solid #bfdbfe;border-radius:8px;'
+            'padding:0.7rem 1rem;margin-bottom:1rem;font-size:0.83rem;color:#1e40af;">'
             '🔍 <strong>How it works:</strong> Paste AI-generated text or a legal argument. '
             'LexiAssist extracts every statute, case, and rule cited, then checks each one against '
             'its verified Nigerian legal database and flags hallucinations, repealed laws, and unverified authorities.'
@@ -8114,7 +8183,7 @@ def render_global_search():
         snippet = text[start:end]
         return esc(snippet).replace(
             esc(text[idx:idx+len(term)]),
-            f'<strong style="background:#fef9c3;">{esc(text[idx:idx+len(term)])}</strong>',
+            f'<strong style="background:var(--la-bg2);">{esc(text[idx:idx+len(term)])}</strong>',
             1,
         )
 
@@ -9123,7 +9192,7 @@ Multiple demand letters sent. No response. Client wants to sue.""",
                 st.markdown(f"- {esc(risk)}")
 
     st.markdown(f"""
-<div style="background:var(--la-card);border-left:4px solid #059669;
+<div style="background:#f0fdf4;border-left:4px solid #059669;
 padding:1rem;border-radius:0.5rem;margin-bottom:1.5rem;">
   <strong>⚡ Immediate Next Step:</strong> {esc(lifecycle.get('immediate_next_step', ''))}
 </div>""", unsafe_allow_html=True)
@@ -9161,7 +9230,7 @@ border-radius:0.75rem;padding:1.2rem;">
   <p>{esc(stage.get('description', ''))}</p>
   <p><strong>⏱️ Duration:</strong> {esc(stage.get('duration_estimate', ''))} &nbsp;|&nbsp;
   <strong>📅 Trigger:</strong> {esc(stage.get('deadline_trigger', ''))}</p>
-  {f'<div style="background:#fef3c7;border-left:3px solid #f59e0b;padding:0.6rem;border-radius:0.3rem;margin-top:0.5rem;"><strong>⚠️ Warning:</strong> {esc(stage.get("warning",""))}</div>' if stage.get("warning") else ""}
+  {f'<div style="background:var(--la-bg2);border-left:3px solid #f59e0b;padding:0.6rem;border-radius:0.3rem;margin-top:0.5rem;color:var(--la-text);"><strong>⚠️ Warning:</strong> {esc(stage.get("warning",""))}</div>' if stage.get("warning") else ""}
 </div>""", unsafe_allow_html=True)
 
             dc1, dc2 = st.columns(2)
@@ -9396,7 +9465,7 @@ with the defendant.""",
 
                 with s1_tab:
                     st.markdown(f"""
-<div style="background:var(--la-card);border-left:4px solid #059669;border-radius:0.75rem;
+<div style="background:#f0fdf4;border-left:4px solid #059669;border-radius:0.75rem;
 padding:1.5rem;line-height:1.8;">
   <h4 style="margin:0 0 1rem 0;color:#059669;">📋 Examination-in-Chief — {esc(role_label)}</h4>
   <div style="white-space:pre-wrap;font-size:0.95rem;">{esc(sec1)}</div>
@@ -9404,7 +9473,7 @@ padding:1.5rem;line-height:1.8;">
 
                 with s2_tab:
                     st.markdown(f"""
-<div style="background:var(--la-card);border-left:4px solid #dc2626;border-radius:0.75rem;
+<div style="background:#fef2f2;border-left:4px solid #dc2626;border-radius:0.75rem;
 padding:1.5rem;line-height:1.8;">
   <h4 style="margin:0 0 1rem 0;color:#dc2626;">⚔️ Cross-Examination Risks</h4>
   <div style="white-space:pre-wrap;font-size:0.95rem;">{esc(sec2)}</div>
@@ -9412,7 +9481,7 @@ padding:1.5rem;line-height:1.8;">
 
                 with s3_tab:
                     st.markdown(f"""
-<div style="background:var(--la-card);border-left:4px solid #f59e0b;border-radius:0.75rem;
+<div style="background:#fffbeb;border-left:4px solid #f59e0b;border-radius:0.75rem;
 padding:1.5rem;line-height:1.8;">
   <h4 style="margin:0 0 1rem 0;color:#d97706;">🧭 Coaching Notes for the Witness</h4>
   <div style="white-space:pre-wrap;font-size:0.95rem;">{esc(sec3)}</div>
@@ -9420,10 +9489,10 @@ padding:1.5rem;line-height:1.8;">
 
                 with s4_tab:
                     st.markdown("""
-<div style="background:var(--la-card);border-left:4px solid #3b82f6;border-radius:0.6rem;
+<div style="background:#eff6ff;border-left:4px solid #3b82f6;border-radius:0.6rem;
 padding:0.9rem 1.2rem;margin-bottom:1rem;">
   <strong style="color:#1d4ed8;">↩️ Re-Examination Questions</strong><br>
-  <small style="color:var(--la-text2);">Generated from the cross-examination attack points above.
+  <small style="color:#475569;">Generated from the cross-examination attack points above.
   Re-examination is limited to matters arising from cross-examination (Evidence Act 2011, s.215).</small>
 </div>""", unsafe_allow_html=True)
 
@@ -9445,7 +9514,7 @@ padding:0.9rem 1.2rem;margin-bottom:1rem;">
                             st.rerun()
                     else:
                         st.markdown(f"""
-<div style="background:var(--la-card);border-left:4px solid #3b82f6;border-radius:0.75rem;
+<div style="background:#eff6ff;border-left:4px solid #3b82f6;border-radius:0.75rem;
 padding:1.5rem;line-height:1.8;white-space:pre-wrap;font-size:0.95rem;">
 {esc(reexam_result)}</div>""", unsafe_allow_html=True)
                         re1, re2 = st.columns(2)
@@ -9537,15 +9606,15 @@ padding:1.5rem;line-height:1.8;white-space:pre-wrap;font-size:0.95rem;">
                         lt1, lt2, lt3 = st.tabs(["📋 Exam-in-Chief", "⚔️ Cross-Exam Risks", "🧭 Coaching"])
                         with lt1:
                             st.markdown(f'<div style="white-space:pre-wrap;font-size:0.9rem;'
-                                        f'background:var(--la-card);border-left:3px solid #059669;padding:1rem;border-radius:0.5rem;color:var(--la-text);">'
+                                        f'background:#f0fdf4;padding:1rem;border-radius:0.5rem;">'
                                         f'{esc(log_sec1)}</div>', unsafe_allow_html=True)
                         with lt2:
                             st.markdown(f'<div style="white-space:pre-wrap;font-size:0.9rem;'
-                                        f'background:var(--la-card);border-left:3px solid #dc2626;padding:1rem;border-radius:0.5rem;color:var(--la-text);">'
+                                        f'background:#fef2f2;padding:1rem;border-radius:0.5rem;">'
                                         f'{esc(log_sec2)}</div>', unsafe_allow_html=True)
                         with lt3:
                             st.markdown(f'<div style="white-space:pre-wrap;font-size:0.9rem;'
-                                        f'background:var(--la-card);border-left:3px solid #f59e0b;padding:1rem;border-radius:0.5rem;color:var(--la-text);">'
+                                        f'background:#fffbeb;padding:1rem;border-radius:0.5rem;">'
                                         f'{esc(log_sec3)}</div>', unsafe_allow_html=True)
                     else:
                         st.markdown(f'<div class="response-box" style="font-size:0.88rem;">'
@@ -9874,7 +9943,7 @@ display:inline-block;font-size:0.9rem;color:var(--la-text);">
                             st.markdown(f"""
 <div style="margin-top:1rem;background:var(--la-card);border:1px solid var(--la-border);
 border-radius:0.75rem;padding:1.4rem;">
-  <h5 style="margin:0 0 0.8rem 0;color:#1e293b;">🔬 Full Legal Analysis</h5>
+  <h5 style="margin:0 0 0.8rem 0;color:var(--la-text);">🔬 Full Legal Analysis</h5>
   <div style="white-space:pre-wrap;font-size:0.92rem;line-height:1.75;">{esc(dd_result)}</div>
 </div>""", unsafe_allow_html=True)
                             safe_pdf_download(
@@ -10059,7 +10128,7 @@ paid. Matter is before the Lagos State Rent Tribunal.""",
                     summary_text = scan_result.get("scan_summary", "")
                     if summary_text:
                         st.markdown(f"""
-<div style="background:var(--la-card);border:2px solid #059669;border-radius:0.75rem;
+<div style="background:#f0fdf4;border:2px solid #059669;border-radius:0.75rem;
 padding:1rem 1.4rem;margin-bottom:1.2rem;">
   <strong style="color:#059669;">🎯 Scan Summary:</strong>
   <span style="font-size:0.95rem;"> {esc(summary_text)}</span>
@@ -10105,7 +10174,7 @@ padding:1rem 1.2rem;margin-bottom:0.7rem;">
       <span style="font-size:0.8rem;">{esc(fav_label)}</span>
     </div>
   </div>
-  {f'<p style="margin:0;font-size:0.9rem;color:#374151;line-height:1.6;">{esc(how)}</p>' if how else ''}
+  {f'<p style="margin:0;font-size:0.9rem;color:var(--la-text);line-height:1.6;">{esc(how)}</p>' if how else ''}
 </div>""", unsafe_allow_html=True)
 
                     # Export scan report
@@ -10478,11 +10547,11 @@ def render_profile():
                         msg["To"] = st.session_state.profile["notif_email"]
                         body = f"""
 <html>
-<body style="font-family:Georgia,serif;max-width:600px;margin:auto;padding:20px;color:#1e293b;">
+<body style="font-family:Georgia,serif;max-width:600px;margin:auto;padding:20px;color:var(--la-text);">
   <h2 style="color:#059669;border-bottom:2px solid #059669;padding-bottom:10px;">
     ⚖️ LexiAssist Hearing Reminder
   </h2>
-  <div style="background:var(--la-card);border-left:4px solid #059669;
+  <div style="background:#f0fdf4;border-left:4px solid #059669;
   padding:15px;border-radius:8px;margin:20px 0;">
     <h3 style="margin:0 0 10px 0;">{esc(h['title'])}</h3>
     <p style="margin:5px 0;"><strong>Suit Number:</strong> {esc(h['suit'])}</p>
@@ -10492,11 +10561,11 @@ def render_profile():
       <span style="color:#dc2626;font-weight:bold;">{days_until(h['date'])} day(s)</span>
     </p>
   </div>
-  <p style="background:#fef3c7;padding:10px;border-radius:6px;">
+  <p style="background:#fff8e1;padding:10px;border-radius:6px;color:#5a4000;border-left:4px solid #f59e0b;">
     ⚠️ Please ensure all court processes, briefs, and appearances
     are prepared well in advance.
   </p>
-  <p style="color:#6b7280;font-size:12px;margin-top:30px;
+  <p style="color:var(--la-text2);font-size:12px;margin-top:30px;
   border-top:1px solid #e5e7eb;padding-top:10px;">
     Sent by <strong>{esc(firm)}</strong> via LexiAssist v8.0 ·
     {datetime.now().strftime('%d %B %Y at %H:%M')}
@@ -10730,183 +10799,7 @@ def render_profile():
                 st.success("✅ All data reset. Profile and password preserved.")
                 st.rerun()
 
-    # ── Firm Admin Settings (admin only) — CORRECT LOCATION ───────────────
-    if _is_admin and tab_firm_admin is not None:
-        with tab_firm_admin:
-            st.markdown("#### ⚙️ Firm-Wide Admin Settings")
-            st.caption(
-                "These settings apply across the whole firm deployment. "
-                "Visible to admins only."
-            )
-            firm_cfg = st.session_state.profile.get("firm_config", {})
-            fa1, fa2 = st.columns(2)
 
-            with fa1:
-                st.markdown("##### 💰 Default Billing Rates")
-                default_hourly = st.number_input(
-                    "Default Hourly Rate (₦)",
-                    min_value=0, max_value=5_000_000,
-                    value=int(firm_cfg.get("default_hourly_rate", 50000)),
-                    step=5000, key="fa_hourly_rate",
-                    help="Used as the default when creating new time entries",
-                )
-                default_currency = st.selectbox(
-                    "Billing Currency",
-                    ["NGN (₦)", "USD ($)", "GBP (£)", "EUR (€)"],
-                    index=["NGN (₦)", "USD ($)", "GBP (£)", "EUR (€)"].index(
-                        firm_cfg.get("billing_currency", "NGN (₦)")
-                    ),
-                    key="fa_currency",
-                )
-                vat_rate = st.number_input(
-                    "VAT Rate (%)", min_value=0.0, max_value=30.0,
-                    value=float(firm_cfg.get("vat_rate", 7.5)),
-                    step=0.5, format="%.1f", key="fa_vat_rate",
-                    help="Applied to invoices (Nigeria standard VAT is 7.5%)",
-                )
-                wht_rate = st.number_input(
-                    "WHT Rate (%) — Withholding Tax",
-                    min_value=0.0, max_value=20.0,
-                    value=float(firm_cfg.get("wht_rate", 5.0)),
-                    step=0.5, format="%.1f", key="fa_wht_rate",
-                    help="Withholding Tax (typically 5% or 10%)",
-                )
-                st.markdown("##### 🏛️ Default Jurisdictions")
-                _courts = [
-                    "Federal High Court", "High Court of Lagos State",
-                    "High Court of Abuja (FCT)", "High Court of Rivers State",
-                    "High Court of Kano State", "Court of Appeal",
-                    "Supreme Court of Nigeria", "National Industrial Court",
-                    "Magistrate Court",
-                ]
-                default_court = st.selectbox(
-                    "Default Court", _courts,
-                    index=_courts.index(firm_cfg["default_court"])
-                          if firm_cfg.get("default_court") in _courts else 0,
-                    key="fa_default_court",
-                )
-                _states = [
-                    "Lagos", "FCT / Abuja", "Rivers", "Kano", "Ogun", "Oyo",
-                    "Anambra", "Enugu", "Delta", "Cross River", "Federal",
-                ]
-                default_state = st.selectbox(
-                    "Default State / Jurisdiction", _states,
-                    index=_states.index(firm_cfg["default_state"])
-                          if firm_cfg.get("default_state") in _states else 0,
-                    key="fa_default_state",
-                )
-
-            with fa2:
-                st.markdown("##### 🤖 AI & Monthly Budget")
-                monthly_ai_budget = st.number_input(
-                    "Monthly AI Budget (₦)",
-                    min_value=0, max_value=10_000_000,
-                    value=int(firm_cfg.get("monthly_ai_budget", 0)),
-                    step=1000, key="fa_ai_budget",
-                    help="Set to 0 for no limit.",
-                )
-                allowed_models = st.multiselect(
-                    "Allowed AI Models", SUPPORTED_MODELS,
-                    default=[m for m in firm_cfg.get("allowed_models", SUPPORTED_MODELS)
-                             if m in SUPPORTED_MODELS],
-                    key="fa_allowed_models",
-                )
-                st.markdown("##### 📋 Letterhead & Exports")
-                letterhead_footer = st.text_area(
-                    "Default Letterhead Footer",
-                    value=firm_cfg.get("letterhead_footer", ""),
-                    height=80, key="fa_lh_footer",
-                    placeholder="e.g. Solicitors & Advocates · RC No. 123456",
-                )
-                bank_name = st.text_input(
-                    "Bank Name (for invoices)",
-                    value=firm_cfg.get("bank_name", ""), key="fa_bank_name",
-                    placeholder="e.g. First Bank of Nigeria",
-                )
-                bank_account = st.text_input(
-                    "Account Number",
-                    value=firm_cfg.get("bank_account", ""), key="fa_bank_acct",
-                    placeholder="e.g. 1234567890",
-                )
-                bank_sort_code = st.text_input(
-                    "Sort Code / Account Name",
-                    value=firm_cfg.get("bank_sort_code", ""), key="fa_bank_sort",
-                    placeholder="e.g. Adekunle & Associates",
-                )
-                st.markdown("##### 🔐 User Permissions")
-                allow_self_register = st.toggle(
-                    "Allow self-registration",
-                    value=firm_cfg.get("allow_self_register", True),
-                    key="fa_self_reg",
-                )
-                require_admin_approval = st.toggle(
-                    "Require admin approval for new accounts",
-                    value=firm_cfg.get("require_admin_approval", False),
-                    key="fa_admin_approval",
-                )
-                allow_user_api_key = st.toggle(
-                    "Allow users to set their own API key",
-                    value=firm_cfg.get("allow_user_api_key", True),
-                    key="fa_user_api_key",
-                )
-
-            st.markdown("---")
-            if st.button(
-                "💾 Save Firm Admin Settings", type="primary",
-                key="fa_save_btn", use_container_width=True,
-            ):
-                st.session_state.profile["firm_config"] = {
-                    "default_hourly_rate":    default_hourly,
-                    "billing_currency":       default_currency,
-                    "vat_rate":               vat_rate,
-                    "wht_rate":               wht_rate,
-                    "default_court":          default_court,
-                    "default_state":          default_state,
-                    "monthly_ai_budget":      monthly_ai_budget,
-                    "allowed_models":         allowed_models,
-                    "letterhead_footer":      letterhead_footer.strip(),
-                    "bank_name":              bank_name.strip(),
-                    "bank_account":           bank_account.strip(),
-                    "bank_sort_code":         bank_sort_code.strip(),
-                    "allow_self_register":    allow_self_register,
-                    "require_admin_approval": require_admin_approval,
-                    "allow_user_api_key":     allow_user_api_key,
-                }
-                persist_profile()
-                get_db().append_audit(
-                    "FIRM_SETTINGS_UPDATED",
-                    f"admin={st.session_state.get('current_username', '')}",
-                )
-                st.success("✅ Firm admin settings saved.")
-                st.rerun()
-
-            st.markdown("---")
-            st.markdown("##### 💰 Billing Preview")
-            _sym = {"NGN (₦)": "₦", "USD ($)": "$",
-                    "GBP (£)": "£", "EUR (€)": "€"}.get(
-                firm_cfg.get("billing_currency", "NGN (₦)"), "₦"
-            )
-            _hrs  = 5.0
-            _sub  = _hrs * firm_cfg.get("default_hourly_rate", 50000)
-            _vat  = _sub * (firm_cfg.get("vat_rate", 7.5) / 100)
-            _wht  = _sub * (firm_cfg.get("wht_rate", 5.0) / 100)
-            _tot  = _sub + _vat - _wht
-            st.markdown(
-                f'<div style="background:var(--la-bg2);border:1px solid var(--la-border);'
-                f'border-radius:8px;padding:0.9rem 1.2rem;'
-                f'font-size:0.86rem;color:var(--la-text);">'
-                f'<strong>Sample Invoice — 5 hrs @ {_sym}'
-                f'{firm_cfg.get("default_hourly_rate", 50000):,.0f}/hr</strong><br><br>'
-                f'Subtotal: <strong>{_sym}{_sub:,.2f}</strong><br>'
-                f'VAT ({firm_cfg.get("vat_rate", 7.5)}%): '
-                f'<strong>{_sym}{_vat:,.2f}</strong><br>'
-                f'WHT ({firm_cfg.get("wht_rate", 5.0)}%): '
-                f'<strong>−{_sym}{_wht:,.2f}</strong><br>'
-                f'<hr style="margin:0.4rem 0;border-color:var(--la-border);">'
-                f'<strong>Total Payable: {_sym}{_tot:,.2f}</strong>'
-                f'</div>',
-                unsafe_allow_html=True,
-            )
 
 
 
@@ -11088,7 +10981,7 @@ def render_fee_calculator():
                 with sc3:
                     st.metric("Penalty (if late > 30 days)", fmt_currency(sd_result * 0.1 + 50))
                 st.markdown(f"""
-<div style="background:var(--la-bg2);border-left:3px solid #f59e0b;padding:0.8rem 1rem;
+<div style="background:#fffbeb;border-left:3px solid #f59e0b;padding:0.8rem 1rem;
 border-radius:0.4rem;margin-top:0.5rem;font-size:0.9rem;">
   ⚠️ <strong>Reminder:</strong> Stamp duty must be paid within 30 days of execution.
   Late stamping attracts a 10% penalty plus ₦50 administrative charge.
@@ -11108,7 +11001,8 @@ border-radius:0.4rem;margin-top:0.5rem;font-size:0.9rem;">
     with tab_court:
         st.markdown("#### 🏛️ Court Filing Fee Estimator")
         st.markdown(
-            '<div style="background:#fef3c7;border:1px solid #f59e0b;border-radius:8px;'
+            '<div style="background:var(--la-bg2);border:1px solid var(--la-border);'
+            'border-left:4px solid #f59e0b;border-radius:8px;'
             'padding:0.6rem 1rem;font-size:0.82rem;color:var(--la-text);margin-bottom:0.5rem;">'
             '<strong>⚠️ Estimate Only — Verify Before Filing:</strong> These fees are '
             'indicative and based on the applicable Rules of Court. Registry fees change '
@@ -11160,7 +11054,8 @@ border-radius:0.4rem;margin-top:0.5rem;font-size:0.9rem;">
             verified_on = court.get("last_verified", "—")
             st.info(f"ℹ️ **{court['label']}:** {court_note}")
             st.markdown(
-                f'<div style="background:#fef3c7;border:1px solid #f59e0b;border-radius:6px;'
+                f'<div style="background:var(--la-bg2);border:1px solid var(--la-border);'
+                f'border-left:4px solid #f59e0b;border-radius:6px;'
                 f'padding:0.55rem 0.9rem;margin:0.4rem 0 0.8rem 0;font-size:0.82rem;color:var(--la-text);">'
                 f'⚠️ <strong>Registry fees change without notice.</strong> '
                 f'These figures are estimates based on court rules verified in '
@@ -11540,8 +11435,180 @@ XYZ claims ABC refused to pay the last instalment of ₦10M. ABC disputes this."
             Counsel remains professionally responsible for all advice and negotiations.
         </div>""", unsafe_allow_html=True)
 
+    # ── Firm Admin Settings (admin only) ──────────────────────────────────
+    if _is_admin and tab_firm_admin is not None:
+        with tab_firm_admin:
+            st.markdown("#### ⚙️ Firm-Wide Admin Settings")
+            st.caption("These settings apply across the whole firm deployment. Visible to admins only.")
 
+            firm_cfg = st.session_state.profile.get("firm_config", {})
 
+            fa1, fa2 = st.columns(2)
+
+            with fa1:
+                st.markdown("##### 💰 Default Billing Rates")
+                default_hourly = st.number_input(
+                    "Default Hourly Rate (₦)",
+                    min_value=0, max_value=5_000_000,
+                    value=int(firm_cfg.get("default_hourly_rate", 50000)),
+                    step=5000, key="fa_hourly_rate",
+                    help="Used as the default when creating new time entries",
+                )
+                default_currency = st.selectbox(
+                    "Billing Currency",
+                    ["NGN (₦)", "USD ($)", "GBP (£)", "EUR (€)"],
+                    index=["NGN (₦)", "USD ($)", "GBP (£)", "EUR (€)"].index(
+                        firm_cfg.get("billing_currency", "NGN (₦)")
+                    ),
+                    key="fa_currency",
+                )
+                vat_rate = st.number_input(
+                    "VAT Rate (%)", min_value=0.0, max_value=30.0,
+                    value=float(firm_cfg.get("vat_rate", 7.5)),
+                    step=0.5, format="%.1f", key="fa_vat_rate",
+                    help="Applied to invoices (Nigeria standard VAT is 7.5%)",
+                )
+                wht_rate = st.number_input(
+                    "WHT Rate (%) — Withholding Tax",
+                    min_value=0.0, max_value=20.0,
+                    value=float(firm_cfg.get("wht_rate", 5.0)),
+                    step=0.5, format="%.1f", key="fa_wht_rate",
+                    help="Withholding Tax rate for professional services (typically 5% or 10%)",
+                )
+                st.markdown("##### 🏛️ Default Jurisdictions")
+                _courts = [
+                    "Federal High Court", "High Court of Lagos State",
+                    "High Court of Abuja (FCT)", "High Court of Rivers State",
+                    "High Court of Kano State", "Court of Appeal",
+                    "Supreme Court of Nigeria", "National Industrial Court", "Magistrate Court",
+                ]
+                default_court = st.selectbox(
+                    "Default Court", _courts,
+                    index=_courts.index(firm_cfg["default_court"])
+                          if firm_cfg.get("default_court") in _courts else 0,
+                    key="fa_default_court",
+                )
+                _states = [
+                    "Lagos", "FCT / Abuja", "Rivers", "Kano", "Ogun", "Oyo",
+                    "Anambra", "Enugu", "Delta", "Cross River", "Federal",
+                ]
+                default_state = st.selectbox(
+                    "Default State / Jurisdiction", _states,
+                    index=_states.index(firm_cfg["default_state"])
+                          if firm_cfg.get("default_state") in _states else 0,
+                    key="fa_default_state",
+                )
+
+            with fa2:
+                st.markdown("##### 🤖 AI & Monthly Budget")
+                monthly_ai_budget = st.number_input(
+                    "Monthly AI Budget (₦)",
+                    min_value=0, max_value=10_000_000,
+                    value=int(firm_cfg.get("monthly_ai_budget", 0)),
+                    step=1000, key="fa_ai_budget",
+                    help="Set to 0 for no limit. Alerts when 80% is reached.",
+                )
+                allowed_models = st.multiselect(
+                    "Allowed AI Models",
+                    SUPPORTED_MODELS,
+                    default=[m for m in firm_cfg.get("allowed_models", SUPPORTED_MODELS)
+                             if m in SUPPORTED_MODELS],
+                    key="fa_allowed_models",
+                )
+                st.markdown("##### 📋 Letterhead & Exports")
+                letterhead_footer = st.text_area(
+                    "Default Letterhead Footer",
+                    value=firm_cfg.get("letterhead_footer", ""),
+                    height=80, key="fa_lh_footer",
+                    placeholder="e.g. Solicitors & Advocates · RC No. 123456",
+                )
+                bank_name = st.text_input(
+                    "Bank Name (for invoices)",
+                    value=firm_cfg.get("bank_name", ""), key="fa_bank_name",
+                    placeholder="e.g. First Bank of Nigeria",
+                )
+                bank_account = st.text_input(
+                    "Account Number",
+                    value=firm_cfg.get("bank_account", ""), key="fa_bank_acct",
+                    placeholder="e.g. 1234567890",
+                )
+                bank_sort_code = st.text_input(
+                    "Sort Code / Account Name",
+                    value=firm_cfg.get("bank_sort_code", ""), key="fa_bank_sort",
+                    placeholder="e.g. Adekunle & Associates",
+                )
+                st.markdown("##### 🔐 User Permissions")
+                allow_self_register = st.toggle(
+                    "Allow self-registration",
+                    value=firm_cfg.get("allow_self_register", True),
+                    key="fa_self_reg",
+                )
+                require_admin_approval = st.toggle(
+                    "Require admin approval for new accounts",
+                    value=firm_cfg.get("require_admin_approval", False),
+                    key="fa_admin_approval",
+                )
+                allow_user_api_key = st.toggle(
+                    "Allow users to set their own API key",
+                    value=firm_cfg.get("allow_user_api_key", True),
+                    key="fa_user_api_key",
+                )
+
+            st.markdown("---")
+            if st.button("💾 Save Firm Admin Settings", type="primary",
+                         key="fa_save_btn", use_container_width=True):
+                st.session_state.profile["firm_config"] = {
+                    "default_hourly_rate":    default_hourly,
+                    "billing_currency":       default_currency,
+                    "vat_rate":               vat_rate,
+                    "wht_rate":               wht_rate,
+                    "default_court":          default_court,
+                    "default_state":          default_state,
+                    "monthly_ai_budget":      monthly_ai_budget,
+                    "allowed_models":         allowed_models,
+                    "letterhead_footer":      letterhead_footer.strip(),
+                    "bank_name":              bank_name.strip(),
+                    "bank_account":           bank_account.strip(),
+                    "bank_sort_code":         bank_sort_code.strip(),
+                    "allow_self_register":    allow_self_register,
+                    "require_admin_approval": require_admin_approval,
+                    "allow_user_api_key":     allow_user_api_key,
+                }
+                persist_profile()
+                get_db().append_audit(
+                    "FIRM_SETTINGS_UPDATED",
+                    f"admin={st.session_state.get('current_username','')}",
+                )
+                st.success("✅ Firm admin settings saved.")
+                st.rerun()
+
+            # Billing preview
+            st.markdown("---")
+            st.markdown("##### 💰 Billing Preview")
+            _currency_sym = {"NGN (₦)": "₦", "USD ($)": "$",
+                             "GBP (£)": "£", "EUR (€)": "€"}.get(
+                firm_cfg.get("billing_currency", "NGN (₦)"), "₦"
+            )
+            _sample_hours = 5.0
+            _subtotal = _sample_hours * firm_cfg.get("default_hourly_rate", 50000)
+            _vat_amt  = _subtotal * (firm_cfg.get("vat_rate", 7.5) / 100)
+            _wht_amt  = _subtotal * (firm_cfg.get("wht_rate", 5.0) / 100)
+            _total    = _subtotal + _vat_amt - _wht_amt
+            st.markdown(
+                f'<div style="background:var(--la-bg2);border:1px solid var(--la-border);'
+                f'border-radius:8px;padding:0.9rem 1.2rem;font-size:0.86rem;color:var(--la-text);">'
+                f'<strong>Sample Invoice — 5 hours @ '
+                f'{_currency_sym}{firm_cfg.get("default_hourly_rate", 50000):,.0f}/hr</strong><br><br>'
+                f'Subtotal: <strong>{_currency_sym}{_subtotal:,.2f}</strong><br>'
+                f'VAT ({firm_cfg.get("vat_rate", 7.5)}%): '
+                f'<strong>{_currency_sym}{_vat_amt:,.2f}</strong><br>'
+                f'WHT ({firm_cfg.get("wht_rate", 5.0)}%): '
+                f'<strong>−{_currency_sym}{_wht_amt:,.2f}</strong><br>'
+                f'<hr style="margin:0.4rem 0;border-color:var(--la-border);">'
+                f'<strong>Total Payable: {_currency_sym}{_total:,.2f}</strong>'
+                f'</div>',
+                unsafe_allow_html=True,
+            )
 
 
 # ═══════════════════════════════════════════════════════
@@ -11875,7 +11942,7 @@ def render_user_management():
                     f'<small style="color:var(--la-text-secondary);">'
                     f'{esc(r["timestamp"][:19])}</small><br>'
                     f'<small>{esc(r.get("detail","")[:200])}</small><br>'
-                    f'<code style="font-size:0.65rem;color:#94a3b8;">'
+                    f'<code style="font-size:0.65rem;color:var(--la-text2);">'
                     f'hash: {esc(r["entry_hash"][:16])}…</code>'
                     f'</div>',
                     unsafe_allow_html=True,
@@ -12038,7 +12105,7 @@ def render_user_management():
                         st.markdown(
                             f'<div class="history-item">'
                             f'<strong>{esc(nc.get("name",""))}</strong> '
-                            f'<code style="background:var(--la-bg2);padding:0.1rem 0.4rem;'
+                            f'<code style="background:#f0fdf4;padding:0.1rem 0.4rem;'
                             f'border-radius:3px;">{esc(nc.get("citation",""))}</code><br>'
                             f'<small>{esc(nc.get("principle",""))} · '
                             f'{esc(nc.get("court",""))} {esc(nc.get("year",""))}</small>'
@@ -12560,7 +12627,7 @@ def render_confidence_panel(scores: dict) -> str:
         return f"""
 <div style="margin-bottom:0.45rem;">
   <div style="display:flex;justify-content:space-between;font-size:0.78rem;margin-bottom:2px;">
-    <span style="color:var(--la-text2);font-weight:500;">{esc(name)}</span>
+    <span style="color:#475569;font-weight:500;">{esc(name)}</span>
     <span style="color:{ax_color};font-weight:700;">{score}/10</span>
   </div>
   <div style="background:#e5e7eb;border-radius:999px;height:6px;">
