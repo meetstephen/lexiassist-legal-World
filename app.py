@@ -2889,38 +2889,75 @@ iframe[height="0"],iframe[style*="height: 0"]{{
   padding:0!important;margin:0!important;border:none!important;}}
 
 /* ══════════════════════════════════════════════════════
-   FIX 1 — SIDEBAR: always scrollable, never vanishes
+   SIDEBAR — always visible, always scrollable
+   Root causes fixed:
+   1. Streamlit white header bar hidden (was overlaying scrollbar)
+   2. Outer sidebar = overflow:hidden frame only
+   3. Inner stSidebarContent = the ONE scrollable element
+   4. z-index layering prevents header from intercepting clicks
    ══════════════════════════════════════════════════════ */
-/* Outer sidebar panel: fixed frame — must NOT scroll itself */
+
+/* 1. Hide the built-in Streamlit white header bar entirely */
+header[data-testid="stHeader"] {{
+  display: none !important;
+  height: 0 !important;
+  min-height: 0 !important;
+  visibility: hidden !important;
+  pointer-events: none !important;
+}}
+/* Also kill the top decoration bar */
+[data-testid="stDecoration"] {{
+  display: none !important;
+  height: 0 !important;
+}}
+/* Remove top padding that Streamlit adds for its header */
+.stApp > .main > .block-container,
+.block-container {{
+  padding-top: 1rem !important;
+}}
+.stApp {{
+  margin-top: 0 !important;
+  padding-top: 0 !important;
+}}
+
+/* 2. Outer sidebar: rigid frame — must NOT scroll itself */
 section[data-testid="stSidebar"] {{
   display: flex !important;
   flex-direction: column !important;
   visibility: visible !important;
-  overflow: hidden !important;       /* frame only — inner content scrolls */
+  overflow: hidden !important;
   height: 100vh !important;
   min-height: 100vh !important;
   position: fixed !important;
+  top: 0 !important;
+  left: 0 !important;
+  z-index: 100 !important;
 }}
-/* Inner content wrapper: the ONE element that scrolls */
+
+/* 3. Inner content wrapper: the ONE element that scrolls */
 section[data-testid="stSidebarContent"] {{
   display: flex !important;
   flex-direction: column !important;
-  flex: 1 1 auto !important;         /* fill the outer frame */
-  overflow-y: auto !important;       /* scroll here only */
+  flex: 1 1 auto !important;
+  overflow-y: auto !important;
   overflow-x: hidden !important;
-  height: 100% !important;
-  min-height: 0 !important;          /* allows flex child to shrink & scroll */
-  padding-bottom: 3rem !important;   /* breathing room at the bottom */
-  -webkit-overflow-scrolling: touch !important; /* smooth on iOS/Safari */
-  scrollbar-width: thin !important;  /* Firefox */
+  height: 100vh !important;
+  min-height: 0 !important;
+  padding-bottom: 4rem !important;
+  -webkit-overflow-scrolling: touch !important;
+  scrollbar-width: thin !important;
 }}
-/* The collapse toggle button: always visible and clickable */
-[data-testid="collapsedControl"] {{
+
+/* 4. Collapse toggle: above everything, always clickable */
+[data-testid="collapsedControl"],
+[data-testid="stSidebarCollapseButton"] {{
   display: flex !important;
   visibility: visible !important;
   z-index: 9999 !important;
+  pointer-events: all !important;
 }}
-/* Sidebar nav radio labels: don't clip on small screens */
+
+/* 5. Sidebar radio labels: wrap properly on narrow screens */
 section[data-testid="stSidebar"] .stRadio label {{
   white-space: normal !important;
   word-break: break-word !important;
@@ -4448,28 +4485,75 @@ def render_sidebar(group_names=None):
     if group_names is None:
         group_names = []
     # ── Override any login-screen CSS that hid the sidebar ──────────────
+    # ── Enforce sidebar visibility + scrollability on every rerun ──────────
     st.markdown("""<style>
-/* Outer sidebar: fixed frame, NOT scrollable */
-section[data-testid="stSidebar"]{
-  display:flex!important;flex-direction:column!important;
-  visibility:visible!important;
-  overflow:hidden!important;
-  height:100vh!important;min-height:100vh!important;
-  position:fixed!important;
-}
-/* Inner content: the ONE scrollable element */
-section[data-testid="stSidebarContent"]{
-  display:flex!important;flex-direction:column!important;
-  flex:1 1 auto!important;
-  overflow-y:auto!important;overflow-x:hidden!important;
-  height:100%!important;min-height:0!important;
-  padding-bottom:3rem!important;
-  -webkit-overflow-scrolling:touch!important;
-}
-[data-testid="collapsedControl"]{
-  display:flex!important;visibility:visible!important;z-index:9999!important;
-}
+header[data-testid="stHeader"]{display:none!important;height:0!important;visibility:hidden!important;pointer-events:none!important;}
+[data-testid="stDecoration"]{display:none!important;height:0!important;}
+section[data-testid="stSidebar"]{display:flex!important;flex-direction:column!important;visibility:visible!important;overflow:hidden!important;height:100vh!important;min-height:100vh!important;position:fixed!important;top:0!important;left:0!important;z-index:100!important;}
+section[data-testid="stSidebarContent"]{display:flex!important;flex-direction:column!important;flex:1 1 auto!important;overflow-y:auto!important;overflow-x:hidden!important;height:100vh!important;min-height:0!important;padding-bottom:4rem!important;-webkit-overflow-scrolling:touch!important;}
+[data-testid="collapsedControl"],[data-testid="stSidebarCollapseButton"]{display:flex!important;visibility:visible!important;z-index:9999!important;pointer-events:all!important;}
 </style>""", unsafe_allow_html=True)
+    # ── JS guardian: enforces sidebar scroll on every DOM mutation ───────────
+    st.components.v1.html("""
+<script>
+(function() {
+  function fixSidebar() {
+    // Hide the Streamlit white header bar
+    var hdr = document.querySelector('header[data-testid="stHeader"]');
+    if (hdr) { hdr.style.cssText = 'display:none!important;height:0!important;'; }
+
+    // Outer sidebar: rigid frame, NOT scrollable
+    var sb = document.querySelector('section[data-testid="stSidebar"]');
+    if (sb) {
+      sb.style.setProperty('display', 'flex', 'important');
+      sb.style.setProperty('visibility', 'visible', 'important');
+      sb.style.setProperty('overflow', 'hidden', 'important');
+      sb.style.setProperty('height', '100vh', 'important');
+      sb.style.setProperty('position', 'fixed', 'important');
+      sb.style.setProperty('top', '0', 'important');
+      sb.style.setProperty('left', '0', 'important');
+      sb.style.setProperty('z-index', '100', 'important');
+    }
+
+    // Inner content wrapper: the ONE scrollable element
+    var sc = document.querySelector('section[data-testid="stSidebarContent"]');
+    if (sc) {
+      sc.style.setProperty('display', 'flex', 'important');
+      sc.style.setProperty('flex-direction', 'column', 'important');
+      sc.style.setProperty('flex', '1 1 auto', 'important');
+      sc.style.setProperty('overflow-y', 'auto', 'important');
+      sc.style.setProperty('overflow-x', 'hidden', 'important');
+      sc.style.setProperty('height', '100vh', 'important');
+      sc.style.setProperty('min-height', '0', 'important');
+      sc.style.setProperty('-webkit-overflow-scrolling', 'touch', 'important');
+    }
+  }
+
+  // Run immediately
+  fixSidebar();
+
+  // Run again after a short delay (Streamlit may redraw)
+  setTimeout(fixSidebar, 300);
+  setTimeout(fixSidebar, 800);
+
+  // Watch for any DOM changes and re-apply (survives reruns)
+  var observer = new MutationObserver(function(mutations) {
+    for (var m of mutations) {
+      if (m.addedNodes.length || m.attributeName) {
+        fixSidebar();
+        break;
+      }
+    }
+  });
+  observer.observe(document.body, {
+    childList: true,
+    subtree: true,
+    attributes: true,
+    attributeFilter: ['style', 'class']
+  });
+})();
+</script>
+""", height=0)
     with st.sidebar:
         firm = get_firm_name()
         corp = (st.session_state.get("theme", "⚖️ Corporate") == "⚖️ Corporate")
