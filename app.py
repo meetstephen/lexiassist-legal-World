@@ -4407,9 +4407,15 @@ def render_sidebar(group_names=None):
         group_names = []
     # ── Override any login-screen CSS that hid the sidebar ──────────────
     st.markdown("""<style>
-[data-testid="stSidebar"]{display:flex!important;visibility:visible!important;}
-[data-testid="collapsedControl"]{display:flex!important;visibility:visible!important;}
-section[data-testid="stSidebarContent"]{display:flex!important;}
+/* Hide Streamlit's built-in white header bar and decoration strip */
+header[data-testid="stHeader"]{display:none!important;height:0!important;min-height:0!important;pointer-events:none!important;}
+[data-testid="stDecoration"]{display:none!important;height:0!important;}
+/* Remove the top padding Streamlit adds to compensate for its header */
+.block-container{padding-top:1rem!important;}
+/* Sidebar: always visible, raised above any overlay */
+[data-testid="stSidebar"]{display:flex!important;visibility:visible!important;z-index:999!important;}
+[data-testid="collapsedControl"]{display:flex!important;visibility:visible!important;z-index:9999!important;pointer-events:all!important;}
+section[data-testid="stSidebarContent"]{display:flex!important;overflow-y:auto!important;}
 </style>""", unsafe_allow_html=True)
     with st.sidebar:
         firm = get_firm_name()
@@ -4584,44 +4590,6 @@ section[data-testid="stSidebarContent"]{display:flex!important;}
         elif today.month == 12:
             st.info("ℹ️ **NBA APC:** Renewal opens January. Deadline: 31 March.")
 
-    # ── JS: close sidebar when user clicks the main content area (mobile) ──
-    # This restores the original Streamlit behaviour where clicking outside
-    # the sidebar on mobile auto-collapses it without requiring a button tap.
-    st.components.v1.html("""
-<script>
-(function() {
-  function tryAttach() {
-    var main = window.parent.document.querySelector(
-      '.main, [data-testid="stMainBlockContainer"], section.main'
-    );
-    var collapseBtn = window.parent.document.querySelector(
-      '[data-testid="collapsedControl"] button, button[aria-label="Close sidebar"]'
-    );
-    if (!main || !collapseBtn) { return; }
-
-    main.addEventListener('click', function(e) {
-      // Only close if sidebar is currently open (on mobile widths)
-      var sidebar = window.parent.document.querySelector(
-        '[data-testid="stSidebar"]'
-      );
-      if (!sidebar) return;
-      var sidebarW = sidebar.getBoundingClientRect().width;
-      // If sidebar is open (width > 50px) and screen is narrow (<=768px)
-      if (sidebarW > 50 && window.parent.innerWidth <= 768) {
-        collapseBtn.click();
-      }
-    }, false);
-  }
-  // Retry until the DOM is ready
-  var attempts = 0;
-  var interval = setInterval(function() {
-    tryAttach();
-    attempts++;
-    if (attempts > 20) clearInterval(interval);
-  }, 400);
-})();
-</script>
-""", height=0)
 
 
 
