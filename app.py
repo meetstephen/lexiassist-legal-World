@@ -12,6 +12,7 @@ AI-generated outputs are drafting aids only. Lawyers must independently verify
 all authorities, limitation periods, court rules, filing fees, and legal conclusions
 before relying on them for client advice or court filings.
 """
+
 from __future__ import annotations
 
 import time
@@ -10205,10 +10206,20 @@ padding:1.5rem;line-height:1.8;white-space:pre-wrap;font-size:0.95rem;">
 # ═══════════════════════════════════════════════════════
 def render_legal_news():
     st.markdown("""<div class="page-header">
-        <h2>📰 Nigerian Legal News Feed</h2>
-        <p>AI-powered digest of recent legal developments · Bookmarks · Case Relevance Scan ·
-        Deep Dive analysis — searchable by subject area</p>
+    <h2>📰 Practice Update Generator</h2>
+    <p>AI-assisted Nigerian legal practice updates · Reading list · Case relevance scan · Deep-dive analysis</p>
     </div>""", unsafe_allow_html=True)
+
+    st.markdown(
+    '<div style="background:var(--la-bg2);border:1px solid #f59e0b;'
+    'border-left:4px solid #f59e0b;border-radius:8px;'
+    'padding:0.75rem 1rem;margin-bottom:1rem;font-size:0.85rem;">'
+    '<strong>⚠️ Private Beta Warning:</strong> This is an AI-assisted practice update generator, '
+    'not a live verified legal news service. Verify every development against primary sources, '
+    'law reports, regulator publications, or official court releases before relying on it.'
+    '</div>',
+    unsafe_allow_html=True,
+    )
 
     if not st.session_state.api_configured:
         st.warning("⚠️ Connect your API key first.")
