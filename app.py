@@ -40,14 +40,28 @@ except ImportError:
 
 
 def _get_encryption_key() -> bytes:
-    """Resolve Fernet key from secrets or env. Generates a session-only key as fallback (NOT persistent)."""
+    """
+    Resolve Fernet key from secrets or env.
+    Production/beta: ENCRYPTION_KEY is REQUIRED.
+    Development: generates a temporary session key if missing.
+    """
     key = ""
     try:
         key = st.secrets.get("ENCRYPTION_KEY", "")
     except Exception:
         key = os.getenv("ENCRYPTION_KEY", "")
     if not key:
-        # Fallback: derive from session — credentials encrypted this way will NOT survive restart
+        if is_production() or is_beta():
+            st.error(
+                "❌ ENCRYPTION_KEY is required in beta/production. "
+                "Generate a Fernet key and add it to Streamlit secrets."
+            )
+            st.code(
+                'python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"',
+                language="bash",
+            )
+            st.stop()
+        # Development fallback only
         if "_session_fernet_key" not in st.session_state:
             if HAS_CRYPTO:
                 st.session_state["_session_fernet_key"] = Fernet.generate_key().decode()
@@ -58,9 +72,15 @@ def _get_encryption_key() -> bytes:
 
 
 def encrypt_secret(plaintext: str) -> str:
-    """Encrypt a string. Returns base64 token, or empty string on failure."""
-    if not plaintext or not HAS_CRYPTO:
-        return plaintext  # Pass through if no crypto available
+    """Encrypt a string. Returns Fernet token prefixed with enc:."""
+    if not plaintext:
+        return ""
+    if not HAS_CRYPTO:
+        if is_production() or is_beta():
+            st.error("❌ `cryptography` package is required for beta/production secret storage.")
+            st.stop()
+        logger.warning("cryptography not installed; storing secret as plaintext in development only.")
+        return plaintext
     try:
         key = _get_encryption_key()
         if not key:
@@ -127,6 +147,44 @@ except ImportError:
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("LexiAssist")
+
+# ═══════════════════════════════════════════════════════
+# RUNTIME / ENVIRONMENT HELPERS
+# ═══════════════════════════════════════════════════════
+def app_env() -> str:
+    """Return current app environment: development, beta, or production."""
+    try:
+        return str(st.secrets.get("APP_ENV", os.getenv("APP_ENV", "development"))).lower().strip()
+    except Exception:
+        return os.getenv("APP_ENV", "development").lower().strip()
+
+def is_production() -> bool:
+    return app_env() == "production"
+
+def is_beta() -> bool:
+    return app_env() in ("beta", "private_beta", "private-beta")
+
+def require_secret(name: str) -> str:
+    """Return a required secret or stop the app with a clear error."""
+    val = ""
+    try:
+        val = st.secrets.get(name, "")
+    except Exception:
+        val = os.getenv(name, "")
+    if not val:
+        st.error(f"❌ Required secret `{name}` is missing. Add it to Streamlit secrets or environment variables.")
+        st.stop()
+    return str(val).strip()
+
+def safe_json_loads(raw: str, fallback=None):
+    """Safely parse JSON returned by LLMs."""
+    if fallback is None:
+        fallback = {}
+    try:
+        clean = raw.strip().replace("```json", "").replace("```", "").strip()
+        return json.loads(clean)
+    except Exception:
+        return fallback
 
 # ═══════════════════════════════════════════════════════
 # PAGE CONFIG
@@ -367,6 +425,25 @@ Context: Original query, previous analysis, and a follow-up question are provide
 - Address the follow-up directly with the same rigor
 - Maintain the Litigator/Strategist tone
 - Match the specified response mode"""
+
+SOURCE_BACKED_RESEARCH_SYSTEM = IDENTITY_CORE + """
+TASK: Source-Backed Nigerian Legal Research.
+
+You are given user-provided sources, extracts, URLs, or pasted text.
+You MUST distinguish between:
+1. What the supplied sources actually say
+2. Your legal analysis based on those sources
+3. What still requires independent verification
+
+STRICT RULES:
+- Do not invent sources.
+- Do not claim a source says something unless it appears in the supplied material.
+- If a URL is supplied without extract text, say it must be independently opened and verified.
+- Use Nigerian law throughout.
+- Mark unsupported propositions as [UNSUPPORTED BY PROVIDED SOURCES].
+- End with a "Verification Checklist".
+"""
+
 
 COMPARISON_PROMPT = IDENTITY_CORE + """
 TASK: Compare and contrast the TWO legal analyses provided below.
@@ -1058,6 +1135,67 @@ DEFAULT_LEGAL_MAXIMS = [
 # landmark decisions. This is the seed — extend monthly from NWLR/LPELR.
 # Format: case name → (citation, court, year, principle)
 # ═══════════════════════════════════════════════════════
+
+# ═══════════════════════════════════════════════════════
+# DETERMINISTIC LEGAL CURRENCY MAP
+# ═══════════════════════════════════════════════════════
+REPEALED_LAWS = {
+    "CAMA 1990": "Companies and Allied Matters Act 2020",
+    "Companies and Allied Matters Act 1990": "Companies and Allied Matters Act 2020",
+    "Electoral Act 2010": "Electoral Act 2022",
+    "Arbitration Act 1988": "Arbitration and Conciliation Act 2023",
+    "Arbitration and Conciliation Act 1988": "Arbitration and Conciliation Act 2023",
+    "BOFIA 1991": "Banks and Other Financial Institutions Act 2020",
+    "Banks and Other Financial Institutions Act 1991": "Banks and Other Financial Institutions Act 2020",
+    "Copyright Act 1988": "Copyright Act 2022",
+    "Evidence Act 1945": "Evidence Act 2011",
+    "Police Act 1943": "Police Act 2020",
+}
+
+FOREIGN_PERSUASIVE_MARKERS = [
+    "Donoghue v Stevenson",
+    "Carlill v Carbolic Smoke Ball",
+    "Hadley v Baxendale",
+    "Salomon v Salomon",
+    "Hedley Byrne",
+]
+
+
+def scan_repealed_laws(text: str) -> list:
+    """Deterministically scan text for repealed/superseded laws."""
+    findings = []
+    if not text:
+        return findings
+    for old, new in REPEALED_LAWS.items():
+        if re.search(rf"\b{re.escape(old)}\b", text, re.IGNORECASE):
+            findings.append({
+                "authority": old,
+                "type": "Statute",
+                "status": "Repealed",
+                "problem": f"{old} has been repealed/superseded.",
+                "fix": f"Use {new} and verify the specific current provision.",
+                "confidence": 98,
+            })
+    return findings
+
+
+def scan_foreign_authorities(text: str) -> list:
+    """Flag common foreign authorities as persuasive only."""
+    findings = []
+    if not text:
+        return findings
+    for marker in FOREIGN_PERSUASIVE_MARKERS:
+        if re.search(rf"\b{re.escape(marker)}\b", text, re.IGNORECASE):
+            findings.append({
+                "authority": marker,
+                "type": "Case",
+                "status": "Foreign",
+                "problem": "Foreign authority — persuasive only, not binding in Nigerian courts.",
+                "fix": "Use only as persuasive authority and look for Nigerian binding authority.",
+                "confidence": 95,
+            })
+    return findings
+
 
 VERIFIED_NIGERIAN_CASES = {
     # ─── Constitutional Law ───
@@ -3804,9 +3942,13 @@ class Database:
 
     # ── Session Tokens ──
     def create_session_token(self, user_id: str, days: int = 30, device_hint: str = "") -> str:
-        """Create a persistent session token valid for `days` days. Returns the token."""
+        """
+        Create a persistent session token.
+        SECURITY: Returns raw token to app session. Stores only SHA-256(token) in DB.
+        """
         import datetime as _dt
-        token = uuid.uuid4().hex + uuid.uuid4().hex  # 64-char random, unguessable
+        token = uuid.uuid4().hex + uuid.uuid4().hex
+        token_hash = hash_session_token(token)
         now = datetime.now()
         expires = now + _dt.timedelta(days=days)
         try:
@@ -3814,7 +3956,7 @@ class Database:
                 "INSERT INTO user_sessions "
                 "(token, user_id, created_at, expires_at, last_used, device_hint) "
                 "VALUES (%s, %s, %s, %s, %s, %s)",
-                (token, user_id, now.isoformat(), expires.isoformat(),
+                (token_hash, user_id, now.isoformat(), expires.isoformat(),
                  now.isoformat(), device_hint),
             )
             self.conn.commit()
@@ -3827,30 +3969,29 @@ class Database:
         return token
 
     def validate_session_token(self, token: str) -> Optional[dict]:
-        """Validate a session token. Returns the user dict if valid, else None."""
+        """Validate a raw session token. DB stores only token hash."""
         if not token or len(token) < 32:
             return None
+        token_hash = hash_session_token(token)
         try:
             cur = self._execute(
-                "SELECT user_id, expires_at FROM user_sessions WHERE token = %s", (token,)
+                "SELECT user_id, expires_at FROM user_sessions WHERE token = %s", (token_hash,)
             )
             row = cur.fetchone()
             if not row:
                 return None
             user_id, expires_at = row
-            # Check expiry
             try:
                 exp = datetime.fromisoformat(expires_at)
                 if datetime.now() > exp:
                     self.revoke_session_token(token)
                     return None
             except Exception:
-                pass
-            # Touch last_used
+                return None
             try:
                 self._execute(
                     "UPDATE user_sessions SET last_used = %s WHERE token = %s",
-                    (datetime.now().isoformat(), token),
+                    (datetime.now().isoformat(), token_hash),
                 )
                 self.conn.commit()
             except Exception:
@@ -3863,9 +4004,10 @@ class Database:
             return None
 
     def revoke_session_token(self, token: str):
-        """Delete a single session token."""
+        """Delete a single session token. Accepts raw token or already-hashed token."""
         try:
-            self._execute("DELETE FROM user_sessions WHERE token = %s", (token,))
+            token_key = hash_session_token(token) if not re.fullmatch(r"[a-f0-9]{64}", token) else token
+            self._execute("DELETE FROM user_sessions WHERE token = %s", (token_key,))
             self.conn.commit()
         except Exception:
             try:
@@ -3950,6 +4092,38 @@ class Database:
              "action": r[3], "detail": r[4], "entry_hash": r[5]}
             for r in (cur.fetchall() or [])
         ]
+
+    def verify_audit_chain(self) -> dict:
+        """
+        Verify hash-chain integrity of the audit log.
+        Returns {"ok": bool, "checked": int, "broken_at": str, "message": str}
+        """
+        import hashlib as _hl
+        try:
+            cur = self._execute(
+                "SELECT id, timestamp, user_id, action, detail, prev_hash, entry_hash "
+                "FROM audit_log ORDER BY timestamp ASC"
+            )
+            rows = cur.fetchall() or []
+            prev_hash = "GENESIS"
+            checked = 0
+            for r in rows:
+                entry_id, ts, uid, action, detail, stored_prev, stored_hash = r
+                if stored_prev != prev_hash:
+                    return {"ok": False, "checked": checked,
+                            "broken_at": entry_id, "message": "Previous hash mismatch."}
+                raw = f"{entry_id}|{ts}|{uid}|{action}|{detail}|{stored_prev}"
+                computed = _hl.sha256(raw.encode()).hexdigest()
+                if computed != stored_hash:
+                    return {"ok": False, "checked": checked,
+                            "broken_at": entry_id, "message": "Entry hash mismatch."}
+                prev_hash = stored_hash
+                checked += 1
+            return {"ok": True, "checked": checked, "broken_at": "",
+                    "message": "Audit chain verified."}
+        except Exception as e:
+            return {"ok": False, "checked": 0, "broken_at": "",
+                    "message": f"Verification failed: {e}"}
 
     # ── Phase 2: RAG — statute chunk storage ────────────────────────────
     def upsert_statute_chunk(self, chunk_id: str, source: str, section_label: str,
@@ -4080,6 +4254,11 @@ def load_user_data():
 # ═══════════════════════════════════════════════════════
 # MULTI-USER AUTH
 # ═══════════════════════════════════════════════════════
+def hash_session_token(token: str) -> str:
+    """Hash a session token before storing or comparing in DB."""
+    return hashlib.sha256(token.encode()).hexdigest()
+
+
 def hash_password(password: str) -> str:
     """PBKDF2-HMAC-SHA256 with random salt. Format: pbkdf2$<salt>$<dk>"""
     import secrets as _sec
@@ -4134,18 +4313,11 @@ def do_login(username: str, password: str, remember_me: bool = True) -> bool:
     load_user_data()
     st.session_state.user_data_loaded = True
     # ── Persistent session token ──
+    # ── Session token: stored in session state only, NOT in URL ──
+    # SECURITY: URL tokens leak via browser history, screenshots, logs, referrers.
     if remember_me:
         token = db.create_session_token(uid, days=30)
         st.session_state["_session_token"] = token
-        try:
-            # Write a short hash-prefix to URL (not full token) to trigger auto-login
-            # Full token stays in session state only — reduces URL exposure
-            import hashlib as _hl
-            url_ref = _hl.sha256(token.encode()).hexdigest()[:16]
-            st.session_state["_token_url_ref"] = url_ref
-            st.query_params["t"] = token  # kept for auto-login compatibility
-        except Exception:
-            pass
     return True
 
 
@@ -4407,15 +4579,9 @@ def render_sidebar(group_names=None):
         group_names = []
     # ── Override any login-screen CSS that hid the sidebar ──────────────
     st.markdown("""<style>
-/* Hide Streamlit's built-in white header bar and decoration strip */
-header[data-testid="stHeader"]{display:none!important;height:0!important;min-height:0!important;pointer-events:none!important;}
-[data-testid="stDecoration"]{display:none!important;height:0!important;}
-/* Remove the top padding Streamlit adds to compensate for its header */
-.block-container{padding-top:1rem!important;}
-/* Sidebar: always visible, raised above any overlay */
-[data-testid="stSidebar"]{display:flex!important;visibility:visible!important;z-index:999!important;}
-[data-testid="collapsedControl"]{display:flex!important;visibility:visible!important;z-index:9999!important;pointer-events:all!important;}
-section[data-testid="stSidebarContent"]{display:flex!important;overflow-y:auto!important;}
+[data-testid="stSidebar"]{display:flex!important;visibility:visible!important;}
+[data-testid="collapsedControl"]{display:flex!important;visibility:visible!important;}
+section[data-testid="stSidebarContent"]{display:flex!important;}
 </style>""", unsafe_allow_html=True)
     with st.sidebar:
         firm = get_firm_name()
@@ -4590,6 +4756,44 @@ section[data-testid="stSidebarContent"]{display:flex!important;overflow-y:auto!i
         elif today.month == 12:
             st.info("ℹ️ **NBA APC:** Renewal opens January. Deadline: 31 March.")
 
+    # ── JS: close sidebar when user clicks the main content area (mobile) ──
+    # This restores the original Streamlit behaviour where clicking outside
+    # the sidebar on mobile auto-collapses it without requiring a button tap.
+    st.components.v1.html("""
+<script>
+(function() {
+  function tryAttach() {
+    var main = window.parent.document.querySelector(
+      '.main, [data-testid="stMainBlockContainer"], section.main'
+    );
+    var collapseBtn = window.parent.document.querySelector(
+      '[data-testid="collapsedControl"] button, button[aria-label="Close sidebar"]'
+    );
+    if (!main || !collapseBtn) { return; }
+
+    main.addEventListener('click', function(e) {
+      // Only close if sidebar is currently open (on mobile widths)
+      var sidebar = window.parent.document.querySelector(
+        '[data-testid="stSidebar"]'
+      );
+      if (!sidebar) return;
+      var sidebarW = sidebar.getBoundingClientRect().width;
+      // If sidebar is open (width > 50px) and screen is narrow (<=768px)
+      if (sidebarW > 50 && window.parent.innerWidth <= 768) {
+        collapseBtn.click();
+      }
+    }, false);
+  }
+  // Retry until the DOM is ready
+  var attempts = 0;
+  var interval = setInterval(function() {
+    tryAttach();
+    attempts++;
+    if (attempts > 20) clearInterval(interval);
+  }, 400);
+})();
+</script>
+""", height=0)
 
 
 
@@ -7038,10 +7242,13 @@ def render_tools():
 You are a Nigerian limitation period expert. Analyse these facts and compute ALL applicable
 limitation periods. Today's date is {date.today().strftime('%d %B %Y')}.
 
-CRITICAL: Where a limitation period depends on jurisdiction-specific state law, public officer 
-exceptions, continuing injury, fraud/concealment, or court discretion, you MUST flag this in 
-special_notes. Do NOT state hard deadlines where the law requires verification. State the 
-general rule AND what must be verified against applicable State Limitation Law.
+CRITICAL SAFETY RULES:
+- If the limitation period depends on State law, say so and identify which State Limitation Law applies.
+- If public officer rules may apply, flag POPA/pre-action notice requirements separately.
+- If continuing injury, fraud, concealment, disability, or acknowledgment may affect time, flag it.
+- Do NOT give a hard final deadline where jurisdiction-specific verification is required.
+- Always include a verification warning in special_notes.
+- Distinguish between Federal limitation law and applicable State Limitation Laws.
 
 Respond ONLY in this exact JSON format, nothing else:
 {{
@@ -8108,6 +8315,269 @@ MATTER FACTS: {aml_facts}
         elif av_raw_fb:
             st.markdown("---")
             st.markdown(f'<div class="response-box">{esc(av_raw_fb)}</div>', unsafe_allow_html=True)
+
+
+
+
+def render_authority_verification():
+    st.markdown("""<div class="page-header">
+        <h2>🔍 Authority Verification Mode</h2>
+        <p>Check cases, statutes, repealed laws, foreign authorities, and possible hallucinations</p>
+    </div>""", unsafe_allow_html=True)
+
+    st.markdown(
+        '<div style="background:var(--la-bg2);border:1px solid var(--la-border);'
+        'border-left:4px solid #3b82f6;border-radius:8px;'
+        'padding:0.75rem 1rem;margin-bottom:1rem;font-size:0.85rem;">'
+        '<strong>How it works:</strong> LexiAssist first performs deterministic checks '
+        'against its verified Nigerian case database and repealed-law map, then classifies '
+        'every authority found. Always verify independently before filing.'
+        '</div>',
+        unsafe_allow_html=True,
+    )
+
+    av_text = st.text_area(
+        "Paste legal text, AI output, pleading, research memo, or authorities to verify",
+        height=260,
+        key="authority_verify_text",
+        placeholder=(
+            "Example:\n"
+            "The court has jurisdiction under Madukolu v Nkemdilim. "
+            "The Companies and Allied Matters Act 1990 applies. "
+            "See Donoghue v Stevenson on duty of care."
+        ),
+    )
+
+    run_btn = st.button(
+        "🔍 Verify Authorities",
+        type="primary",
+        use_container_width=True,
+        disabled=not av_text.strip(),
+        key="authority_verify_btn",
+    )
+
+    if run_btn:
+        deterministic = []
+
+        # Case-name extraction and deterministic case verification
+        case_names_found = extract_case_names(av_text)
+        for name in case_names_found:
+            match = verify_case_name(name)
+            if match:
+                deterministic.append({
+                    "authority": match["name"],
+                    "type": "Case",
+                    "status": "Verified",
+                    "problem": "",
+                    "fix": f"Verified: {match.get('citation', '')} — {match.get('principle', '')}",
+                    "confidence": 95,
+                })
+            else:
+                deterministic.append({
+                    "authority": name,
+                    "type": "Case",
+                    "status": "Unverified",
+                    "problem": "Case name not found in the local verified Nigerian case database.",
+                    "fix": "Verify on NWLR, LPELR, LawPavilion, or official law report before citing.",
+                    "confidence": 60,
+                })
+
+        deterministic.extend(scan_repealed_laws(av_text))
+        deterministic.extend(scan_foreign_authorities(av_text))
+
+        # Citation-shaped strings
+        citations = extract_citations(av_text)
+        for c in citations:
+            raw_cit = c.get("raw", "")
+            if raw_cit and not any(r["authority"] == raw_cit for r in deterministic):
+                deterministic.append({
+                    "authority": raw_cit,
+                    "type": "Citation",
+                    "status": "Needs Verification",
+                    "problem": "Citation format detected, but citation-to-case mapping is not confirmed locally.",
+                    "fix": "Verify the citation against NWLR/LPELR/LawPavilion before relying.",
+                    "confidence": 70,
+                })
+
+        if not deterministic:
+            deterministic.append({
+                "authority": "No authorities detected",
+                "type": "None",
+                "status": "No Authority Found",
+                "problem": "The text does not appear to contain case names or citation-shaped references.",
+                "fix": "If this is a legal argument, add specific statutes, rules, or case authorities.",
+                "confidence": 80,
+            })
+
+        st.session_state["_authority_results"] = deterministic
+
+    results = st.session_state.get("_authority_results", [])
+
+    if results:
+        st.markdown("---")
+        st.markdown(f"### Verification Results — {len(results)} item(s)")
+
+        counts = {}
+        for r in results:
+            counts[r["status"]] = counts.get(r["status"], 0) + 1
+
+        cols = st.columns(min(4, max(1, len(counts))))
+        for col, (status, count) in zip(cols, counts.items()):
+            with col:
+                st.metric(status, count)
+
+        status_meta = {
+            "Verified":           ("#16a34a", "#f0fdf4", "✅"),
+            "Unverified":         ("#d97706", "#fffbeb", "⚠️"),
+            "Repealed":           ("#dc2626", "#fef2f2", "🚫"),
+            "Foreign":            ("#0891b2", "#ecfeff", "🌍"),
+            "Needs Verification": ("#7c3aed", "#faf5ff", "📌"),
+            "No Authority Found": ("#64748b", "#f8fafc", "ℹ️"),
+        }
+
+        for r in results:
+            colour, bg, icon = status_meta.get(r["status"], ("#64748b", "#f8fafc", "❓"))
+            st.markdown(
+                f'<div style="background:{bg};border:1px solid {colour};'
+                f'border-left:4px solid {colour};border-radius:8px;'
+                f'padding:0.85rem 1rem;margin-bottom:0.55rem;">'
+                f'<strong style="color:{colour};">{icon} {esc(r["authority"])}</strong> '
+                f'<span style="font-size:0.75rem;color:{colour};font-weight:700;">'
+                f'[{esc(r["type"])} · {esc(r["status"])} · {r.get("confidence", 0)}%]</span>'
+                f'<br><small><strong>Problem:</strong> {esc(r.get("problem", "") or "None")}</small>'
+                f'<br><small><strong>Fix:</strong> {esc(r.get("fix", ""))}</small>'
+                f'</div>',
+                unsafe_allow_html=True,
+            )
+
+        report = "AUTHORITY VERIFICATION REPORT\n"
+        report += f"Generated: {datetime.now():%d %B %Y at %H:%M}\n"
+        report += "=" * 60 + "\n\n"
+        for r in results:
+            report += f"Authority: {r['authority']}\n"
+            report += f"Type: {r['type']}\n"
+            report += f"Status: {r['status']}\n"
+            report += f"Confidence: {r.get('confidence', 0)}%\n"
+            report += f"Problem: {r.get('problem', '')}\n"
+            report += f"Fix: {r.get('fix', '')}\n\n"
+
+        st.download_button(
+            "📥 Download Verification Report",
+            export_txt(report, "Authority Verification Report"),
+            f"Authority_Verification_{datetime.now():%Y%m%d_%H%M}.txt",
+            "text/plain",
+            key="authority_report_download",
+            use_container_width=True,
+        )
+
+        st.markdown(
+            '<div class="disclaimer"><strong>⚖️ Disclaimer:</strong> '
+            'This verification tool is a screening aid. Always confirm authorities from '
+            'official law reports, NWLR, LPELR, LawPavilion, court rules, or primary legislation.'
+            '</div>',
+            unsafe_allow_html=True,
+        )
+
+
+def render_source_backed_research():
+    st.markdown("""<div class="page-header">
+        <h2>🔗 Source-Backed Research</h2>
+        <p>Research from user-provided statutes, case extracts, regulator publications, URLs, or pasted source text</p>
+    </div>""", unsafe_allow_html=True)
+
+    if not st.session_state.api_configured:
+        st.warning("⚠️ Connect your API key first.")
+        return
+
+    st.markdown(
+        '<div style="background:var(--la-bg2);border:1px solid var(--la-border);'
+        'border-left:4px solid #059669;border-radius:8px;'
+        'padding:0.75rem 1rem;margin-bottom:1rem;font-size:0.85rem;">'
+        '<strong>Best for beta:</strong> Paste source extracts from statutes, judgments, regulator pages, '
+        'law reports, court rules, or official publications. LexiAssist will analyse only the provided material '
+        'and clearly flag what still needs verification.'
+        '</div>',
+        unsafe_allow_html=True,
+    )
+
+    query = st.text_area(
+        "Research Question",
+        height=120,
+        key="sbr_query",
+        placeholder="E.g. What is the current position on setting aside arbitral awards under the Arbitration and Conciliation Act 2023?",
+    )
+
+    sources = st.text_area(
+        "Provided Sources / Extracts / URLs",
+        height=260,
+        key="sbr_sources",
+        placeholder=(
+            "Paste source extracts here.\n\n"
+            "Example:\n"
+            "SOURCE 1: Arbitration and Conciliation Act 2023, section ...\n"
+            "Extract: ...\n\n"
+            "SOURCE 2: Supreme Court case extract ...\n"
+            "Extract: ...\n\n"
+            "URL-only sources may be included but must be independently verified."
+        ),
+    )
+
+    mode = st.session_state.response_mode
+
+    run_btn = st.button(
+        "🔗 Run Source-Backed Research",
+        type="primary",
+        use_container_width=True,
+        disabled=not (query.strip() and sources.strip()),
+        key="sbr_run_btn",
+    )
+
+    if run_btn:
+        prompt = (
+            f"RESEARCH QUESTION:\n{query.strip()}\n\n"
+            f"USER-PROVIDED SOURCES:\n{sanitize_doc_context(sources.strip())}\n\n"
+            "Prepare a source-backed Nigerian legal research memorandum.\n\n"
+            "Required structure:\n"
+            "1. Short Answer\n"
+            "2. Sources Reviewed\n"
+            "3. What the Sources Establish\n"
+            "4. Nigerian Legal Analysis\n"
+            "5. Unsupported / To Verify\n"
+            "6. Practical Implications for Counsel\n"
+            "7. Verification Checklist"
+        )
+        with st.spinner("🔗 Analysing provided sources..."):
+            result = generate(prompt, SOURCE_BACKED_RESEARCH_SYSTEM, mode, "analysis")
+
+        st.session_state["sbr_result"] = result
+        add_to_history(f"[Source-Backed Research] {query[:100]}", result, "analysis", mode)
+        st.rerun()
+
+    result = st.session_state.get("sbr_result", "")
+    if result:
+        st.markdown("---")
+        st.markdown("### 🔗 Source-Backed Research Result")
+
+        fname = f"SourceBackedResearch_{datetime.now():%Y%m%d_%H%M}"
+        c1, c2, c3, c4 = st.columns(4)
+        with c1:
+            st.download_button("📥 TXT", export_txt(result, "Source-Backed Research"),
+                               f"{fname}.txt", "text/plain", key="sbr_txt", use_container_width=True)
+        with c2:
+            st.download_button("📥 HTML", export_html(result, "Source-Backed Research"),
+                               f"{fname}.html", "text/html", key="sbr_html", use_container_width=True)
+        with c3:
+            safe_pdf_download(result, "Source-Backed Research", fname, "sbr_pdf")
+        with c4:
+            safe_docx_download(result, "Source-Backed Research", fname, "sbr_docx", doc_type="research")
+
+        st.markdown(f'<div class="response-box">{esc(result)}</div>', unsafe_allow_html=True)
+
+        st.markdown(
+            '<div class="disclaimer"><strong>⚖️ Disclaimer:</strong> Source-backed research is only as reliable '
+            'as the supplied sources. Verify all source extracts against official/publication copies before relying.</div>',
+            unsafe_allow_html=True,
+        )
 
 
 # ═══════════════════════════════════════════════════════
@@ -9770,7 +10240,7 @@ def render_legal_news():
         with nf3:
             st.markdown("<br>", unsafe_allow_html=True)
             nf_generate_btn = st.button(
-                "🔄 Fetch Latest",
+                "🔄 Generate Updates",
                 type="primary", use_container_width=True,
                 key="nf_generate_btn",
             )
@@ -9803,7 +10273,7 @@ def render_legal_news():
             st.markdown("""
 <div style="background:var(--la-bg2);border:1.5px dashed var(--la-border);border-radius:0.85rem;
 padding:2.5rem;text-align:center;color:var(--la-text2);">
-  <h3 style="margin:0 0 0.5rem 0;color:var(--la-text);">📰 Your Legal Feed is Empty</h3>
+  <h3 style="margin:0 0 0.5rem 0;color:var(--la-text);">📰 No Practice Updates Generated Yet</h3>
   <p style="margin:0;">Select a subject area and click <strong>Fetch Latest</strong>
   to load Nigerian legal developments.</p>
 </div>""", unsafe_allow_html=True)
@@ -11893,6 +12363,19 @@ def render_user_management():
             "Each entry's hash covers its content AND the previous entry's hash, "
             "making retroactive tampering detectable."
         )
+        vc1, vc2 = st.columns([1, 3])
+        with vc1:
+            if st.button("🔐 Verify Audit Chain", key="verify_audit_chain_btn", use_container_width=True):
+                chain_result = db.verify_audit_chain()
+                if chain_result["ok"]:
+                    st.success(f"✅ {chain_result['message']} Checked {chain_result['checked']} entries.")
+                else:
+                    st.error(
+                        f"🚨 Audit chain problem: {chain_result['message']} "
+                        f"Broken at: {chain_result.get('broken_at', '—')}"
+                    )
+        with vc2:
+            st.caption("Use this to detect tampering or accidental modification of audit records.")
         is_super_admin = st.session_state.get("current_username", "") in ("admin", "superadmin")
         if is_super_admin:
             audit_rows = db.get_all_audit_log_admin(limit=500)
@@ -12993,14 +13476,11 @@ def main():
     db = get_db()
     db.ensure_connected()  # heal stale/aborted connections before any DB work
 
-    # ── Auto-login from persistent session token (survives page refreshes) ──
+    # ── Auto-login via URL token: DISABLED for beta security ──────────────
+    # URL session tokens are unsafe (browser history, logs, screenshots, referrers).
+    # For persistent login, implement secure HttpOnly cookies or external auth.
     if not st.session_state.authenticated:
-        try:
-            token = st.query_params.get("t", "")
-        except Exception:
-            token = ""
-        if token and not st.session_state.authenticated:
-            do_auto_login_from_token(token)
+        pass  # No URL-token auto-login in beta
 
     # ── Auth gate ──
     if not st.session_state.authenticated:
@@ -13015,6 +13495,19 @@ def main():
         load_user_data()
         st.session_state.user_data_loaded = True
 
+    # ── Global private-beta / legal reliability banner ──
+    if is_beta() or is_production():
+        st.markdown(
+            '<div style="background:var(--la-bg2);border:1px solid #f59e0b;'
+            'border-left:4px solid #f59e0b;border-radius:8px;'
+            'padding:0.55rem 1rem;margin-bottom:0.8rem;font-size:0.82rem;">'
+            '<strong>🔬 Private Beta:</strong> LexiAssist outputs are AI-generated drafting aids. '
+            'Verify all authorities, limitation periods, court rules, filing fees, and legal conclusions '
+            'before advising clients or filing in court.'
+            '</div>',
+            unsafe_allow_html=True,
+        )
+
     _maybe_send_hearing_reminders()
 
     is_admin = (st.session_state.current_user_role == "admin")
@@ -13026,6 +13519,7 @@ def main():
             ("🏠 Home",            render_home),
             ("🧠 AI Assistant",    render_ai),
             ("📚 Research",        render_research),
+            ("🔗 Source Research", render_source_backed_research),
             ("📝 Notes → Brief",   render_notes_converter),
         ],
         "📁 Matters": [
@@ -13043,11 +13537,12 @@ def main():
         ],
         "🔧 Tools": [
             ("🔧 Tools",           render_tools),
+            ("🔍 Authority Verify", render_authority_verification),
             ("🎯 Witness Prep",    render_witness_prep),
             ("🤝 Settlement",      render_settlement_advisor),
             ("🔎 Due Diligence",   render_due_diligence),
             ("📋 Templates",       render_templates),
-            ("📰 Legal News",      render_legal_news),
+            ("📰 Practice Updates", render_legal_news),
             ("🔎 Search",          render_global_search),
         ],
         "👤 Account": [
