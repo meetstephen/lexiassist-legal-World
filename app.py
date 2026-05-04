@@ -1,8 +1,16 @@
 """
-LexiAssist v8.0 — Elite AI Legal Engine for Nigerian Lawyers
-Single-file deployment with SQLite persistence.
-Contract Review · Cost Tracking · User Profiles · Analysis Comparison
-Save to Case · Editable References · Custom Templates · Auth Support
+LexiAssist v8.0 — Elite AI Legal Workflow Engine for Nigerian Lawyers
+Single-file Streamlit deployment with PostgreSQL persistence.
+
+Private-beta ready features:
+Contract Review · Cost Tracking · User Profiles · Analysis Comparison · Save to Case
+Editable References · Custom Templates · Auth Support · Authority Verification
+Practice Update Generator · Source-Backed Research · Citation Audit
+
+IMPORTANT:
+AI-generated outputs are drafting aids only. Lawyers must independently verify
+all authorities, limitation periods, court rules, filing fees, and legal conclusions
+before relying on them for client advice or court filings.
 """
 from __future__ import annotations
 
