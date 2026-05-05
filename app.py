@@ -2517,12 +2517,34 @@ section[data-testid="stSidebar"] .stButton>button:hover{{
   background:{acc}22!important;border-color:{acc}55!important;}}
 
 /* ── Sidebar collapse/expand toggle arrow (all Streamlit versions) ── */
+/* CRITICAL: must sit ABOVE any white header bar and be clickable */
 [data-testid="stSidebarCollapsedControl"],
 [data-testid="collapsedControl"],
 [data-testid="stSidebarCollapseButton"]{{
-  background:{sidebar_bg}!important;border-right:1px solid {sb_line}!important;
-  display:flex!important;align-items:center!important;justify-content:center!important;
-  visibility:visible!important;opacity:1!important;z-index:999!important;}}
+ background:transparent!important;
+ border:none!important;
+ display:flex!important;align-items:center!important;justify-content:center!important;
+ visibility:visible!important;opacity:1!important;
+ z-index:999999!important;
+ position:fixed!important;
+ top:0.5rem!important;
+ left:0.5rem!important;
+ pointer-events:auto!important;}}
+
+/* Force Streamlit's top header bar (the white tile) to be transparent
+ so it never covers the sidebar toggle */
+[data-testid="stHeader"],
+header[data-testid="stHeader"],
+div[data-testid="stHeader"]{{
+ background:transparent!important;
+ background-color:transparent!important;
+ height:auto!important;
+ z-index:1!important;}}
+
+/* Also kill any decoration bar that overlaps the toggle */
+[data-testid="stDecoration"]{{
+ display:none!important;}}
+
 [data-testid="stSidebarCollapsedControl"] button,
 [data-testid="collapsedControl"] button,
 [data-testid="stSidebarCollapseButton"] button,
@@ -4379,16 +4401,73 @@ def do_logout():
 
 
 def render_login_screen():
+    # Hide sidebar ONLY on login screen (re-shown after auth via render_sidebar override)
     st.markdown("""<style>
-[data-testid="stSidebar"]{display:none!important;}
+section[data-testid="stSidebar"]{display:none!important;}
+[data-testid="stSidebarCollapsedControl"]{display:none!important;}
 [data-testid="collapsedControl"]{display:none!important;}
+[data-testid="stSidebarCollapseButton"]{display:none!important;}
 </style>""", unsafe_allow_html=True)
     st.markdown(get_theme_css(st.session_state.get("theme", "⚖️ Corporate")), unsafe_allow_html=True)
+
+    # ── Hero block — same style as render_home() ──
     st.markdown("""
-<div class="hero">
-  <h1>⚖️ LexiAssist v8.0</h1>
-  <p>Elite AI Legal Engine &nbsp;&middot;&nbsp; Nigerian Law &nbsp;&middot;&nbsp; Built for Practitioners</p>
-</div>""", unsafe_allow_html=True)
+<style>
+.lexi-hero {
+position: relative;
+overflow: hidden;
+background: linear-gradient(135deg, #1e3a5f 0%, #0f2440 60%, #162d4a 100%);
+border-radius: 16px;
+padding: 2.6rem 2.8rem 2.3rem;
+margin-bottom: 1.8rem;
+border: 1px solid rgba(255,255,255,0.08);
+box-shadow: 0 8px 32px rgba(0,0,0,0.25);
+}
+.lexi-hero-watermark {
+position: absolute;
+right: 2rem;
+top: 50%;
+transform: translateY(-50%);
+font-size: 13rem;
+line-height: 1;
+opacity: 0.07;
+color: #ffffff;
+pointer-events: none;
+user-select: none;
+filter: blur(1px);
+font-family: serif;
+}
+.lexi-hero h1 {
+font-size: 3.4rem !important;
+font-weight: 900 !important;
+letter-spacing: -0.04em !important;
+color: #ffffff !important;
+margin: 0 0 0.4rem 0 !important;
+line-height: 1 !important;
+position: relative;
+z-index: 1;
+}
+.lexi-hero p {
+font-size: 1rem !important;
+color: rgba(255,255,255,0.82) !important;
+margin: 0 !important;
+position: relative;
+z-index: 1;
+line-height: 1.6;
+}
+@media (max-width: 768px) {
+.lexi-hero h1 { font-size: 2.5rem !important; }
+.lexi-hero-watermark { font-size: 7rem !important; opacity: 0.05 !important; }
+}
+</style>
+<div class="lexi-hero">
+<div class="lexi-hero-watermark">&#9878;</div>
+<h1>⚖️ LexiAssist v8.0</h1>
+<p>Elite AI Legal Engine &nbsp;&middot;&nbsp; Nigerian Law &nbsp;&middot;&nbsp; Built for Practitioners<br>
+Position-taking &middot; Strategy-driven &middot; Risk-ranked &middot; Litigator-minded</p>
+</div>
+""", unsafe_allow_html=True)
+
     _, col, _ = st.columns([1, 2, 1])
     with col:
         st.markdown('<div class="login-card">', unsafe_allow_html=True)
@@ -4514,15 +4593,70 @@ def render_register_form(key_prefix: str, admin_mode: bool = False):
 def render_create_admin_screen():
     """First-run screen: no users exist yet."""
     st.markdown("""<style>
-[data-testid="stSidebar"]{display:none!important;}
+section[data-testid="stSidebar"]{display:none!important;}
+[data-testid="stSidebarCollapsedControl"]{display:none!important;}
 [data-testid="collapsedControl"]{display:none!important;}
+[data-testid="stSidebarCollapseButton"]{display:none!important;}
 </style>""", unsafe_allow_html=True)
     st.markdown(get_theme_css(st.session_state.get("theme", "⚖️ Corporate")), unsafe_allow_html=True)
+
+    # ── Hero block — same style as home page ──
     st.markdown("""
-<div class="hero">
-  <h1>⚖️ LexiAssist v8.0</h1>
-  <p>First-time setup &nbsp;&middot;&nbsp; Create your administrator account below</p>
-</div>""", unsafe_allow_html=True)
+ <style>
+ .lexi-hero {
+ position: relative;
+ overflow: hidden;
+ background: linear-gradient(135deg, #1e3a5f 0%, #0f2440 60%, #162d4a 100%);
+ border-radius: 16px;
+ padding: 2.6rem 2.8rem 2.3rem;
+ margin-bottom: 1.8rem;
+ border: 1px solid rgba(255,255,255,0.08);
+ box-shadow: 0 8px 32px rgba(0,0,0,0.25);
+ }
+ .lexi-hero-watermark {
+ position: absolute;
+ right: 2rem;
+ top: 50%;
+ transform: translateY(-50%);
+ font-size: 13rem;
+ line-height: 1;
+ opacity: 0.07;
+ color: #ffffff;
+ pointer-events: none;
+ user-select: none;
+ filter: blur(1px);
+ font-family: serif;
+ }
+ .lexi-hero h1 {
+ font-size: 3.4rem !important;
+ font-weight: 900 !important;
+ letter-spacing: -0.04em !important;
+ color: #ffffff !important;
+ margin: 0 0 0.4rem 0 !important;
+ line-height: 1 !important;
+ position: relative;
+ z-index: 1;
+ }
+ .lexi-hero p {
+ font-size: 1rem !important;
+ color: rgba(255,255,255,0.82) !important;
+ margin: 0 !important;
+ position: relative;
+ z-index: 1;
+ line-height: 1.6;
+ }
+ @media (max-width: 768px) {
+ .lexi-hero h1 { font-size: 2.5rem !important; }
+ .lexi-hero-watermark { font-size: 7rem !important; opacity: 0.05 !important; }
+ }
+ </style>
+ <div class="lexi-hero">
+ <div class="lexi-hero-watermark">&#9878;</div>
+ <h1>⚖️ LexiAssist v8.0</h1>
+ <p>First-time setup &nbsp;&middot;&nbsp; Create your administrator account below</p>
+ </div>
+ """, unsafe_allow_html=True)
+
     _, col, _ = st.columns([1, 2, 1])
     with col:
         st.markdown('<div class="login-card">', unsafe_allow_html=True)
@@ -4587,11 +4721,22 @@ def render_sidebar(group_names=None):
     if group_names is None:
         group_names = []
     # ── Override any login-screen CSS that hid the sidebar ──────────────
+    # Force sidebar and ALL collapse-control variants visible + clickable
     st.markdown("""<style>
-[data-testid="stSidebar"]{display:flex!important;visibility:visible!important;}
-[data-testid="collapsedControl"]{display:flex!important;visibility:visible!important;}
+section[data-testid="stSidebar"]{
+ display:flex!important;visibility:visible!important;opacity:1!important;}
 section[data-testid="stSidebarContent"]{display:flex!important;}
+[data-testid="stSidebarCollapsedControl"],
+[data-testid="collapsedControl"],
+[data-testid="stSidebarCollapseButton"]{
+ display:flex!important;visibility:visible!important;opacity:1!important;
+ z-index:999999!important;pointer-events:auto!important;}
+[data-testid="stHeader"]{
+ background:transparent!important;background-color:transparent!important;
+ z-index:1!important;}
+[data-testid="stDecoration"]{display:none!important;}
 </style>""", unsafe_allow_html=True)
+
     with st.sidebar:
         firm = get_firm_name()
         corp = (st.session_state.get("theme", "⚖️ Corporate") == "⚖️ Corporate")
