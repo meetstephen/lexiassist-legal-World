@@ -4112,6 +4112,40 @@ class Database:
             except Exception:
                 pass
 
+    def get_token_last_used(self, token: str) -> Optional[float]:
+        """Return Unix timestamp of when this token was last used. None if not found."""
+        import time as _t
+        if not token or len(token) < 32:
+            return None
+        token_hash = hash_session_token(token)
+        try:
+            cur = self._execute(
+                "SELECT last_used FROM user_sessions WHERE token = %s", (token_hash,)
+            )
+            row = cur.fetchone()
+            if not row or not row[0]:
+                return None
+            return datetime.fromisoformat(str(row[0])).timestamp()
+        except Exception:
+            return None
+
+    def touch_session_token(self, token: str) -> None:
+        """Update last_used timestamp for this token. Called periodically while user is active."""
+        if not token or len(token) < 32:
+            return
+        token_hash = hash_session_token(token)
+        try:
+            self._execute(
+                "UPDATE user_sessions SET last_used = %s WHERE token = %s",
+                (datetime.now().isoformat(), token_hash),
+            )
+            self.conn.commit()
+        except Exception:
+            try:
+                self.conn.rollback()
+            except Exception:
+                pass
+
     def get_user_sessions(self, user_id: str) -> list:
         """List all active (non-expired) sessions for a user."""
         try:
@@ -4429,6 +4463,10 @@ def do_login(username: str, password: str, remember_me: bool = True) -> bool:
     if remember_me:
         token = db.create_session_token(uid, days=30)
         st.session_state["_session_token"] = token
+        try:
+            st.query_params["t"] = token
+        except Exception:
+            pass
     return True
 
 def _record_login_failure(uname_clean: str) -> None:
@@ -4470,6 +4508,113 @@ def do_auto_login_from_token(token: str) -> bool:
     load_user_data()
     st.session_state.user_data_loaded = True
     return True
+
+
+def render_reauth_screen(token: str, username: str) -> None:
+    """
+    Locked-session re-authentication screen.
+    Shown when a valid token exists but the session was idle too long.
+    The user sees their own username (read-only) and must enter only their password.
+    A random person at the desk cannot proceed without the password.
+    After 5 failed attempts the token is revoked and a full login is required.
+    """
+    import time as _time
+    _fail_key = "_reauth_fails"
+    _fails = st.session_state.get(_fail_key, 0)
+
+    st.markdown(
+        '<div style="max-width:420px;margin:6vh auto 0;">'
+        '<div style="background:var(--la-card);border:1px solid var(--la-border);'
+        'border-radius:14px;padding:2rem 2rem 1.6rem;box-shadow:0 4px 24px #0002;">'
+        '<div style="text-align:center;font-size:2.4rem;margin-bottom:0.4rem;">🔒</div>'
+        '<h2 style="text-align:center;font-size:1.25rem;margin:0 0 0.3rem;color:var(--la-text);">'
+        'Session Locked</h2>'
+        '<p style="text-align:center;font-size:0.83rem;color:var(--la-text2);margin:0 0 1.4rem;">'
+        'Your session was inactive. Enter your password to continue.</p>',
+        unsafe_allow_html=True,
+    )
+
+    # Read-only username badge — confirms whose session this is
+    st.markdown(
+        f'<div style="background:var(--la-bg2);border:1px solid var(--la-border);'
+        f'border-radius:8px;padding:0.55rem 1rem;margin-bottom:1rem;'
+        f'font-size:0.9rem;color:var(--la-text2);text-align:center;">'
+        f'👤 <strong style="color:var(--la-text);">@{username}</strong>'
+        f'</div>',
+        unsafe_allow_html=True,
+    )
+
+    with st.form("reauth_form", clear_on_submit=True):
+        reauth_pw = st.text_input(
+            "Password", type="password",
+            placeholder="Enter your password to unlock",
+            key="reauth_pw_input",
+        )
+        col_unlock, col_signout = st.columns(2)
+        with col_unlock:
+            unlock_btn = st.form_submit_button(
+                "🔓 Unlock", type="primary", use_container_width=True
+            )
+        with col_signout:
+            signout_btn = st.form_submit_button(
+                "↩️ Sign Out", use_container_width=True
+            )
+
+    if signout_btn:
+        # Revoke token and go to login
+        try:
+            get_db().revoke_session_token(token)
+            get_db().append_audit("REAUTH_SIGNOUT", f"user={username}")
+        except Exception:
+            pass
+        try:
+            st.query_params.clear()
+        except Exception:
+            pass
+        st.rerun()
+        return
+
+    if unlock_btn:
+        if not reauth_pw:
+            st.error("❌ Enter your password.")
+        else:
+            db = get_db()
+            user_rec = db.get_user_by_username(username)
+            if user_rec and verify_password(reauth_pw, user_rec["password_hash"]):
+                # ✅ Correct password — restore session fully
+                st.session_state.pop(_fail_key, None)
+                uid = user_rec["user_id"]
+                st.session_state.authenticated = True
+                st.session_state.current_user_id = uid
+                st.session_state.current_username = user_rec["username"]
+                st.session_state.current_user_role = user_rec["role"]
+                st.session_state["_session_token"] = token
+                # Reset last_used so idle clock restarts from now
+                db.touch_session_token(token)
+                load_user_data()
+                st.session_state.user_data_loaded = True
+                st.session_state["_last_activity"] = _time.time()
+                db.append_audit("REAUTH_SUCCESS", f"user={username}")
+                st.rerun()
+            else:
+                _fails += 1
+                st.session_state[_fail_key] = _fails
+                db.append_audit("REAUTH_FAILED", f"user={username} attempt={_fails}")
+                if _fails >= 5:
+                    # Too many failures — revoke token, force full login
+                    try:
+                        db.revoke_session_token(token)
+                        st.query_params.clear()
+                    except Exception:
+                        pass
+                    st.error("🔒 Too many failed attempts. You have been signed out.")
+                    st.rerun()
+                elif _fails >= 3:
+                    st.error(f"❌ Wrong password. {5 - _fails} attempt(s) remaining.")
+                else:
+                    st.error("❌ Incorrect password.")
+
+    st.markdown('</div></div>', unsafe_allow_html=True)
 
 
 def do_logout():
@@ -13899,11 +14044,36 @@ def main():
     db = get_db()
     db.ensure_connected()  # heal stale/aborted connections before any DB work
 
-    # ── Auto-login via URL token: DISABLED for beta security ──────────────
-    # URL session tokens are unsafe (browser history, logs, screenshots, referrers).
-    # For persistent login, implement secure HttpOnly cookies or external auth.
+    # ── Auto-login via URL token (idle-aware) ────────────────────────────
+    # Token lives in ?t= URL param (survives refresh). If the session was
+    # idle for longer than the firm's idle limit we show a locked re-auth
+    # screen instead of silently restoring — so an unattended computer is
+    # protected while a deliberate refresh feels instant.
     if not st.session_state.authenticated:
-        pass  # No URL-token auto-login in beta
+        _url_token = st.query_params.get("t", "")
+        if _url_token:
+            _lu = db.get_token_last_used(_url_token)
+            # Firm-configurable idle limit (default 30 min)
+            try:
+                _firm_idle_min = int(
+                    st.session_state.get("profile", {})
+                    .get("firm_config", {})
+                    .get("idle_timeout_minutes", 30)
+                )
+            except Exception:
+                _firm_idle_min = 30
+            _firm_idle_limit = _firm_idle_min * 60
+            import time as _time_mod_tok
+            if _lu is not None and (_time_mod_tok.time() - _lu) > _firm_idle_limit:
+                # Token valid but idle too long → show locked re-auth screen
+                _locked_user = db.validate_session_token(_url_token)
+                if _locked_user:
+                    render_reauth_screen(_url_token, _locked_user["username"])
+                    return
+                # Token expired/invalid → fall through to normal login
+            else:
+                # Active session or first restore → silent auto-login
+                do_auto_login_from_token(_url_token)
 
     # ── Auth gate ──
     if not st.session_state.authenticated:
@@ -13944,6 +14114,17 @@ def main():
 
     # Update last activity on every interaction
     st.session_state["_last_activity"] = _now
+
+    # Persist last_used to DB every ~60 s so refresh-idle detection stays accurate
+    _touch_key = "_last_token_touch"
+    if _now - st.session_state.get(_touch_key, 0) > 60:
+        _active_tok = st.session_state.get("_session_token", "")
+        if _active_tok:
+            try:
+                db.touch_session_token(_active_tok)
+            except Exception:
+                pass
+        st.session_state[_touch_key] = _now
 
     # ── Global private-beta / legal reliability banner ──
 
