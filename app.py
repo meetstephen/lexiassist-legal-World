@@ -14239,9 +14239,35 @@ def main():
             unsafe_allow_html=True,
         )
 
-    _maybe_send_hearing_reminders()
+        _maybe_send_hearing_reminders()
+
+    # ── Self-ping: refresh activity every render to delay cloud-sleep ──
+    # This injects a tiny iframe that re-pings the healthcheck endpoint every
+    # 7 minutes while a tab is open, keeping the WebSocket alive.
+    try:
+        st.components.v1.html(
+            """
+            <script>
+            (function() {
+              if (window._lexiPingStarted) return;
+              window._lexiPingStarted = true;
+              setInterval(function() {
+                fetch(window.location.origin + '/?healthcheck=1', {
+                  method: 'GET',
+                  cache: 'no-store',
+                  credentials: 'omit'
+                }).catch(function() {});
+              }, 420000); // 7 minutes
+            })();
+            </script>
+            """,
+            height=0,
+        )
+    except Exception:
+        pass
 
     is_admin = (st.session_state.current_user_role == "admin")
+
 
     # ── TOP NAVIGATION TABS ──
     # ── Grouped Navigation (Phase 3 — #11) ──────────────────────────────
