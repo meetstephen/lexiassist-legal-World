@@ -2517,33 +2517,89 @@ section[data-testid="stSidebar"] .stButton>button:hover{{
   background:{acc}22!important;border-color:{acc}55!important;}}
 
 /* ── Sidebar collapse/expand toggle arrow (all Streamlit versions) ── */
-/* CRITICAL: must sit ABOVE any white header bar and be clickable */
+/* CRITICAL: must sit ABOVE the white header bar AND above the sidebar itself
+   when sidebar is open on mobile, so the close arrow is always reachable */
 [data-testid="stSidebarCollapsedControl"],
-[data-testid="collapsedControl"],
-[data-testid="stSidebarCollapseButton"]{{
- background:transparent!important;
- border:none!important;
- display:flex!important;align-items:center!important;justify-content:center!important;
- visibility:visible!important;opacity:1!important;
- z-index:999999!important;
- position:fixed!important;
- top:0.5rem!important;
- left:0.5rem!important;
- pointer-events:auto!important;}}
+[data-testid="collapsedControl"]{{
+  background:transparent!important;
+  border:none!important;
+  display:flex!important;align-items:center!important;justify-content:center!important;
+  visibility:visible!important;opacity:1!important;
+  z-index:9999999!important;
+  position:fixed!important;
+  top:0.5rem!important;
+  left:0.5rem!important;
+  pointer-events:auto!important;}}
+
+/* The IN-SIDEBAR collapse button — must float ABOVE sidebar content
+   especially on mobile where sidebar takes full width */
+[data-testid="stSidebarCollapseButton"],
+section[data-testid="stSidebar"] [data-testid="stSidebarCollapseButton"],
+section[data-testid="stSidebar"] button[kind="header"]{{
+  position:absolute!important;
+  top:0.5rem!important;
+  right:0.5rem!important;
+  z-index:9999999!important;
+  background:rgba(255,255,255,0.15)!important;
+  border:1px solid rgba(255,255,255,0.25)!important;
+  border-radius:50%!important;
+  width:2.2rem!important;
+  height:2.2rem!important;
+  min-width:2.2rem!important;
+  display:flex!important;align-items:center!important;justify-content:center!important;
+  visibility:visible!important;opacity:1!important;
+  pointer-events:auto!important;
+  cursor:pointer!important;
+  backdrop-filter:blur(4px);
+  -webkit-backdrop-filter:blur(4px);}}
+
+[data-testid="stSidebarCollapseButton"]:hover,
+section[data-testid="stSidebar"] [data-testid="stSidebarCollapseButton"]:hover{{
+  background:rgba(255,255,255,0.28)!important;
+  border-color:rgba(255,255,255,0.4)!important;}}
+
+[data-testid="stSidebarCollapseButton"] svg,
+section[data-testid="stSidebar"] [data-testid="stSidebarCollapseButton"] svg{{
+  width:1.1rem!important;height:1.1rem!important;
+  fill:#ffffff!important;color:#ffffff!important;
+  visibility:visible!important;opacity:1!important;}}
 
 /* Force Streamlit's top header bar (the white tile) to be transparent
- so it never covers the sidebar toggle */
+   so it never covers the sidebar toggle */
 [data-testid="stHeader"],
 header[data-testid="stHeader"],
 div[data-testid="stHeader"]{{
- background:transparent!important;
- background-color:transparent!important;
- height:auto!important;
- z-index:1!important;}}
+  background:transparent!important;
+  background-color:transparent!important;
+  height:auto!important;
+  z-index:1!important;}}
 
 /* Also kill any decoration bar that overlaps the toggle */
 [data-testid="stDecoration"]{{
- display:none!important;}}
+  display:none!important;}}
+
+/* ── MOBILE-SPECIFIC sidebar fixes ── */
+@media (max-width:768px){{
+  /* When sidebar is open on mobile, ensure close button is reachable */
+  section[data-testid="stSidebar"][aria-expanded="true"]{{
+    width:85vw!important;
+    min-width:280px!important;
+    max-width:340px!important;}}
+  /* Push sidebar contents down to make room for close button */
+  section[data-testid="stSidebar"] > div:first-child{{
+    padding-top:3rem!important;}}
+  /* Make close button bigger and easier to tap on mobile */
+  [data-testid="stSidebarCollapseButton"],
+  section[data-testid="stSidebar"] [data-testid="stSidebarCollapseButton"]{{
+    width:2.6rem!important;
+    height:2.6rem!important;
+    min-width:2.6rem!important;
+    top:0.6rem!important;
+    right:0.6rem!important;}}
+  [data-testid="stSidebarCollapseButton"] svg{{
+    width:1.3rem!important;height:1.3rem!important;}}
+}}
+
 
 [data-testid="stSidebarCollapsedControl"] button,
 [data-testid="collapsedControl"] button,
@@ -4707,8 +4763,9 @@ line-height: 1.6;
 </style>
 <div class="lexi-hero">
 <div class="lexi-hero-watermark">&#9878;</div>
-<h1>⚖️ LexiAssist v8.0</h1>
-<p>Elite AI Legal Engine &nbsp;&middot;&nbsp; Nigerian Law &nbsp;&middot;&nbsp; Built for Practitioners<br>
+        <h1>⚖️ LexiAssist</h1>
+        <p>Elite AI Legal Engine &nbsp;&middot;&nbsp; Nigerian Law &nbsp;&middot;&nbsp; Built for Practitioners<br>
+
 Position-taking &middot; Strategy-driven &middot; Risk-ranked &middot; Litigator-minded</p>
 </div>
 """, unsafe_allow_html=True)
@@ -4939,8 +4996,9 @@ section[data-testid="stSidebar"]{display:none!important;}
  </style>
  <div class="lexi-hero">
  <div class="lexi-hero-watermark">&#9878;</div>
- <h1>⚖️ LexiAssist v8.0</h1>
- <p>First-time setup &nbsp;&middot;&nbsp; Create your administrator account below</p>
+        <h1>⚖️ LexiAssist</h1>
+        <p>First-time setup &nbsp;&middot;&nbsp; Create your administrator account below</p>
+
  </div>
  """, unsafe_allow_html=True)
 
@@ -4961,7 +5019,7 @@ def render_setup_screen():
 </style>""", unsafe_allow_html=True)
     st.markdown("""
     <div class="hero">
-        <h1>⚖️ LexiAssist v8.0</h1>
+        <h1>⚖️ LexiAssist </h1>
         <p>Elite AI Legal Engine for Nigerian Lawyers</p>
     </div>
     """, unsafe_allow_html=True)
@@ -5459,7 +5517,7 @@ def render_home():
         unsafe_allow_html=True,
     )
 
-    # ── Admin-only health banner: budget burn, failed logins, backup reminder ──
+        # ── Admin-only health banner: collapsed by default to keep home clean ──
     if st.session_state.get("current_user_role") == "admin":
         try:
             firm_cfg = st.session_state.get("profile", {}).get("firm_config", {})
@@ -5502,20 +5560,41 @@ def render_home():
 
             fail_color = "#dc2626" if fail_count_24h > 5 else "#64748b"
 
-            st.markdown(
-                f'<div style="background:var(--la-card);border:1px solid var(--la-border);'
-                f'border-radius:8px;padding:0.7rem 1rem;margin-bottom:0.8rem;'
-                f'display:flex;justify-content:space-between;flex-wrap:wrap;gap:0.6rem;'
-                f'font-size:0.82rem;color:var(--la-text);">'
-                f'<div>🛡️ <strong>Admin Dashboard</strong></div>'
-                f'<div>💰 AI Spend: <strong style="color:{burn_color};">{burn_label}</strong></div>'
-                f'<div>🔒 Failed Logins (24h): <strong style="color:{fail_color};">{fail_count_24h}</strong></div>'
-                f'<div>💾 {backup_warn}</div>'
-                f'</div>',
-                unsafe_allow_html=True,
+            # Determine if there's anything urgent worth surfacing
+            has_alert = (pct >= 90) or (fail_count_24h > 5) or ("⚠️" in backup_warn)
+            expander_label = (
+                f"🛡️ Admin Dashboard {'⚠️ — needs attention' if has_alert else '· quick view'}"
             )
+
+            with st.expander(expander_label, expanded=has_alert):
+                ad1, ad2, ad3 = st.columns(3)
+                with ad1:
+                    st.markdown(
+                        f'<div style="padding:0.4rem 0;">'
+                        f'💰 <strong>AI Spend</strong><br>'
+                        f'<span style="color:{burn_color};font-weight:700;">{burn_label}</span>'
+                        f'</div>',
+                        unsafe_allow_html=True,
+                    )
+                with ad2:
+                    st.markdown(
+                        f'<div style="padding:0.4rem 0;">'
+                        f'🔒 <strong>Failed Logins (24h)</strong><br>'
+                        f'<span style="color:{fail_color};font-weight:700;">{fail_count_24h}</span>'
+                        f'</div>',
+                        unsafe_allow_html=True,
+                    )
+                with ad3:
+                    st.markdown(
+                        f'<div style="padding:0.4rem 0;">'
+                        f'💾 <strong>Backup Status</strong><br>'
+                        f'<span style="font-size:0.85rem;">{backup_warn}</span>'
+                        f'</div>',
+                        unsafe_allow_html=True,
+                    )
         except Exception as _e:
             logger.warning(f"Admin banner failed: {_e}")
+
 
     firm = get_firm_name()
 
@@ -5834,17 +5913,21 @@ def render_home():
             st.info("No upcoming hearings. Add cases with hearing dates.")
 
     with col_right:
-        st.markdown("### 🧠 Recent AI Sessions")
         history = st.session_state.chat_history
-        if history:
-            for entry in reversed(history[-6:]):
-                mode_lbl = RESPONSE_MODES.get(entry.get("mode", ""), {}).get("label", "")
-                st.markdown(f"""<div class="history-item">
-                    <strong>{esc(entry.get('query', '')[:80])}{'…' if len(entry.get('query', '')) > 80 else ''}</strong><br>
-                    <small>{esc(entry.get('timestamp', ''))} · {esc(mode_lbl)} · {entry.get('word_count', 0)} words</small>
-                </div>""", unsafe_allow_html=True)
-        else:
-            st.info("No AI sessions yet. Go to AI Assistant to start.")
+        session_count = len(history)
+        with st.expander(f"🧠 Recent AI Sessions ({session_count})", expanded=False):
+            if history:
+                for entry in reversed(history[-6:]):
+                    mode_lbl = RESPONSE_MODES.get(entry.get("mode", ""), {}).get("label", "")
+                    st.markdown(f"""<div class="history-item">
+                        <strong>{esc(entry.get('query', '')[:80])}{'…' if len(entry.get('query', '')) > 80 else ''}</strong><br>
+                        <small>{esc(entry.get('timestamp', ''))} · {esc(mode_lbl)} · {entry.get('word_count', 0)} words</small>
+                    </div>""", unsafe_allow_html=True)
+                if session_count > 6:
+                    st.caption(f"Showing latest 6 of {session_count} sessions. Full history in 🧠 AI Assistant.")
+            else:
+                st.info("No AI sessions yet. Go to AI Assistant to start.")
+
 
         # Cost summary on home
         if cost_summary["total_calls"] > 0:
@@ -14027,9 +14110,25 @@ def _resolve_api_key() -> str:
     return ""
 
 def main():
+    # ── Health-check endpoint for keep-alive pingers ──
+    # If URL contains ?healthcheck=1, return minimal HTML and exit before the
+    # heavy app loads. This lets external pingers verify the container is alive
+    # without consuming AI tokens or DB queries.
+    try:
+        qp = st.query_params
+        if qp.get("healthcheck") == "1":
+            st.markdown(
+                f"<html><body><h1>OK</h1><p>{datetime.now().isoformat()}</p></body></html>",
+                unsafe_allow_html=True,
+            )
+            st.stop()
+    except Exception:
+        pass
+
     init_session_state()
     auto_connect()
     st.markdown(get_theme_css(
+
         st.session_state.theme,
         font_size_scale=st.session_state.get("font_size_scale", 1.0),
         high_contrast=st.session_state.get("high_contrast", False),
