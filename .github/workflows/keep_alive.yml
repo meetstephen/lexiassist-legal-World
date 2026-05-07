@@ -1,15 +1,72 @@
-name: Keep App Awake
+name: Keep LexiAssist Alive
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Runs every 6 hours to keep the Streamlit Community Cloud app awake.
+# Streamlit sleeps after 12 h of no browser traffic — we ping every 6 h
+# to stay well inside that window (2× safety margin).
+#
+# SETUP (one-time):
+#   1. Go to your GitHub repo → Settings → Secrets and variables → Actions
+#   2. Click "New repository secret"
+#   3. Name:  STREAMLIT_URL
+#      Value: https://your-app-name.streamlit.app   (your exact app URL)
+#   4. Save. Done.
+#
+# You can also trigger this manually from the Actions tab at any time.
+# ─────────────────────────────────────────────────────────────────────────────
 
 on:
   schedule:
-    # Runs every 6 hours, offset from the top of the hour to avoid GitHub queue delays
-    - cron: '12 */6 * * *'
-  workflow_dispatch: # Lets you trigger it manually to test
+    #        ┌── minute (0)
+    #        │  ┌── every 6th hour  (0, 6, 12, 18 UTC)
+    #        │  │      ┌── any day of month
+    #        │  │      │  ┌── any month
+    #        │  │      │  │  ┌── any day of week
+    - cron: '0 0,6,12,18 * * *'
+  workflow_dispatch:   # allows manual trigger from Actions tab
 
 jobs:
-  ping-app:
+  ping:
+    name: Ping Streamlit App
     runs-on: ubuntu-latest
+    timeout-minutes: 10
+
     steps:
-      - name: Ping Streamlit App
+      # ── 1. Check out repo (needed for keep_alive.py) ──────────────────
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      # ── 2. Set up Python ───────────────────────────────────────────────
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+
+      # ── 3. Install Chrome (stable, headless) ──────────────────────────
+      - name: Install Google Chrome
         run: |
-          curl --fail --max-time 30 -I https://lexiassist-legal-world.streamlit.app
+          wget -q -O - https://dl.google.com/linux/linux_signing_key.pub \
+            | sudo gpg --dearmor -o /usr/share/keyrings/google-chrome.gpg
+          echo "deb [arch=amd64 signed-by=/usr/share/keyrings/google-chrome.gpg] \
+            https://dl.google.com/linux/chrome/deb/ stable main" \
+            | sudo tee /etc/apt/sources.list.d/google-chrome.list
+          sudo apt-get update -qq
+          sudo apt-get install -y google-chrome-stable
+
+      # ── 4. Install Python dependencies ────────────────────────────────
+      - name: Install Python dependencies
+        run: pip install selenium webdriver-manager
+
+      # ── 5. Run the keep-alive ping ────────────────────────────────────
+      - name: Ping app
+        env:
+          STREAMLIT_URL: ${{ secrets.STREAMLIT_URL }}
+        run: python keep_alive.py
+
+      # ── 6. Report result ──────────────────────────────────────────────
+      - name: Report
+        if: always()
+        run: |
+          echo "Workflow completed at $(date -u '+%Y-%m-%d %H:%M UTC')"
+          echo "Next scheduled run: in ~6 hours"
