@@ -89,3 +89,30 @@ filterwarnings = [
     # package outside `streamlit run` — expected and harmless.
     "ignore:.*No runtime found.*:UserWarning",
 ]
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Mypy — gradual type checking
+#
+# Strategy: start strict on the pure-logic modules (ai, legal_data, migrator)
+# and leave the Streamlit-heavy page modules unchecked for now (they have too
+# many untyped streamlit interactions). Expand strict coverage over time.
+# ─────────────────────────────────────────────────────────────────────────────
+[tool.mypy]
+python_version = "3.12"
+warn_return_any = true
+warn_unused_configs = true
+# Ignore missing stubs for third-party libs we can't control
+ignore_missing_imports = true
+# Don't check everything by default — only the overrides below
+follow_imports = "skip"
+
+[[tool.mypy.overrides]]
+module = [
+    "lexi.ai",
+    # "lexi.legal_data",  # TODO: add TypedDicts for data structures
+    "lexi.migrator",
+]
+follow_imports = "normal"
+check_untyped_defs = true
+disallow_untyped_defs = true
+warn_unreachable = true
