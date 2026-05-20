@@ -37,7 +37,7 @@ from .database import get_db
 # ═══════════════════════════════════════════════════════
 # GEMINI CLIENT + KEY RESOLUTION
 # ═══════════════════════════════════════════════════════
-def _get_genai_client(key: str):
+def _get_genai_client(key: str) -> "Any":
     """Build a google.genai Client from an API key."""
     return genai.Client(api_key=key)
 
@@ -47,9 +47,9 @@ def _resolve_api_key() -> str:
     for src in [
         lambda: _safe_secret("GEMINI_API_KEY"),
         lambda: os.getenv("GEMINI_API_KEY", ""),
-        lambda: st.session_state.get("api_key", ""),
+        lambda: str(st.session_state.get("api_key", "")),
     ]:
-        k = src()
+        k = str(src() or "")
         if k and k.strip() and len(k.strip()) >= 10:
             return k.strip()
     return ""
@@ -58,7 +58,7 @@ def _resolve_api_key() -> str:
 def _safe_secret(key: str, default: str = "") -> str:
     """Read a Streamlit secret without raising if missing."""
     try:
-        return st.secrets[key]
+        return str(st.secrets[key])
     except Exception:
         return default
 
@@ -66,7 +66,7 @@ def _safe_secret(key: str, default: str = "") -> str:
 # ═══════════════════════════════════════════════════════
 # CONNECTION HELPERS
 # ═══════════════════════════════════════════════════════
-def auto_connect():
+def auto_connect() -> None:
     """Silently configure the API key on first run if available in secrets/env."""
     if st.session_state.api_configured:
         return
@@ -113,7 +113,7 @@ def estimate_cost(input_text: str, output_text: str) -> float:
     input_tokens = len(input_text) / 4
     output_tokens = len(output_text) / 4
     cost = (input_tokens / 1_000_000) * COST_PER_1M_INPUT + (output_tokens / 1_000_000) * COST_PER_1M_OUTPUT
-    return round(cost, 6)
+    return float(round(cost, 6))
 
 
 # ═══════════════════════════════════════════════════════

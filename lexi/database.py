@@ -13,6 +13,7 @@ import logging
 from .crypto import encrypt_secret, decrypt_secret
 from .constants import _get_db_url
 from .citations import VERIFIED_NIGERIAN_CASES
+from .migrator import run_migrations
 
 # ═══════════════════════════════════════════════════════
 # DATABASE LAYER
@@ -23,7 +24,7 @@ class Database:
     def __init__(self):
         self.url = _get_db_url()
         self.conn = self._connect()
-        self._init_tables()
+        run_migrations(self.conn)  # versioned migrations
 
     def _connect(self):
         conn = psycopg2.connect(self.url)
@@ -851,7 +852,7 @@ class Database:
                 pass
             try:
                 self.conn = self._connect()
-                self._init_tables()
+                run_migrations(self.conn)  # versioned migrations
             except Exception as e:
                 logger.error(f"DB reconnect failed: {e}")
 

@@ -42,6 +42,7 @@ FOUNDATION_MODULES = [
     "lexi.database",
     "lexi.auth",
     "lexi.helpers",
+    "lexi.migrator",
     "lexi.pages",
 ]
 

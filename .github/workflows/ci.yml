@@ -46,6 +46,11 @@ jobs:
         run: |
           ruff check .
 
+      - name: Type check (mypy)
+        run: |
+          pip install mypy
+          mypy lexi/ai.py lexi/migrator.py
+
       - name: Smoke tests (imports + render_* wiring)
         run: |
           pytest tests/ -q
