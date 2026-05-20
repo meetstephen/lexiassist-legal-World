@@ -42,7 +42,6 @@ st.set_page_config(
 )
 
 # ── Now load the rest of the package ────────────────────────────────────────
-from lexi.legal_data import LEGAL_DATA_VERSION
 from lexi.themes import get_theme_css
 from lexi.database import get_db, load_user_data
 from lexi.cookies import get_session_cookie, inject_cookie_reader
@@ -319,29 +318,30 @@ def main():
             with tab:
                 fn()
 
-    # Footer
+    # ── Footer (Option 3: pro-firm letterhead style) ────────────────────
+    # Three lines:
+    #   1. Disclaimer banner — "LexiAssist · AI-Generated Drafting Aid · Not Legal Advice · Verify all authorities"
+    #   2. Firm letterhead    — "{Firm}  |  Powered by LexiAssist v{__version__}  |  © {year}"
+    # Username intentionally omitted (cleaner for screenshots / screen-shares).
+    # Legal-data version, "updated", and "last act" lines are intentionally
+    # removed; they still surface in Tools and Admin Settings for users who
+    # want to see them, but the global footer stays clean.
     st.markdown("---")
-    firm = get_firm_name()
-    firm_text = f"{esc(firm)} · " if firm and firm != "LexiAssist" else ""
-    uname = st.session_state.get("current_username", "")
-    user_text = f" · Signed in as @{esc(uname)}" if uname else ""
-    ldv = LEGAL_DATA_VERSION
+    firm = get_firm_name() or "LexiAssist"
+    year = datetime.now().year
     st.markdown(
         f"""
-    <div style="text-align:center;font-size:0.82rem;color:var(--la-text2);
+    <div style="text-align:center;color:var(--la-text2);
                 margin-top:1.5rem;padding:1rem 1rem 0.5rem;
                 border-top:1px solid var(--la-border);">
-        <span style="color:#ef4444;font-weight:700;font-size:0.85rem;">
-            ⚠️ AI-Generated Analysis — Not Legal Advice
-        </span><br>
-        <span style="font-size:0.75rem;line-height:2;">
-            <strong>Engine:</strong> {esc(ldv['version'])} &nbsp;|&nbsp;
-            <strong>Updated:</strong> {esc(ldv['updated'])} &nbsp;|&nbsp;
-            <strong>Latest Act:</strong> {esc(ldv['last_act'])}
-        </span><br>
-        <span style="font-size:0.72rem;opacity:0.7;">
-            {firm_text}{"Signed in as @" + esc(uname) if uname else ""}
-        </span>
+        <div style="color:#ef4444;font-weight:700;font-size:0.84rem;line-height:1.6;">
+            LexiAssist &middot; AI-Generated Drafting Aid &middot; Not Legal Advice &middot; Verify all authorities
+        </div>
+        <div style="margin-top:0.45rem;font-size:0.78rem;line-height:1.6;opacity:0.85;">
+            <strong>{esc(firm)}</strong> &nbsp;|&nbsp;
+            Powered by LexiAssist v{esc(__version__)} &nbsp;|&nbsp;
+            &copy; {year}
+        </div>
     </div>""",
         unsafe_allow_html=True,
     )
