@@ -68,3 +68,34 @@ UPLOAD_TYPES = ["pdf", "docx", "doc", "txt", "xlsx", "xls", "csv", "json", "rtf"
 # Cost per 1M tokens (approx Gemini 2.5 Flash pricing)
 COST_PER_1M_INPUT = 0.15
 COST_PER_1M_OUTPUT = 0.60
+
+
+# ═══════════════════════════════════════════════════════
+# FX RATE — USD → NGN
+# ═══════════════════════════════════════════════════════
+# Used to convert Gemini's USD-denominated cost estimates into Naira so
+# that the firm-wide monthly_ai_budget (set in NGN) can be enforced.
+#
+# This is intentionally NOT a live FX feed — a stale-but-conservative
+# constant beats a flaky API call inside the hot path of every AI call.
+# Override via Streamlit secret `USD_TO_NGN` or env var of the same name
+# when the rate drifts materially. Bump the default in code on each major
+# release so deployments without secrets stay reasonably current.
+def _get_usd_to_ngn() -> float:
+    raw = ""
+    try:
+        raw = str(st.secrets.get("USD_TO_NGN", ""))
+    except Exception:
+        raw = ""
+    if not raw:
+        raw = os.getenv("USD_TO_NGN", "")
+    try:
+        rate = float(raw) if raw else 0.0
+        if rate > 0:
+            return rate
+    except (TypeError, ValueError):
+        pass
+    return 1600.0  # fallback default — review at every major release
+
+
+USD_TO_NGN = _get_usd_to_ngn()
