@@ -135,9 +135,29 @@ def safe_json_loads(raw: str, fallback=None):
 
 
 # ═══════════════════════════════════════════════════════
-# LOW-LEVEL HTML HELPER (used package-wide)
+# LOW-LEVEL HELPERS (used package-wide; live here to keep
+# database / auth / helpers free of circular imports)
 # ═══════════════════════════════════════════════════════
 def esc(text: str) -> str:
+    """HTML-escape a value. Empty input returns empty string."""
     if not text:
         return ""
     return html_mod.escape(str(text))
+
+
+def new_id() -> str:
+    """Generate a short, URL-safe identifier (12 hex chars).
+
+    Centralised here because both lexi.database and lexi.helpers need
+    it; routing through one of them would create a circular import.
+    """
+    return uuid.uuid4().hex[:12]
+
+
+def hash_session_token(token: str) -> str:
+    """Hash a session token before storing or comparing in the database.
+
+    Centralised here for the same reason as ``new_id`` — both
+    lexi.database and lexi.auth need this primitive.
+    """
+    return hashlib.sha256(token.encode()).hexdigest()

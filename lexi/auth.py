@@ -8,8 +8,10 @@ state.
 """
 from __future__ import annotations
 
-from .runtime import st, os, re, hashlib, time, datetime, logger, esc
+from .runtime import st, os, re, hashlib, time, datetime, uuid, logger, esc
 from .crypto import encrypt_secret, decrypt_secret
+from .constants import SUPPORTED_MODELS
+from .themes import get_theme_css
 from .database import get_db, load_user_data
 
 

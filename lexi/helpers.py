@@ -12,8 +12,12 @@ from .runtime import (
     genai, _genai_types, pd,
     HAS_PDF_READ, pdfplumber,
     HAS_XLSX, openpyxl,
+    HAS_DOCX, DocxDocument,
+    smtplib, MIMEMultipart, MIMEText,
     safe_json_loads,
+    __version__,
 )
+import logging
 from .crypto import encrypt_secret, decrypt_secret
 from .constants import (
     SUPPORTED_MODELS, DEFAULT_MODEL,
@@ -29,6 +33,7 @@ from .legal_data import DEFAULT_LIMITATION_PERIODS, DEFAULT_LEGAL_MAXIMS
 from .citations import (
     verify_response_citations, extract_citations, extract_case_names,
 )
+from .fuzzy import DEFAULT_TEMPLATES
 from .rag import build_rag_context
 from .database import get_db, persist, persist_profile, _bootstrap_verified_cases
 
