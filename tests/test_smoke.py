@@ -214,6 +214,31 @@ def test_prompts_compose_correctly():
             f"task_drafting.txt missing required Nigerian marker {marker!r}"
         )
 
+    # All 36 states + FCT must appear in the drafting protocol — no
+    # geopolitical zone left out (the South-East was a known prior gap).
+    all_36_states_plus_fct = [
+        # South-East
+        "Abia", "Anambra", "Ebonyi", "Enugu", "Imo",
+        # South-South
+        "Akwa Ibom", "Bayelsa", "Cross River", "Delta", "Edo", "Rivers",
+        # South-West
+        "Ekiti", "Lagos", "Ogun", "Ondo", "Osun", "Oyo",
+        # North-Central
+        "Benue", "Kogi", "Kwara", "Nasarawa", "Niger", "Plateau",
+        # North-East
+        "Adamawa", "Bauchi", "Borno", "Gombe", "Taraba", "Yobe",
+        # North-West
+        "Jigawa", "Kaduna", "Kano", "Katsina", "Kebbi", "Sokoto", "Zamfara",
+        # FCT
+        "FCT",
+    ]
+    missing_states = [s for s in all_36_states_plus_fct if s not in drafting]
+    assert not missing_states, (
+        f"Drafting protocol is missing these states: {missing_states}. "
+        f"LexiAssist serves practitioners in all 36 states + FCT — every "
+        f"jurisdiction must be represented."
+    )
+
 
 def test_drafting_skips_strategy_block():
     """build_system_prompt must NOT inject the STRATEGIC POSITION block
