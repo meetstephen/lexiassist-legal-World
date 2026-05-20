@@ -992,6 +992,15 @@ def verify_case_name(name: str) -> Optional[dict]:
     """Look up a case name with exact, partial, and fuzzy matching."""
     name_clean = re.sub(r"\s+", " ", name.strip()).lower()
 
+    # Empty / whitespace-only input must NOT match anything. The
+    # substring loop below uses ``name_clean in key.lower()``, and an
+    # empty string is a substring of every key in Python — without this
+    # guard, ``verify_case_name("")`` would silently report the first
+    # database entry as a "partial match", labelling AI hallucinations
+    # of empty responses as verified.
+    if not name_clean:
+        return None
+
     # Exact match
     for key, val in VERIFIED_NIGERIAN_CASES.items():
         if key.lower() == name_clean:
