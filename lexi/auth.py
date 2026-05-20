@@ -13,6 +13,7 @@ from .crypto import encrypt_secret, decrypt_secret
 from .constants import SUPPORTED_MODELS
 from .themes import get_theme_css
 from .database import get_db, load_user_data
+from .cookies import set_session_cookie, delete_session_cookie
 
 
 def manual_connect(key: str) -> bool:
@@ -108,14 +109,12 @@ def do_login(username: str, password: str, remember_me: bool = True) -> bool:
     db.append_audit("LOGIN", f"user={uname_clean}")
     load_user_data()
     st.session_state.user_data_loaded = True
-    # ── Session token: stored in session state only, NOT in URL ──
+    # ── Session token: stored in HttpOnly-like cookie, NOT in URL ──
     if remember_me:
         token = db.create_session_token(uid, days=30)
         st.session_state["_session_token"] = token
-        try:
-            st.query_params["t"] = token
-        except Exception:
-            pass
+        st.session_state["_cookie_token"] = token
+        set_session_cookie(token)
     return True
 
 def _record_login_failure(uname_clean: str) -> None:
@@ -140,7 +139,7 @@ def _record_login_failure(uname_clean: str) -> None:
 
 
 def do_auto_login_from_token(token: str) -> bool:
-    """Silently restore a session from a persistent token. Returns True if valid."""
+    """Silently restore a session from a persistent cookie token. Returns True if valid."""
     if not token:
         return False
     db = get_db()
@@ -154,6 +153,7 @@ def do_auto_login_from_token(token: str) -> bool:
     st.session_state.current_username = user["username"]
     st.session_state.current_user_role = user["role"]
     st.session_state["_session_token"] = token
+    st.session_state["_cookie_token"] = token
     load_user_data()
     st.session_state.user_data_loaded = True
     return True
@@ -216,10 +216,9 @@ def render_reauth_screen(token: str, username: str) -> None:
             get_db().append_audit("REAUTH_SIGNOUT", f"user={username}")
         except Exception:
             pass
-        try:
-            st.query_params.clear()
-        except Exception:
-            pass
+        delete_session_cookie()
+        st.session_state.pop("_cookie_token", None)
+        st.session_state.pop("_session_token", None)
         st.rerun()
         return
 
@@ -253,7 +252,8 @@ def render_reauth_screen(token: str, username: str) -> None:
                     # Too many failures — revoke token, force full login
                     try:
                         db.revoke_session_token(token)
-                        st.query_params.clear()
+                        delete_session_cookie()
+                        st.session_state.pop("_cookie_token", None)
                     except Exception:
                         pass
                     st.error("🔒 Too many failed attempts. You have been signed out.")
@@ -267,20 +267,18 @@ def render_reauth_screen(token: str, username: str) -> None:
 
 
 def do_logout():
-    """Revoke session token, clear query params, and wipe session state."""
+    """Revoke session token, delete cookie, and wipe session state."""
     db = get_db()
     token = st.session_state.get("_session_token", "")
     uname = st.session_state.get("current_username", "unknown")
     db.append_audit("LOGOUT", f"user={uname}")
     if token:
         db.revoke_session_token(token)
-    try:
-        st.query_params.clear()
-    except Exception:
-        pass
+    # Remove the session cookie from the browser
+    delete_session_cookie()
     clear_keys = [
         "authenticated", "current_user_id", "current_username", "current_user_role",
-        "user_data_loaded", "_session_token",
+        "user_data_loaded", "_session_token", "_cookie_token",
         "cases", "clients", "time_entries", "invoices",
         "chat_history", "custom_templates", "custom_limitation_periods", "custom_maxims",
         "profile", "last_response", "original_query", "research_results",
