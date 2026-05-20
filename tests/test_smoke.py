@@ -191,12 +191,16 @@ def test_prompts_compose_correctly():
                 f"the identity_core inheritance is broken"
             )
 
-    # Strategy block belongs in standard + comprehensive only
-    assert "STRATEGIC POSITION" not in PROMPTS_BY_MODE["brief"], (
+    # Strategy block belongs in standard + comprehensive only.
+    # Match the box-drawing section header, not the bare phrase, so we
+    # don't collide with task_drafting.txt's Rule 1 that references the
+    # phrase in a "do NOT include" instruction.
+    strategy_marker = "\u2550\u2550\u2550 STRATEGIC POSITION \u2550\u2550\u2550"
+    assert strategy_marker not in PROMPTS_BY_MODE["brief"], (
         "brief mode must NOT contain the STRATEGIC POSITION block"
     )
-    assert "STRATEGIC POSITION" in PROMPTS_BY_MODE["standard"]
-    assert "STRATEGIC POSITION" in PROMPTS_BY_MODE["comprehensive"]
+    assert strategy_marker in PROMPTS_BY_MODE["standard"]
+    assert strategy_marker in PROMPTS_BY_MODE["comprehensive"]
 
     # Drafting task modifier is the comprehensive Nigerian protocol
     drafting = TASK_MODIFIERS["drafting"]
@@ -242,11 +246,26 @@ def test_prompts_compose_correctly():
 
 def test_drafting_skips_strategy_block():
     """build_system_prompt must NOT inject the STRATEGIC POSITION block
-    into drafting outputs — drafts are operative documents, not analyses."""
+    into drafting outputs — drafts are operative documents, not analyses.
+
+    NB: we look for the actual section *header* (with box-drawing chars),
+    not the bare phrase "STRATEGIC POSITION", because the drafting
+    protocol legitimately references the phrase in Rule 1 (a quoted
+    instruction telling the AI NOT to emit that block).
+    """
     from lexi.helpers import build_system_prompt
+    from lexi.prompts import STRATEGY_BLOCK
+
+    # The strategy block's distinctive section header must NOT appear
+    # in a drafting prompt. Use the full first-line marker so we don't
+    # collide with mentions of the phrase in instructions.
+    strategy_marker = "\u2550\u2550\u2550 STRATEGIC POSITION \u2550\u2550\u2550"
+    assert strategy_marker in STRATEGY_BLOCK, (
+        "Sanity: strategy_block.txt must contain the section header"
+    )
 
     drafting_system = build_system_prompt("drafting", "comprehensive")
-    assert "STRATEGIC POSITION" not in drafting_system, (
+    assert strategy_marker not in drafting_system, (
         "Drafting system prompt must not include the STRATEGIC POSITION "
         "block — it pollutes pleadings/affidavits with risk tables a "
         "lawyer would never sign their name to."
@@ -256,7 +275,7 @@ def test_drafting_skips_strategy_block():
 
     # Analysis tasks DO get the strategy block
     analysis_system = build_system_prompt("general", "comprehensive")
-    assert "STRATEGIC POSITION" in analysis_system
+    assert strategy_marker in analysis_system
 
 
 def test_precedent_grounding_helper():
