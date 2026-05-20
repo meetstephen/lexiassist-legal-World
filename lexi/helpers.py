@@ -192,7 +192,30 @@ def delete_time_entry(eid: str):
     persist("time_entries")
 
 
+def get_currency_symbol() -> str:
+    """Return the currency symbol configured in Firm Admin Settings.
+    Falls back to ₦ (NGN) if not configured."""
+    _SYMBOLS = {"NGN (₦)": "₦", "USD ($)": "$", "GBP (£)": "£", "EUR (€)": "€"}
+    try:
+        cfg = st.session_state.get("profile", {}).get("firm_config", {})
+        return _SYMBOLS.get(cfg.get("billing_currency", "NGN (₦)"), "₦")
+    except Exception:
+        return "₦"
+
+
 def fmt_currency(amount) -> str:
+    """Format a monetary amount with the firm's configured currency symbol."""
+    sym = get_currency_symbol()
+    try:
+        return f"{sym}{float(amount):,.2f}"
+    except Exception:
+        return f"{sym}0.00"
+
+
+def fmt_ngn(amount) -> str:
+    """Format a monetary amount in NGN (₦). Used for Nigerian statutory fees,
+    stamp duties, and regulatory amounts that are always denominated in Naira
+    regardless of the firm's billing currency setting."""
     try:
         return f"₦{float(amount):,.2f}"
     except Exception:

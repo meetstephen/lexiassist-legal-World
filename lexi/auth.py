@@ -188,7 +188,7 @@ def render_reauth_screen(token: str, username: str) -> None:
         f'<div style="background:var(--la-bg2);border:1px solid var(--la-border);'
         f'border-radius:8px;padding:0.55rem 1rem;margin-bottom:1rem;'
         f'font-size:0.9rem;color:var(--la-text2);text-align:center;">'
-        f'👤 <strong style="color:var(--la-text);">@{username}</strong>'
+        f'👤 <strong style="color:var(--la-text);">@{esc(username)}</strong>'
         f'</div>',
         unsafe_allow_html=True,
     )
