@@ -1,0 +1,6 @@
+
+Generate a legal news digest for Nigerian lawyers covering: {subject_area}.
+Focus on developments that would have occurred in the last 30-90 days (you may use representative/
+typical examples if specific recent cases are uncertain — but mark them [REPRESENTATIVE EXAMPLE]).
+Generate exactly 6 news items.
+Today's reference date: {today}.

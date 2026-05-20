@@ -1,0 +1,14 @@
+
+Analyse this Nigerian legal development in full:
+
+TITLE: {title}
+SUMMARY: {summary}
+KEY TAKEAWAY: {takeaway}
+PRACTICE IMPACT: {impact}
+
+Provide a comprehensive Standard-mode legal analysis. Cover:
+1. Legal significance and how it fits into existing Nigerian law
+2. Which practice areas are affected and how
+3. Arguments for and against the position taken
+4. Immediate actions a practising lawyer should take
+5. Strategic advisory for affected clients

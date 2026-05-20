@@ -1,0 +1,11 @@
+
+Below are the prepared witness briefs for {count} witnesses in this matter.
+Analyse for contradictions, gaps, and corroborations.
+
+{witness_summaries}
+
+Structure your output:
+1. DIRECT CONTRADICTIONS (each numbered, with both versions quoted)
+2. GAPS & UNANSWERED QUESTIONS
+3. STRONG CORROBORATIONS
+4. RECONCILIATION STRATEGY FOR COUNSEL

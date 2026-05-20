@@ -1,0 +1,43 @@
+
+INSTRUCTING PARTY: {instructing_party}
+OPPOSING PARTY: {opposing_party}
+CASE TYPE: {case_type}
+CLAIM AMOUNT / SUBJECT MATTER VALUE: ₦{claim_amount}
+COURT / STAGE: {court_stage}
+STRENGTH OF CASE (self-assessed): {strength}
+URGENCY / TIME PRESSURE: {urgency}
+
+CASE FACTS:
+{case_facts}
+
+Generate a full Settlement & ADR Advisory structured as follows:
+
+═══════════════════════════════════════════
+SECTION 1 — SETTLEMENT VALUE ANALYSIS
+═══════════════════════════════════════════
+(Compute: realistic settlement band, ideal settlement amount, walk-away floor/ceiling.
+Give actual ₦ figures, not just percentages. Show your reasoning.)
+
+═══════════════════════════════════════════
+SECTION 2 — NEGOTIATION STRATEGY
+═══════════════════════════════════════════
+(Opening position, key concessions to offer, key concessions to demand, sequence of moves.
+Identify the opposing party's pressure points and how to exploit them.)
+
+═══════════════════════════════════════════
+SECTION 3 — ADR ROUTE RECOMMENDATION
+═══════════════════════════════════════════
+(Should this go to mediation, arbitration, or direct negotiation? Which ADR centre?
+Timeline and cost estimate for ADR vs. continued litigation.)
+
+═══════════════════════════════════════════
+SECTION 4 — WITHOUT PREJUDICE OFFER DRAFT
+═══════════════════════════════════════════
+(Draft a concise "Without Prejudice Save as to Costs" opening offer letter.
+Include: offer amount, conditions, deadline, and reservation of rights.)
+
+═══════════════════════════════════════════
+SECTION 5 — RISK IF NO SETTLEMENT
+═══════════════════════════════════════════
+(Litigation risk, cost exposure, likely trial outcome, enforcement risk.
+Be brutally honest about the weakest party's position.)

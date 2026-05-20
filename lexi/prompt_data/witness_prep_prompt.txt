@@ -1,0 +1,23 @@
+
+CASE FACTS:
+{case_facts}
+
+WITNESS ROLE: {witness_role}
+CASE TYPE: {case_type}
+
+Generate the three sections below. Each section must be clearly labelled.
+
+═══════════════════════════════════
+SECTION 1 — EXAMINATION-IN-CHIEF QUESTIONS
+═══════════════════════════════════
+(Numbered open-ended questions. Non-leading. Structured to build narrative chronologically.)
+
+═══════════════════════════════════
+SECTION 2 — CROSS-EXAMINATION RISKS
+═══════════════════════════════════
+(Bullet-point attack lines. For each: the attack angle, the likely question the opponent asks, and the vulnerability it exploits.)
+
+═══════════════════════════════════
+SECTION 3 — COACHING NOTES FOR THE WITNESS
+═══════════════════════════════════
+(Concise, practical, numbered instructions. What to do, what to avoid, how to behave in the box.)

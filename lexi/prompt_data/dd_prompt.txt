@@ -1,0 +1,23 @@
+
+TRANSACTION TYPE: {transaction_type}
+TRANSACTION VALUE: ₦{transaction_value}
+JURISDICTION: {jurisdiction}
+PARTIES: {parties}
+BRIEF TRANSACTION DESCRIPTION: {description}
+SPECIAL CONCERNS: {special_concerns}
+
+Generate a comprehensive due diligence checklist structured as:
+
+1. CORPORATE / ENTITY SEARCHES
+2. TITLE / PROPERTY SEARCHES (if applicable)
+3. REGULATORY / LICENSING SEARCHES  
+4. FINANCIAL & TAX SEARCHES
+5. LITIGATION / ENCUMBRANCE SEARCHES
+6. CONTRACTS & COMMERCIAL DOCUMENTS
+7. EMPLOYMENT & LABOUR (if applicable)
+8. ENVIRONMENTAL / SECTOR-SPECIFIC (if applicable)
+9. TRANSACTION STRUCTURE RISK FLAGS
+10. RECOMMENDED CONDITIONS PRECEDENT
+
+For each section, provide numbered checklist items with priority flags.
+End with a CRITICAL PATH — the 5 searches that must be completed first and why.

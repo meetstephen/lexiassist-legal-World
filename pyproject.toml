@@ -72,6 +72,8 @@ ignore = [
 "lexi/auth.py" = ["F811"]
 "lexi/exports.py" = ["F811"]
 "lexi/rag.py" = ["F811"]
+# One-shot extraction scripts use sys.path manipulation before imports.
+"scripts/*.py" = ["E402"]
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Pytest — smoke tests
