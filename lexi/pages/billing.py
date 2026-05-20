@@ -45,7 +45,7 @@ def render_billing():
                 desc = st.text_input("Description *", key="bill_desc_inp")
             with bt2:
                 hours = st.number_input("Hours *", min_value=0.0, step=0.25, key="bill_hrs_inp")
-                rate = st.number_input("Rate (₦/hr) *", min_value=0.0, step=1000.0, value=50000.0, key="bill_rate_inp")
+                rate = st.number_input(f"Rate ({get_currency_symbol()}/hr) *", min_value=0.0, step=1000.0, value=50000.0, key="bill_rate_inp")
                 entry_date = st.date_input("Date", key="bill_date_inp")
 
             if st.form_submit_button("➕ Add Entry", type="primary"):
@@ -131,7 +131,7 @@ def render_billing():
                     safe_docx_download(inv_text, f"Invoice {inv['invoice_no']}",
                                        f"Invoice_{inv['invoice_no']}", f"inv_docx_{inv['id']}",
                                        doc_type="invoice",
-                                       meta={"invoice_no": inv.get("invoice_no",""), "client": inv.get("client_name",""), "matter": inv.get("matter",""), "amount": f"₦{inv.get('amount',0):,.2f}"})
+                                       meta={"invoice_no": inv.get("invoice_no",""), "client": inv.get("client_name",""), "matter": inv.get("matter",""), "amount": fmt_currency(inv.get('amount',0))})
 
     # ── Billing Reports ──
     with tab_report:

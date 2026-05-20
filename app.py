@@ -222,9 +222,14 @@ def main():
 
         _maybe_send_hearing_reminders()
 
-    # ── Self-ping: refresh activity every render to delay cloud-sleep ──
-    # This injects a tiny iframe that re-pings the healthcheck endpoint every
-    # 7 minutes while a tab is open, keeping the WebSocket alive.
+    # ── Keep-alive: client-side ping while tab is open ──────────────────
+    # Strategy: Two layers prevent Streamlit Cloud from sleeping the app.
+    # 1. This JS fires a GET to /?healthcheck=1 every 7 min while any user
+    #    has a tab open — the primary keep-alive mechanism.
+    # 2. A GitHub Actions cron (keep_alive.yml) pings the healthcheck every
+    #    6 hours as a cold-start safety net for zero-user periods.
+    # No Puppeteer/Selenium/headless browser needed — a simple HTTP GET
+    # to the healthcheck endpoint is sufficient to prevent deep sleep.
     try:
         st.components.v1.html(
             """
@@ -337,8 +342,6 @@ def main():
         unsafe_allow_html=True,
     )
 
-    # ── Keep-Alive Ping ──────────────────────────────────────────────────────────
-    st.components.v1.html("", height=0)
     # ────────────────────────────────────────────────────────────────────────────
 
 

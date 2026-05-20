@@ -50,7 +50,7 @@ def render_fee_calculator():
                 min_value=0.0, value=5_000_000.0, step=100_000.0,
                 format="%.2f", key="land_val_inp",
             )
-            st.caption(f"Entered: **{fmt_currency(land_value)}**")
+            st.caption(f"Entered: **{fmt_ngn(land_value)}**")
         with lf2:
             include_vat = st.checkbox("Add 7.5% VAT on fees", value=True, key="land_vat_chk")
             show_breakdown = st.checkbox("Show band-by-band breakdown", value=True, key="land_bband")
@@ -70,22 +70,22 @@ def render_fee_calculator():
             r1, r2, r3 = st.columns(3)
             with r1:
                 st.markdown(f"""<div class="stat-card">
-                    <div class="stat-value">{fmt_currency(base_fee)}</div>
+                    <div class="stat-value">{fmt_ngn(base_fee)}</div>
                     <div class="stat-label">Base Solicitor's Fee</div>
                 </div>""", unsafe_allow_html=True)
             with r2:
                 st.markdown(f"""<div class="stat-card">
-                    <div class="stat-value">{fmt_currency(vat)}</div>
+                    <div class="stat-value">{fmt_ngn(vat)}</div>
                     <div class="stat-label">VAT (7.5%)</div>
                 </div>""", unsafe_allow_html=True)
             with r3:
                 st.markdown(f"""<div class="stat-card">
-                    <div class="stat-value">{fmt_currency(total)}</div>
+                    <div class="stat-value">{fmt_ngn(total)}</div>
                     <div class="stat-label">Total Chargeable</div>
                 </div>""", unsafe_allow_html=True)
 
             effective_rate = (base_fee / lf_value * 100) if lf_value > 0 else 0
-            st.info(f"💡 Effective rate: **{effective_rate:.3f}%** on {fmt_currency(lf_value)}")
+            st.info(f"💡 Effective rate: **{effective_rate:.3f}%** on {fmt_ngn(lf_value)}")
 
             if show_breakdown:
                 st.markdown("##### 📊 Band-by-Band Breakdown")
@@ -93,15 +93,15 @@ def render_fee_calculator():
                 df = pd.DataFrame([
                     {
                         "Band": row["band"],
-                        "Taxable Amount": fmt_currency(row["taxable"]),
+                        "Taxable Amount": fmt_ngn(row["taxable"]),
                         "Rate": row["rate"],
-                        "Fee": fmt_currency(row["fee"]),
+                        "Fee": fmt_ngn(row["fee"]),
                     }
                     for row in breakdown
                 ])
                 if include_vat:
-                    df.loc[len(df)] = {"Band": "VAT (7.5%)", "Taxable Amount": "", "Rate": "7.5%", "Fee": fmt_currency(vat)}
-                df.loc[len(df)] = {"Band": "TOTAL", "Taxable Amount": "", "Rate": "", "Fee": fmt_currency(total)}
+                    df.loc[len(df)] = {"Band": "VAT (7.5%)", "Taxable Amount": "", "Rate": "7.5%", "Fee": fmt_ngn(vat)}
+                df.loc[len(df)] = {"Band": "TOTAL", "Taxable Amount": "", "Rate": "", "Fee": fmt_ngn(total)}
                 st.dataframe(df, use_container_width=True, hide_index=True)
 
             # Store for fee note tab
@@ -145,7 +145,7 @@ def render_fee_calculator():
         sd_annual = 0.0
 
         if basis == "flat":
-            st.metric("Stamp Duty Payable", fmt_currency(inst.get("flat", 0)))
+            st.metric("Stamp Duty Payable", fmt_ngn(inst.get("flat", 0)))
             st.session_state["fn_stamp_duty"] = float(inst.get("flat", 0))
         else:
             v1, v2 = st.columns(2)
@@ -170,7 +170,7 @@ def render_fee_calculator():
                 if basis == "annual_rent_x_years":
                     sd_years = st.number_input("Number of Years",
                         min_value=0.5, max_value=6.9, value=2.0, step=0.5, key="sd_years_inp")
-                    st.caption(f"Annual rent: {fmt_currency(sd_annual)} × {sd_years} years")
+                    st.caption(f"Annual rent: {fmt_ngn(sd_annual)} × {sd_years} years")
 
             duty = compute_stamp_duty(
                 instrument_key,
@@ -188,12 +188,12 @@ def render_fee_calculator():
                 st.markdown("---")
                 sc1, sc2, sc3 = st.columns(3)
                 with sc1:
-                    st.metric("Stamp Duty", fmt_currency(sd_result))
+                    st.metric("Stamp Duty", fmt_ngn(sd_result))
                 with sc2:
                     effective = (sd_result / (sd_value or sd_annual * sd_years or 1)) * 100
                     st.metric("Effective Rate", f"{effective:.3f}%")
                 with sc3:
-                    st.metric("Penalty (if late > 30 days)", fmt_currency(sd_result * 0.1 + 50))
+                    st.metric("Penalty (if late > 30 days)", fmt_ngn(sd_result * 0.1 + 50))
                 st.markdown(f"""
 <div style="background:#fffbeb;border-left:3px solid #f59e0b;padding:0.8rem 1rem;
 border-radius:0.4rem;margin-top:0.5rem;font-size:0.9rem;">
@@ -242,7 +242,7 @@ border-radius:0.4rem;margin-top:0.5rem;font-size:0.9rem;">
                 min_value=0.0, value=10_000_000.0, step=500_000.0,
                 format="%.2f", key="cf_claim_inp",
             )
-            st.caption(f"Claim: **{fmt_currency(claim_val)}**")
+            st.caption(f"Claim: **{fmt_ngn(claim_val)}**")
 
         if st.button("🔢 Get Filing Fees", type="primary", key="cf_calc_btn", use_container_width=True):
             st.session_state["cf_result"] = (court_key, claim_val)
@@ -257,9 +257,9 @@ border-radius:0.4rem;margin-top:0.5rem;font-size:0.9rem;">
             st.markdown("---")
             ff1, ff2, ff3 = st.columns(3)
             with ff1:
-                st.metric("Originating Process Fee", fmt_currency(filing_fee))
+                st.metric("Originating Process Fee", fmt_ngn(filing_fee))
             with ff2:
-                st.metric("Estimated Appeal Fee", fmt_currency(appeal_fee))
+                st.metric("Estimated Appeal Fee", fmt_ngn(appeal_fee))
             with ff3:
                 st.metric("Filing + Service (est.)",
                           fmt_currency(filing_fee + filing_fee * 0.3))
