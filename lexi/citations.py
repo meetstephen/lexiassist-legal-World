@@ -439,6 +439,55 @@ def verify_case_name(name: str) -> Optional[dict]:
     return best_match
 
 
+def find_relevant_verified_cases(query: str, top_k: int = 8) -> list[dict]:
+    """Retrieval helper for grounded precedent finding.
+
+    Searches ``VERIFIED_NIGERIAN_CASES`` for cases whose ``principle`` field
+    most strongly overlaps the query keywords. Returns up to ``top_k`` matches
+    sorted by overlap score, each as a dict ready to inject into a prompt.
+
+    The scoring is intentionally simple (token-overlap, no embeddings) because:
+      * the verified DB is small and curated (every entry is a landmark);
+      * we only need a candidate set, not a final ranking — the AI re-ranks; and
+      * it has zero external deps and works offline.
+
+    Returns empty list if query is empty or no candidates score > 0.
+    """
+    if not query or not query.strip():
+        return []
+    stopwords = {
+        "the","a","an","and","or","but","in","on","at","to","for","of","is","are",
+        "was","were","be","been","being","have","has","had","do","does","did","will",
+        "would","could","should","may","might","shall","this","that","these","those",
+        "what","when","where","which","who","how","if","not","no","can","client",
+        "matter","case","issue","situation","problem","question","advice","legal","law",
+        "nigerian","nigeria","under","about",
+    }
+    words = re.findall(r"\b[a-zA-Z]{3,}\b", query.lower())
+    keywords = {w for w in words if w not in stopwords}
+    if not keywords:
+        return []
+
+    scored: list[tuple[int, str, dict]] = []
+    for name, val in VERIFIED_NIGERIAN_CASES.items():
+        principle = (val.get("principle") or "").lower()
+        name_low = name.lower()
+        principle_tokens = set(re.findall(r"\b[a-zA-Z]{3,}\b", principle))
+        name_tokens = set(re.findall(r"\b[a-zA-Z]{3,}\b", name_low))
+        score = (
+            3 * len(keywords & principle_tokens)
+            + 1 * len(keywords & name_tokens)
+        )
+        if score > 0:
+            scored.append((score, name, val))
+
+    scored.sort(key=lambda t: (-t[0], t[1]))
+    return [
+        {"name": n, **v, "_score": s}
+        for s, n, v in scored[:top_k]
+    ]
+
+
 def verify_response_citations(response_text: str) -> dict:
     """Full citation audit on AI-generated legal response."""
     citations = extract_citations(response_text)

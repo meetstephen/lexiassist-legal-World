@@ -121,10 +121,18 @@ def render_templates():
                             "Polish the following Nigerian legal document. "
                             "Ensure grammatical correctness, professional tone, "
                             "and legal completeness. Do not change the substantive "
-                            "legal meaning or any specific details. Return the full document:\n\n"
+                            "legal meaning or any specific details. Apply the full "
+                            "Nigerian drafting protocol — heading, signing block, "
+                            "jurat (if affidavit), stamp duty note, NBA Stamp & "
+                            "Seal line, SCN enrolment number — wherever these are "
+                            "missing or incomplete. Return ONLY the full polished "
+                            "document, no commentary:\n\n"
                             + filled_draft
                         )
-                        polished = generate(polish_prompt, IDENTITY_CORE, "standard", "drafting")
+                        # Route through build_system_prompt so the drafting
+                        # protocol + lawyer profile are applied uniformly.
+                        polish_system = build_system_prompt("drafting", "standard")
+                        polished = generate(polish_prompt, polish_system, "standard", "drafting")
                     st.session_state[filled_key] = polished
                     st.success("✅ Polished! Scroll up to review.")
                     st.rerun()

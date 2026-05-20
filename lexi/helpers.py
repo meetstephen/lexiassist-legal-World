@@ -27,6 +27,7 @@ from .constants import (
     TASK_TYPES, RESPONSE_MODES,
 )
 from .prompts import (
+    IDENTITY_CORE,
     PROMPTS_BY_MODE, TASK_MODIFIERS,
     COMPARISON_PROMPT, CRITIQUE_PROMPT, FOLLOWUP_PROMPT,
     ISSUE_SPOT_PROMPT, SOURCE_BACKED_RESEARCH_SYSTEM,
@@ -136,10 +137,63 @@ def _maybe_send_hearing_reminders():
         st.toast(f"📧 {sent} hearing reminder(s) sent to {notif_email}", icon="✅")
 
 def build_system_prompt(task: str, mode: str, query: str = "") -> str:
-    """Assemble system prompt from identity + mode + task modifier + RAG grounding."""
-    base     = PROMPTS_BY_MODE.get(mode, PROMPTS_BY_MODE["standard"])
+    """Assemble system prompt from identity + mode + task modifier + RAG grounding.
+
+    Drafting carve-outs:
+      * For ``task == "drafting"``, we use ``IDENTITY_CORE`` directly as the
+        base instead of ``PROMPTS_BY_MODE[mode]``. The mode prompts have the
+        STRATEGIC POSITION / RISK RANKING block baked in, which is appropriate
+        for analysis but pollutes operative documents (pleadings, deeds,
+        affidavits, demand letters) with risk tables a lawyer would never
+        sign their name to. The drafting task modifier (``task_drafting.txt``)
+        carries its own complete Nigerian formality protocol.
+      * The lawyer's profile (firm, name, SCN enrolment, NBA branch) is
+        injected so the AI can fill the signing block deterministically
+        instead of always emitting "[COUNSEL NAME]" placeholders.
+    """
+    if task == "drafting":
+        # IDENTITY_CORE only — no strategy/risk block in drafts.
+        base = IDENTITY_CORE
+    else:
+        base = PROMPTS_BY_MODE.get(mode, PROMPTS_BY_MODE["standard"])
     modifier = TASK_MODIFIERS.get(task, TASK_MODIFIERS["general"])
-    system   = base + modifier
+    system = base + modifier
+
+    # Inject the user's profile so the AI can populate signing blocks /
+    # letterheads correctly. Only attach for tasks that put a name on paper.
+    if task in ("drafting", "research", "advisory", "contract_review"):
+        try:
+            profile = st.session_state.get("profile", {}) or {}
+            firm = profile.get("firm_name", "") or ""
+            lawyer = profile.get("lawyer_name", "") or ""
+            nba = profile.get("nba_enroll", "") or ""
+            branch = profile.get("nba_branch", "") or ""
+            address = profile.get("firm_address", "") or ""
+            phone = profile.get("firm_phone", "") or ""
+            email = profile.get("firm_email", "") or ""
+            if any([firm, lawyer, nba]):
+                profile_lines = ["", "═══ DRAFTING PROFILE (use to populate signing blocks) ═══"]
+                if firm:
+                    profile_lines.append(f"Firm Name: {firm}")
+                if lawyer:
+                    profile_lines.append(f"Lead Counsel: {lawyer}")
+                if nba:
+                    profile_lines.append(f"SCN Enrolment Number: {nba}")
+                if branch:
+                    profile_lines.append(f"NBA Branch: {branch}")
+                if address:
+                    profile_lines.append(f"Firm Address: {address}")
+                if phone:
+                    profile_lines.append(f"Firm Phone: {phone}")
+                if email:
+                    profile_lines.append(f"Firm Email: {email}")
+                profile_lines.append("Use these values directly in any signing block, letterhead "
+                                     "or jurat. Do NOT replace them with [PLACEHOLDER] when they are "
+                                     "provided.")
+                profile_lines.append("═══ END DRAFTING PROFILE ═══")
+                system = system + "\n\n" + "\n".join(profile_lines)
+        except Exception:
+            pass
 
     # ── Phase 2: RAG — inject statute grounding if query provided ──
     if query:
