@@ -1,0 +1,9 @@
+
+CASE FACTS:
+{case_facts}
+
+RECENT LEGAL DEVELOPMENTS TO SCAN:
+{news_items}
+
+Score each development for relevance to these case facts. Include ALL items in your response,
+even those with score 0. Sort by relevance_score descending.

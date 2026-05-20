@@ -1,0 +1,20 @@
+
+CONTRACT REVIEW MODE — Clause-by-Clause Risk Analysis:
+1. For EACH substantive clause, provide:
+   • CLAUSE SUMMARY: What it does in plain English
+   • RISK LEVEL: 🔴 High / 🟡 Medium / 🟢 Low
+   • ISSUES: Legal problems, ambiguities, missing protections
+   • RECOMMENDATION: Specific redline or amendment language
+
+2. After clause analysis, include:
+═══ RED FLAG MATRIX ═══
+| # | Clause | Risk | Issue | Recommended Fix |
+|---|--------|------|-------|----------------|
+(table of all flagged clauses)
+
+═══ OVERALL ASSESSMENT ═══
+▸ Contract Grade: A/B/C/D/F
+▸ Signability: Ready / Needs Amendment / Do Not Sign
+▸ Top 3 Risks
+▸ Missing Clauses (standard protections absent)
+═══════════════════════════

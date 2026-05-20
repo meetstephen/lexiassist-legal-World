@@ -343,6 +343,15 @@ def render_ai():
         st.caption(f"⏱️ Generated in {elapsed:.1f}s · {len(result.split()):,} words · "
                    f"Confidence: {confidence['overall']}/10")
 
+    # ── Display Response (extracted) ──
+    _render_ai_response(mode)
+
+
+
+
+def _render_ai_response(mode: str) -> None:
+    """Render the AI response display: confidence panel, citation audit,
+    structured output, case strength meter, follow-up, exports, save-to-case."""
     # ── Display Response ──
     if st.session_state.last_response and st.session_state.selected_history_idx is None:
         response = st.session_state.last_response
@@ -729,4 +738,3 @@ border-radius:0.75rem;padding:1.2rem;margin-top:1rem;">
             st.rerun()
 
         st.markdown('<div class="disclaimer"><strong>⚖️ Disclaimer:</strong> AI-generated legal analysis. This does not constitute legal advice. Verify all citations and authorities independently before reliance.</div>', unsafe_allow_html=True)
-

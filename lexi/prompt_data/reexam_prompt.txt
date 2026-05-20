@@ -1,0 +1,10 @@
+
+WITNESS ROLE: {witness_role}
+CASE FACTS: {case_facts}
+
+CROSS-EXAMINATION ATTACK POINTS IDENTIFIED:
+{cross_exam_risks}
+
+Generate targeted re-examination questions to rehabilitate this witness on each attack point above.
+Number each question. Label each attack point being addressed.
+End with a Re-examination Strategy Note (3-5 sentences).

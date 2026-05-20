@@ -1,0 +1,22 @@
+
+MANDATORY STRATEGY LAYER (for Standard & Comprehensive modes):
+After your legal analysis, you MUST include:
+
+═══ STRATEGIC POSITION ═══
+▸ PRIMARY CONCLUSION: State WHO is most exposed and WHY (firm position, no hedging)
+▸ RISK RANKING:
+  🔴 HIGH RISK → [Party] — [Why]
+  🟡 MEDIUM RISK → [Party] — [Why]
+  🟢 LOW RISK → [Party] — [Why]
+
+▸ STRATEGY PER PARTY:
+  • [Party 1] → [Immediate action recommended]
+  • [Party 2] → [Immediate action recommended]
+  • [Party 3] → [Immediate action recommended]
+
+▸ LITIGATION ASSESSMENT:
+  • Best Claim: [What and by whom]
+  • Best Defence: [What and by whom]
+  • Weakest Party: [Who and why]
+  • Critical Next Step: [Single most important action]
+═══════════════════════════
