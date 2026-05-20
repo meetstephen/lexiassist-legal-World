@@ -224,98 +224,17 @@ def render_tasks():
 
 
 def render_home():
-    # ── Beta verification banner ──
-    st.markdown(
-        '<div style="background:var(--la-bg2);border:1px solid var(--la-border);'
-        'border-left:4px solid #f59e0b;border-radius:8px;'
-        'padding:0.55rem 1rem;margin-bottom:0.8rem;font-size:0.8rem;'
-        'color:var(--la-text);display:flex;align-items:center;gap:0.5rem;">'
-        '<strong style="color:var(--la-text);">🔬 Private Beta</strong>'
-        '<span style="color:var(--la-text2);"> — AI-generated output. '
-        'All authorities, limitation periods, and legal positions must be '
-        'independently verified before advising any client.</span>'
-        '</div>',
-        unsafe_allow_html=True,
-    )
-
-        # ── Admin-only health banner: collapsed by default to keep home clean ──
-    if st.session_state.get("current_user_role") == "admin":
-        try:
-            firm_cfg = st.session_state.get("profile", {}).get("firm_config", {})
-            monthly_budget = float(firm_cfg.get("monthly_ai_budget", 0) or 0)
-            summary = get_db().get_cost_summary()
-            monthly_ngn = float(summary.get("monthly_cost", 0)) * USD_TO_NGN
-            pct = int(monthly_ngn / monthly_budget * 100) if monthly_budget > 0 else 0
-            burn_color = "#dc2626" if pct >= 90 else ("#d97706" if pct >= 70 else "#059669")
-            burn_label = (
-                f"₦{monthly_ngn:,.0f} of ₦{monthly_budget:,.0f} ({pct}%)"
-                if monthly_budget > 0 else
-                f"₦{monthly_ngn:,.0f} (no budget set)"
-            )
-
-            # Failed logins last 24h
-            try:
-                cur = get_db()._execute(
-                    "SELECT COUNT(*) FROM audit_log WHERE action='LOGIN_FAILED' "
-                    "AND timestamp > %s",
-                    ((datetime.now() - pd.Timedelta(days=1)).isoformat(),),
-                )
-                fail_count_24h = cur.fetchone()[0] if cur else 0
-            except Exception:
-                fail_count_24h = 0
-
-            # Last backup reminder (7-day window)
-            last_backup = st.session_state.get("profile", {}).get("last_backup_date", "")
-            backup_warn = ""
-            if last_backup:
-                try:
-                    days_since = (date.today() - datetime.fromisoformat(last_backup).date()).days
-                    if days_since > 7:
-                        backup_warn = f"⚠️ Last backup: {days_since}d ago — consider exporting"
-                    else:
-                        backup_warn = f"✅ Backup: {days_since}d ago"
-                except Exception:
-                    backup_warn = "⚠️ No backup record"
-            else:
-                backup_warn = "⚠️ No backup yet — export from Profile → Data"
-
-            fail_color = "#dc2626" if fail_count_24h > 5 else "#64748b"
-
-            # Determine if there's anything urgent worth surfacing
-            has_alert = (pct >= 90) or (fail_count_24h > 5) or ("⚠️" in backup_warn)
-            expander_label = (
-                f"🛡️ Admin Dashboard {'⚠️ — needs attention' if has_alert else '· quick view'}"
-            )
-
-            with st.expander(expander_label, expanded=has_alert):
-                ad1, ad2, ad3 = st.columns(3)
-                with ad1:
-                    st.markdown(
-                        f'<div style="padding:0.4rem 0;">'
-                        f'💰 <strong>AI Spend</strong><br>'
-                        f'<span style="color:{burn_color};font-weight:700;">{burn_label}</span>'
-                        f'</div>',
-                        unsafe_allow_html=True,
-                    )
-                with ad2:
-                    st.markdown(
-                        f'<div style="padding:0.4rem 0;">'
-                        f'🔒 <strong>Failed Logins (24h)</strong><br>'
-                        f'<span style="color:{fail_color};font-weight:700;">{fail_count_24h}</span>'
-                        f'</div>',
-                        unsafe_allow_html=True,
-                    )
-                with ad3:
-                    st.markdown(
-                        f'<div style="padding:0.4rem 0;">'
-                        f'💾 <strong>Backup Status</strong><br>'
-                        f'<span style="font-size:0.85rem;">{backup_warn}</span>'
-                        f'</div>',
-                        unsafe_allow_html=True,
-                    )
-        except Exception as _e:
-            logger.warning(f"Admin banner failed: {_e}")
-
+    # The "Private Beta" verification banner and the admin "needs attention"
+    # health expander used to live here. Both were removed because they
+    # shouted at the user on every home-screen visit, which is unprofessional
+    # for a tool lawyers screen-share with clients.
+    #
+    # The same disclaimer text still lives in the global footer
+    # ("AI-Generated Drafting Aid · Not Legal Advice · Verify all
+    # authorities") and admin metrics (AI spend, failed logins, backup
+    # status) still surface in the dedicated Admin tab and Tools page.
+    #
+    # Do NOT re-add a banner here without an explicit product decision.
 
     firm = get_firm_name()
 
