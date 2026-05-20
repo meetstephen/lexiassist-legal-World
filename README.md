@@ -56,7 +56,7 @@ LexiAssist combines a jurisdiction-focused AI legal assistant with a full law-of
 - **4-axis confidence scores** — Statutory Grounding · Case Law Support · Procedural Certainty · Position-taking, displayed as coloured progress bars after every response
 - **RAG grounding** — 18 verified Nigerian statute provisions retrieved by keyword similarity and injected into every system prompt before generation
 - **Structured Output panel** — click ⚡ Generate Structured View on any response to categorise it into three columns: ✅ Verified Law · 🧠 Analysis · ⚠️ To Confirm
-- **Citation audit** — every AI response scanned for Nigerian citations; verified against 65+ case database; unverified citations flagged inline with ⚠️
+- **Citation audit** — every AI response scanned for Nigerian citations; verified against 150+ case database; unverified citations flagged inline with ⚠️
 - **Contract Review mode** — clause-by-clause risk analysis with red flag matrix and signability grade
 - **Contract Version Diffing** — paste V1 and V2; get a visual HTML line-by-line diff plus AI explanation of the legal significance of every change
 - **Save to Case** — attach AI outputs directly to case files; every save recorded in the audit log as `ANALYSIS_SAVED`
@@ -76,7 +76,7 @@ LexiAssist combines a jurisdiction-focused AI legal assistant with a full law-of
 - Downloadable TXT verification report with full disclaimer
 
 ### 🛡️ Citation Verification Engine
-- Database of 65+ verified landmark decisions from the Supreme Court and Court of Appeal
+- Database of 150+ verified landmark decisions from the Supreme Court and Court of Appeal
 - Covers: Constitutional · Electoral · Contract · Land · Evidence · Criminal · Employment · Oil & Gas · Banking · Tort · Company · Tax · Customary Law · Procedure
 - Regex patterns covering all major Nigerian report series: NWLR · LPELR · SCNLR · SC · All NLR · NMLR · NCLR · ECSLR · FHCLR · NICN
 - Verified citations shown with ✅ badge; unverified citations shown with ⚠️ [UNVERIFIED — CHECK BEFORE FILING] inline
@@ -373,7 +373,7 @@ Lawyers, litigation teams, solo practitioners, chambers, and legal operations pr
 - **Beta verification banner** — visible amber banner on home page
 
 ### v9.0 — May 2026
-- Citation verification engine with 65+ verified Nigerian landmark cases
+- Citation verification engine with 150+ verified Nigerian landmark cases
 - Streaming AI responses via `generate_content_stream()`
 - Quality gate: silent self-scoring and auto-regeneration on score < 5/10
 - 4-axis confidence scoring panel on every Standard/Comprehensive response

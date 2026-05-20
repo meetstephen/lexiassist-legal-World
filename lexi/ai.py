@@ -29,7 +29,7 @@ from .runtime import (
 from .constants import (
     SUPPORTED_MODELS, DEFAULT_MODEL,
     COST_PER_1M_INPUT, COST_PER_1M_OUTPUT,
-    RESPONSE_MODES,
+    RESPONSE_MODES, USD_TO_NGN,
 )
 from .database import get_db
 
@@ -129,26 +129,85 @@ def generate(prompt: str, system: str, mode: str, task: str = "general", query: 
         return "⚠️ No API key configured. Please set up your key."
 
     # ── Monthly AI budget enforcement (admin-configured) ────────────────
+    # Two layers:
+    #   (1) Reactive — if the cumulative spend already meets/exceeds the
+    #       budget, refuse outright.
+    #   (2) Predictive — if THIS call's worst-case cost would push us over,
+    #       refuse before billing the API. Worst-case = full input chars
+    #       plus max_output_tokens for the selected mode (Brief/Standard/
+    #       Comprehensive). Prevents a single Comprehensive call from
+    #       silently overshooting a near-empty budget.
+    # Failures of the check itself are logged (not silently swallowed) so
+    # that broken DB connectivity doesn't disable enforcement invisibly.
     try:
         firm_cfg = st.session_state.get("profile", {}).get("firm_config", {})
-        monthly_budget = float(firm_cfg.get("monthly_ai_budget", 0) or 0)
-        if monthly_budget > 0:
+        monthly_budget_ngn = float(firm_cfg.get("monthly_ai_budget", 0) or 0)
+        if monthly_budget_ngn > 0:
             summary = get_db().get_cost_summary()
-            monthly_ngn = float(summary.get("monthly_cost", 0)) * 1600
-            if monthly_ngn >= monthly_budget:
+            spent_ngn = float(summary.get("monthly_cost", 0)) * USD_TO_NGN
+
+            # Already over: hard block.
+            if spent_ngn >= monthly_budget_ngn:
+                logger.info(
+                    f"AI call blocked — budget exhausted "
+                    f"(spent ₦{spent_ngn:,.0f} / ₦{monthly_budget_ngn:,.0f})"
+                )
+                try:
+                    get_db().append_audit(
+                        "AI_BUDGET_BLOCKED",
+                        f"reason=exhausted spent_ngn={spent_ngn:.0f} "
+                        f"budget_ngn={monthly_budget_ngn:.0f} mode={mode}",
+                    )
+                except Exception:  # noqa: BLE001 — audit best-effort
+                    pass
                 return (
                     f"🚫 **Monthly AI budget exceeded** — "
-                    f"₦{monthly_ngn:,.0f} of ₦{monthly_budget:,.0f} used this month. "
+                    f"₦{spent_ngn:,.0f} of ₦{monthly_budget_ngn:,.0f} used this month. "
                     f"Contact your firm admin to raise the limit."
                 )
-            elif monthly_ngn >= monthly_budget * 0.9:
-                st.toast(
-                    f"⚠️ AI budget at {int(monthly_ngn/monthly_budget*100)}% — "
-                    f"₦{monthly_budget - monthly_ngn:,.0f} remaining this month",
-                    icon="⚠️",
+
+            # Predictive check — worst-case cost of this specific call.
+            mode_tokens = RESPONSE_MODES.get(mode, RESPONSE_MODES["standard"]).get("tokens", 32000)
+            input_tokens = (len(prompt) + len(system)) / 4
+            projected_usd = (
+                (input_tokens / 1_000_000) * COST_PER_1M_INPUT
+                + (mode_tokens / 1_000_000) * COST_PER_1M_OUTPUT
+            )
+            projected_ngn = projected_usd * USD_TO_NGN
+
+            if spent_ngn + projected_ngn > monthly_budget_ngn:
+                remaining = monthly_budget_ngn - spent_ngn
+                logger.info(
+                    f"AI call blocked — projected overshoot "
+                    f"(remaining ₦{remaining:,.0f}, projected ₦{projected_ngn:,.0f}, mode={mode})"
                 )
-    except Exception:
-        pass
+                try:
+                    get_db().append_audit(
+                        "AI_BUDGET_BLOCKED",
+                        f"reason=would_overshoot remaining_ngn={remaining:.0f} "
+                        f"projected_ngn={projected_ngn:.0f} mode={mode}",
+                    )
+                except Exception:  # noqa: BLE001 — audit best-effort
+                    pass
+                return (
+                    f"🚫 **Insufficient AI budget for this call** — "
+                    f"this {mode} request could cost up to ₦{projected_ngn:,.0f} but only "
+                    f"₦{remaining:,.0f} is left this month. "
+                    f"Try a shorter query in Brief mode, or contact your admin to raise the limit."
+                )
+
+            # 90%+ used: warn but allow.
+            if spent_ngn >= monthly_budget_ngn * 0.9:
+                try:
+                    st.toast(
+                        f"⚠️ AI budget at {int(spent_ngn / monthly_budget_ngn * 100)}% — "
+                        f"₦{monthly_budget_ngn - spent_ngn:,.0f} remaining this month",
+                        icon="⚠️",
+                    )
+                except Exception:  # noqa: BLE001 — toast best-effort
+                    pass
+    except Exception as _budget_err:  # noqa: BLE001 — fail-open by design, but log
+        logger.warning(f"Budget enforcement check failed (allowing call): {_budget_err}")
 
     # ── Per-user rate limit (max 30 AI calls per 60 seconds) ────────────
     try:

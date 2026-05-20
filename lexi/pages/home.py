@@ -244,7 +244,7 @@ def render_home():
             firm_cfg = st.session_state.get("profile", {}).get("firm_config", {})
             monthly_budget = float(firm_cfg.get("monthly_ai_budget", 0) or 0)
             summary = get_db().get_cost_summary()
-            monthly_ngn = float(summary.get("monthly_cost", 0)) * 1600
+            monthly_ngn = float(summary.get("monthly_cost", 0)) * USD_TO_NGN
             pct = int(monthly_ngn / monthly_budget * 100) if monthly_budget > 0 else 0
             burn_color = "#dc2626" if pct >= 90 else ("#d97706" if pct >= 70 else "#059669")
             burn_label = (
