@@ -52,7 +52,7 @@ LexiAssist combines a jurisdiction-focused AI legal assistant with a full law-of
 - **AI Legal Assistant** — analysis, drafting, research, procedural guidance, statutory interpretation, strategic advisory, and contract review
 - **Four response modes** — Brief · Standard · Comprehensive · Ultra (up to 131K tokens)
 - **Streaming output** — responses appear word-by-word via `generate_content_stream()` — no spinner waiting
-- **Quality gate** — silent self-critique; score < 6/10 triggers automatic one-shot regeneration with a stricter prompt
+- **Quality gate** — silent self-critique; score < 5/10 triggers automatic one-shot regeneration with a stricter prompt
 - **4-axis confidence scores** — Statutory Grounding · Case Law Support · Procedural Certainty · Position-taking, displayed as coloured progress bars after every response
 - **RAG grounding** — 18 verified Nigerian statute provisions retrieved by keyword similarity and injected into every system prompt before generation
 - **Structured Output panel** — click ⚡ Generate Structured View on any response to categorise it into three columns: ✅ Verified Law · 🧠 Analysis · ⚠️ To Confirm
@@ -375,7 +375,7 @@ Lawyers, litigation teams, solo practitioners, chambers, and legal operations pr
 ### v9.0 — May 2026
 - Citation verification engine with 65+ verified Nigerian landmark cases
 - Streaming AI responses via `generate_content_stream()`
-- Quality gate: silent self-scoring and auto-regeneration on score < 6/10
+- Quality gate: silent self-scoring and auto-regeneration on score < 5/10
 - 4-axis confidence scoring panel on every Standard/Comprehensive response
 - Fernet-encrypted SMTP credential storage
 - Immutable hash-chained audit log with admin viewer and CSV export
