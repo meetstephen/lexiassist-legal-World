@@ -157,3 +157,178 @@ def test_all_renderers_referenced_in_app_main():
         f"app.main() never references these render functions, so they "
         f"are unreachable from the UI: {missing}"
     )
+
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Prompt composition contract — guards against regressions in the
+# identity_core / strategy_block / mode / drafting prompt assembly.
+# ─────────────────────────────────────────────────────────────────────────────
+def test_prompts_compose_correctly():
+    """All composed mode prompts must contain the Nigerian backbone.
+
+    Pins the "single source of truth" refactor: ``IDENTITY_CORE`` content
+    must propagate to every analysis mode, ``STRATEGY_BLOCK`` must be
+    present in standard/comprehensive but absent in brief, and the
+    drafting task modifier must include the Nigerian formality protocol.
+    """
+    from lexi.prompts import (
+        IDENTITY_CORE, STRATEGY_BLOCK, PROMPTS_BY_MODE, TASK_MODIFIERS,
+    )
+
+    # Identity core anti-hallucination strengthening
+    assert "HARD RULES ON CITATIONS" in IDENTITY_CORE, (
+        "identity_core.txt is missing the strengthened citation rules"
+    )
+
+    # Every mode prompt inherits the identity backbone
+    for mode_name in ("brief", "standard", "comprehensive"):
+        composed = PROMPTS_BY_MODE[mode_name]
+        for marker in ("CFRN 1999", "CAMA", "Evidence Act 2011",
+                       "HARD RULES ON CITATIONS"):
+            assert marker in composed, (
+                f"mode={mode_name} missing {marker!r} after composition — "
+                f"the identity_core inheritance is broken"
+            )
+
+    # Strategy block belongs in standard + comprehensive only.
+    # Match the box-drawing section header, not the bare phrase, so we
+    # don't collide with task_drafting.txt's Rule 1 that references the
+    # phrase in a "do NOT include" instruction.
+    strategy_marker = "\u2550\u2550\u2550 STRATEGIC POSITION \u2550\u2550\u2550"
+    assert strategy_marker not in PROMPTS_BY_MODE["brief"], (
+        "brief mode must NOT contain the STRATEGIC POSITION block"
+    )
+    assert strategy_marker in PROMPTS_BY_MODE["standard"]
+    assert strategy_marker in PROMPTS_BY_MODE["comprehensive"]
+
+    # Drafting task modifier is the comprehensive Nigerian protocol
+    drafting = TASK_MODIFIERS["drafting"]
+    for marker in (
+        "NIGERIAN LEGAL DRAFTING PROTOCOL",
+        "JURAT",
+        "NBA Stamp & Seal",
+        "SCN Enrolment",
+        "Stamp Duties Act",
+        "DATED this",
+        "BETWEEN",
+        "HOLDEN AT",
+    ):
+        assert marker in drafting, (
+            f"task_drafting.txt missing required Nigerian marker {marker!r}"
+        )
+
+    # All 36 states + FCT must appear in the drafting protocol — no
+    # geopolitical zone left out (the South-East was a known prior gap).
+    all_36_states_plus_fct = [
+        # South-East
+        "Abia", "Anambra", "Ebonyi", "Enugu", "Imo",
+        # South-South
+        "Akwa Ibom", "Bayelsa", "Cross River", "Delta", "Edo", "Rivers",
+        # South-West
+        "Ekiti", "Lagos", "Ogun", "Ondo", "Osun", "Oyo",
+        # North-Central
+        "Benue", "Kogi", "Kwara", "Nasarawa", "Niger", "Plateau",
+        # North-East
+        "Adamawa", "Bauchi", "Borno", "Gombe", "Taraba", "Yobe",
+        # North-West
+        "Jigawa", "Kaduna", "Kano", "Katsina", "Kebbi", "Sokoto", "Zamfara",
+        # FCT
+        "FCT",
+    ]
+    missing_states = [s for s in all_36_states_plus_fct if s not in drafting]
+    assert not missing_states, (
+        f"Drafting protocol is missing these states: {missing_states}. "
+        f"LexiAssist serves practitioners in all 36 states + FCT — every "
+        f"jurisdiction must be represented."
+    )
+
+
+def test_drafting_skips_strategy_block():
+    """build_system_prompt must NOT inject the STRATEGIC POSITION block
+    into drafting outputs — drafts are operative documents, not analyses.
+
+    NB: we look for the actual section *header* (with box-drawing chars),
+    not the bare phrase "STRATEGIC POSITION", because the drafting
+    protocol legitimately references the phrase in Rule 1 (a quoted
+    instruction telling the AI NOT to emit that block).
+    """
+    from lexi.helpers import build_system_prompt
+    from lexi.prompts import STRATEGY_BLOCK
+
+    # The strategy block's distinctive section header must NOT appear
+    # in a drafting prompt. Use the full first-line marker so we don't
+    # collide with mentions of the phrase in instructions.
+    strategy_marker = "\u2550\u2550\u2550 STRATEGIC POSITION \u2550\u2550\u2550"
+    assert strategy_marker in STRATEGY_BLOCK, (
+        "Sanity: strategy_block.txt must contain the section header"
+    )
+
+    drafting_system = build_system_prompt("drafting", "comprehensive")
+    assert strategy_marker not in drafting_system, (
+        "Drafting system prompt must not include the STRATEGIC POSITION "
+        "block — it pollutes pleadings/affidavits with risk tables a "
+        "lawyer would never sign their name to."
+    )
+    # But the drafting protocol must be present
+    assert "NIGERIAN LEGAL DRAFTING PROTOCOL" in drafting_system
+
+    # Analysis tasks DO get the strategy block
+    analysis_system = build_system_prompt("general", "comprehensive")
+    assert strategy_marker in analysis_system
+
+
+def test_precedent_grounding_helper():
+    """find_relevant_verified_cases must surface real Nigerian cases for
+    typical practice queries and refuse to invent matches for nonsense."""
+    from lexi.citations import (
+        find_relevant_verified_cases, VERIFIED_NIGERIAN_CASES,
+    )
+
+    # Land/title query → expect Idundun / Ogunleye / Adole
+    land = find_relevant_verified_cases("proving title to land", top_k=5)
+    land_names = {m["name"] for m in land}
+    assert any(name in land_names for name in (
+        "Idundun v Okumagba", "Ogunleye v Oni", "Adole v Gwar",
+    )), f"land query returned only {land_names}"
+
+    # Election petition → expect Buhari or Atiku
+    election = find_relevant_verified_cases("election petition burden of proof", top_k=5)
+    election_names = {m["name"] for m in election}
+    assert any(name in election_names for name in (
+        "Buhari v Obasanjo", "Atiku Abubakar v INEC",
+    )), f"election query returned only {election_names}"
+
+    # Junk → empty list (must NOT hallucinate matches)
+    assert find_relevant_verified_cases("xyz1234 nonexistent topic") == []
+    assert find_relevant_verified_cases("") == []
+
+    # Every match must be a real entry in the verified DB
+    for m in land + election:
+        assert m["name"] in VERIFIED_NIGERIAN_CASES
+
+
+def test_pdf_unicode_sanitiser():
+    """PDF Unicode → ASCII fallback must handle every char that crashed
+    production and produce strict latin-1 output."""
+    from lexi.exports import _pdf_ascii_fallback
+
+    cases = {
+        # The exact banner that crashed production:
+        "STRICTLY PRIVATE & CONFIDENTIAL \u2014 ATTORNEY WORK PRODUCT":
+            ("\u2014", "-"),       # em-dash → hyphen
+        "Pay \u20a65,000,000.00 within 7 days":
+            ("\u20a6", "NGN"),     # Naira sign → NGN
+        "the agreement was \u201cunenforceable\u201d.":
+            ("\u201c", '"'),       # smart quote → straight quote
+        "Order 13 \u2013 Rule 14":
+            ("\u2013", "-"),       # en-dash → hyphen
+        "section 84\u2026":
+            ("\u2026", "..."),     # ellipsis → three dots
+    }
+    for inp, (forbidden, expected) in cases.items():
+        out = _pdf_ascii_fallback(inp)
+        assert forbidden not in out, f"sanitiser left {forbidden!r} in {out!r}"
+        assert expected in out, f"sanitiser missing {expected!r} in {out!r}"
+        # Every output must be encodable as latin-1 (otherwise fpdf crashes)
+        out.encode("latin-1")
