@@ -85,6 +85,7 @@ from lexi.pages.fee_calculator import render_fee_calculator
 from lexi.pages.settlement import render_settlement_advisor
 from lexi.pages.due_diligence import render_due_diligence
 from lexi.pages.user_management import render_user_management
+from lexi.pages.legal import render_privacy_policy, render_terms_of_service
 
 
 # ═══════════════════════════════════════════════════════
@@ -293,6 +294,8 @@ def main():
         ],
         "👤 Account": [
             ("👤 Profile",         render_profile),
+            ("📜 Privacy",         render_privacy_policy),
+            ("📋 Terms",           render_terms_of_service),
         ],
     }
     if is_admin:
@@ -322,6 +325,7 @@ def main():
     # Three lines:
     #   1. Disclaimer banner — "LexiAssist · AI-Generated Drafting Aid · Not Legal Advice · Verify all authorities"
     #   2. Firm letterhead    — "{Firm}  |  Powered by LexiAssist v{__version__}  |  © {year}"
+    #   3. Legal links        — "Privacy Notice · Terms of Service" pointing into Account tab
     # Username intentionally omitted (cleaner for screenshots / screen-shares).
     # Legal-data version, "updated", and "last act" lines are intentionally
     # removed; they still surface in Tools and Admin Settings for users who
@@ -341,6 +345,9 @@ def main():
             <strong>{esc(firm)}</strong> &nbsp;|&nbsp;
             Powered by LexiAssist v{esc(__version__)} &nbsp;|&nbsp;
             &copy; {year}
+        </div>
+        <div style="margin-top:0.3rem;font-size:0.72rem;line-height:1.6;opacity:0.65;">
+            <em>Privacy Notice &middot; Terms of Service &mdash; see &ldquo;👤 Account&rdquo; tab</em>
         </div>
     </div>""",
         unsafe_allow_html=True,
