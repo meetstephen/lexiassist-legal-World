@@ -4,6 +4,8 @@ from __future__ import annotations
 # Barrel import: mirrors the global namespace of the original single-file
 # app.py exactly. The original code below is unchanged.
 from ..runtime import *      # noqa: F401, F403
+# `import *` skips dunder names, so import __version__ explicitly.
+from ..runtime import __version__  # noqa: F401
 from ..crypto import *       # noqa: F401, F403
 from ..constants import *    # noqa: F401, F403
 from ..prompts import *      # noqa: F401, F403
