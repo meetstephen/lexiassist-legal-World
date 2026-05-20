@@ -79,6 +79,7 @@ PAGE_RENDERERS: dict[str, list[str]] = {
     "lexi.pages.settlement":      ["render_settlement_advisor"],
     "lexi.pages.due_diligence":   ["render_due_diligence"],
     "lexi.pages.user_management": ["render_user_management"],
+    "lexi.pages.legal":           ["render_privacy_policy", "render_terms_of_service"],
 }
 
 
