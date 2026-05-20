@@ -1,0 +1,87 @@
+[project]
+name = "lexiassist"
+version = "9.1.1"
+description = "LexiAssist — Elite AI Legal Workflow Engine for Nigerian Lawyers"
+requires-python = ">=3.12"
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Ruff — linter + formatter
+#
+# Philosophy: this is a *baseline* config. We turn on the cheap, high-signal
+# checks (real bugs: undefined names, redefinitions, used-before-assignment,
+# unreachable code, syntax errors) and explicitly silence the rules that
+# would flag pre-existing style choices in the 14k-line original code
+# (semicolons, multi-statement lines, unused barrel imports, etc.). Future
+# PRs can tighten the screws one rule at a time.
+# ─────────────────────────────────────────────────────────────────────────────
+[tool.ruff]
+# The original code uses PEP 701 f-string features (escape sequences inside
+# f-strings, reused outer quote characters) which are Python 3.12+ only.
+# Production deploys on 3.12; we match that here.
+target-version = "py312"
+line-length = 120
+extend-exclude = [
+    ".git",
+    ".github",
+    ".streamlit",
+    ".venv",
+    "venv",
+    "__pycache__",
+    "build",
+    "dist",
+]
+
+[tool.ruff.lint]
+# Start from the default rule set (E + F) then explicitly silence the
+# noisy ones. We do NOT enable I (isort) yet — auto-sorting imports in
+# lexi/runtime.py would break the order-sensitive try/except blocks.
+select = ["E", "F", "W"]
+ignore = [
+    # ── Style preferences in the original code (low signal) ───────────────
+    "E501",  # line too long (CSS strings + inline HTML are unavoidable)
+    "E701",  # multiple statements on one line (colon) — common in render_*
+    "E702",  # multiple statements on one line (semicolon) — original style
+    "E401",  # multiple imports on one line — pre-existing
+    "E741",  # ambiguous variable name (df, e, k…) — pandas / streamlit idiom
+    "E731",  # lambda assignment — used as event handlers
+    # ── Whitespace cleanups (auto-fixable later in a dedicated PR) ────────
+    "W291",  # trailing whitespace
+    "W293",  # whitespace on blank lines
+    # ── Pyflakes findings that are pre-existing or barrel-pattern ─────────
+    "F401",  # unused import (barrel re-exports in runtime.py + pages/)
+    "F541",  # f-string without placeholder (leftover from edits, harmless)
+    "F841",  # unused local variable (pre-existing dead code)
+    # ── Bare except is a real smell but only 2 instances; tackle in cleanup
+    "E722",
+]
+
+[tool.ruff.lint.per-file-ignores]
+# Page modules deliberately use barrel `from ..X import *` to mirror the
+# global namespace of the original single-file app.py. F401/F403/F405
+# don't apply.
+"lexi/pages/*.py" = ["F403", "F405", "E402"]
+# Same pattern in the package root.
+"lexi/__init__.py" = ["F403"]
+# app.py imports run AFTER st.set_page_config() — that's a Streamlit
+# requirement, not a style issue.
+"app.py" = ["E402"]
+# Lazy import shims in these three modules deliberately redefine names
+# pulled in from siblings (the indirection breaks circular imports).
+"lexi/auth.py" = ["F811"]
+"lexi/exports.py" = ["F811"]
+"lexi/rag.py" = ["F811"]
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Pytest — smoke tests
+# ─────────────────────────────────────────────────────────────────────────────
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+addopts = "-q --tb=short"
+filterwarnings = [
+    "ignore::DeprecationWarning",
+    "ignore::FutureWarning",
+    # Streamlit prints a "no runtime found" warning when tests import the
+    # package outside `streamlit run` — expected and harmless.
+    "ignore:.*No runtime found.*:UserWarning",
+]
