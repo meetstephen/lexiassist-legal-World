@@ -45,6 +45,7 @@ st.set_page_config(
 from lexi.legal_data import LEGAL_DATA_VERSION
 from lexi.themes import get_theme_css
 from lexi.database import get_db, load_user_data
+from lexi.cookies import get_session_cookie, inject_cookie_reader
 from lexi.auth import (
     do_auto_login_from_token,
     do_logout,
@@ -124,15 +125,18 @@ def main():
     db = get_db()
     db.ensure_connected()  # heal stale/aborted connections before any DB work
 
-    # ── Auto-login via URL token (idle-aware) ────────────────────────────
-    # Token lives in ?t= URL param (survives refresh). If the session was
-    # idle for longer than the firm's idle limit we show a locked re-auth
-    # screen instead of silently restoring — so an unattended computer is
-    # protected while a deliberate refresh feels instant.
+    # ── Auto-login via cookie token (idle-aware) ────────────────────────────
+    # Token lives in a browser cookie (replaces the old ?t= URL param approach
+    # which leaked tokens in browser history, server logs, and shared links).
+    # If the session was idle for longer than the firm's idle limit we show a
+    # locked re-auth screen instead of silently restoring — so an unattended
+    # computer is protected while a deliberate refresh feels instant.
     if not st.session_state.authenticated:
-        _url_token = st.query_params.get("t", "")
-        if _url_token:
-            _lu = db.get_token_last_used(_url_token)
+        # Inject the cookie reader JS (will trigger a rerun with the token on first load)
+        inject_cookie_reader()
+        _cookie_token = get_session_cookie()
+        if _cookie_token:
+            _lu = db.get_token_last_used(_cookie_token)
             # Firm-configurable idle limit (default 30 min)
             try:
                 _firm_idle_min = int(
@@ -146,14 +150,14 @@ def main():
             import time as _time_mod_tok
             if _lu is not None and (_time_mod_tok.time() - _lu) > _firm_idle_limit:
                 # Token valid but idle too long → show locked re-auth screen
-                _locked_user = db.validate_session_token(_url_token)
+                _locked_user = db.validate_session_token(_cookie_token)
                 if _locked_user:
-                    render_reauth_screen(_url_token, _locked_user["username"])
+                    render_reauth_screen(_cookie_token, _locked_user["username"])
                     return
                 # Token expired/invalid → fall through to normal login
             else:
                 # Active session or first restore → silent auto-login
-                do_auto_login_from_token(_url_token)
+                do_auto_login_from_token(_cookie_token)
 
     # ── Auth gate ──
     if not st.session_state.authenticated:

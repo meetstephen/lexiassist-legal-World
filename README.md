@@ -244,7 +244,7 @@ LexiAssist is designed for use by qualified Nigerian lawyers, not as a direct-to
 | Audit trail | 17 event types · hash-chained · admin-viewable · CSV export | ✅ |
 | XSS protection | `esc()` wrapper (`html.escape()`) on all user content in HTML | ✅ |
 | Streamlit version pinned | `streamlit==1.43.2` in `requirements.txt` | ✅ |
-| Session token in URL | Token written to query param for auto-login — full cookie migration pending | ⚠️ |
+| Session token in cookie | Token stored in browser cookie (SameSite=Lax, Secure) — URL clean | ✅ |
 
 ---
 
