@@ -146,12 +146,12 @@ def esc(text: str) -> str:
 
 
 def new_id() -> str:
-    """Generate a short, URL-safe identifier (12 hex chars).
+    """Generate a short, URL-safe identifier (8 hex chars).
 
     Centralised here because both lexi.database and lexi.helpers need
     it; routing through one of them would create a circular import.
     """
-    return uuid.uuid4().hex[:12]
+    return uuid.uuid4().hex[:8]
 
 
 def hash_session_token(token: str) -> str:
