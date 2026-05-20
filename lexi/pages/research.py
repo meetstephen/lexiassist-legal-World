@@ -40,9 +40,13 @@ def render_research():
         key="research_query_ta",
     )
 
-    # ── Quick Precedent Finder ──
+    # ── Quick Precedent Finder (grounded against verified Nigerian case DB) ──
     with st.expander("🔖 Quick Precedent Finder", expanded=False):
-        st.caption("Get the top 5 most relevant Nigerian cases on any legal point — instantly.")
+        st.caption(
+            "Returns Nigerian cases grounded against LexiAssist's verified case "
+            "database. Every result is tagged ✅ Verified or ⚠️ Unverified — "
+            "the AI is forbidden from inventing citations."
+        )
         prec_cols = st.columns([3, 1])
         with prec_cols[0]:
             prec_query = st.text_input(
@@ -59,52 +63,196 @@ def render_research():
                 type="primary",
             )
         if prec_btn and prec_query.strip():
-            prec_prompt = f"""
-You are a Nigerian law librarian. For the legal issue below, provide the TOP 5 most
-authoritative Nigerian cases. Respond ONLY in this exact JSON format, nothing else:
+            # 1. Retrieval — pull candidates from the verified DB so the AI is
+            #    ranking real cases, not inventing them.
+            grounded = find_relevant_verified_cases(prec_query.strip(), top_k=8)
+            if grounded:
+                grounding_block = (
+                    "═══ VERIFIED CANDIDATE CASES (from the LexiAssist verified Nigerian case database) ═══\n"
+                    "These are the ONLY cases you should rank and explain. Use the citation EXACTLY as given.\n"
+                    "Do NOT invent additional cases.\n\n"
+                    + "\n".join(
+                        f"- {g['name']} {g['citation']} ({g['court']}, {g['year']}) — {g['principle']}"
+                        for g in grounded
+                    )
+                    + "\n═══ END CANDIDATES ═══\n"
+                )
+                target_n = min(5, len(grounded))
+                instruction = (
+                    f"From the VERIFIED CANDIDATE CASES above, select the TOP {target_n} most "
+                    f"relevant to the legal issue and explain each. Do NOT add any case that is "
+                    f"not in the candidate list. Use the citation EXACTLY as provided."
+                )
+            else:
+                # No DB matches — be honest. Ask AI for at most 3 well-known
+                # cases AND mark them clearly as needing verification.
+                grounding_block = (
+                    "═══ NO VERIFIED CANDIDATES FOUND ═══\n"
+                    "The LexiAssist verified database has no matching cases for this issue.\n"
+                    "═══ END ═══\n"
+                )
+                target_n = 3
+                instruction = (
+                    f"Provide UP TO {target_n} well-established Nigerian precedents you are "
+                    f"highly confident about. If you are not certain a case is real, do NOT "
+                    f"include it — return fewer cases instead. Better to return 1 verified case "
+                    f"than 5 invented ones."
+                )
+
+            prec_prompt = f"""{grounding_block}
+
+LEGAL ISSUE: {prec_query.strip()}
+
+{instruction}
+
+Respond ONLY in this exact JSON format, nothing else:
 {{
   "cases": [
     {{
-      "name": "Full case name",
-      "citation": "[(year)] volume report page",
-      "court": "Supreme Court/Court of Appeal/Federal High Court",
-      "year": "1995",
-      "ratio": "One sentence — the exact legal principle established",
+      "name": "Full case name (X v Y)",
+      "citation": "(year) volume report (Pt. X) page",
+      "court": "Supreme Court | Court of Appeal | Federal High Court | National Industrial Court",
+      "year": "YYYY",
+      "ratio": "One sentence — the legal principle established",
       "relevance": "One sentence — why this case applies to the issue"
     }}
   ]
 }}
-LEGAL ISSUE: {prec_query}
+
+HARD RULES:
+1. NEVER invent a case name or citation.
+2. If unsure, return fewer cases — empty list is acceptable.
+3. Use the candidate citations EXACTLY as written above.
 """
-            with st.spinner("🔖 Searching Nigerian precedents..."):
+            with st.spinner("🔖 Searching Nigerian precedents…"):
                 raw = generate(prec_prompt, IDENTITY_CORE, "brief", "research")
+
+            # 2. Parse + verify every returned case against the DB.
             try:
                 clean = raw.strip().replace("```json", "").replace("```", "").strip()
+                # Some models wrap with prose — extract the first JSON object.
+                _open = clean.find("{")
+                _close = clean.rfind("}")
+                if _open >= 0 and _close > _open:
+                    clean = clean[_open : _close + 1]
                 data = json.loads(clean)
-                for i, case in enumerate(data.get("cases", []), 1):
-                    court = case.get("court", "")
-                    if "Supreme" in court:
-                        court_badge = "badge-err"
-                    elif "Appeal" in court:
-                        court_badge = "badge-warn"
-                    else:
-                        court_badge = "badge-ok"
-                    st.markdown(f"""
-<div class="custom-card">
-  <div style="display:flex;justify-content:space-between;align-items:flex-start;">
-    <h4 style="margin:0;">#{i} · {esc(case.get('name',''))}</h4>
-    <span class="badge {court_badge}">{esc(court)}</span>
-  </div>
-  <div style="margin:0.4rem 0;">
-    📖 <code>{esc(case.get('citation',''))}</code> · 📅 {esc(case.get('year',''))}
-  </div>
-  <div><strong>Ratio:</strong> {esc(case.get('ratio',''))}</div>
-  <div style="color:var(--la-text2);">
-    <strong>Why relevant:</strong> {esc(case.get('relevance',''))}
-  </div>
-</div>""", unsafe_allow_html=True)
+                ai_cases = data.get("cases", []) or []
             except Exception:
                 st.markdown(raw)
+                ai_cases = []
+
+            verified_count = 0
+            unverified_count = 0
+            grounded_names = {g["name"].lower() for g in grounded}
+
+            for i, case in enumerate(ai_cases, 1):
+                name = (case.get("name") or "").strip()
+                court = (case.get("court") or "").strip()
+                ai_citation = (case.get("citation") or "").strip()
+                year = (case.get("year") or "").strip()
+                ratio = (case.get("ratio") or "").strip()
+                relevance = (case.get("relevance") or "").strip()
+
+                # Authoritative lookup against the verified DB.
+                match = verify_case_name(name) if name else None
+                # Treat as verified if either the AI picked a candidate we
+                # passed in, OR the name matches the DB at all.
+                is_grounded_pick = name.lower() in grounded_names
+                is_verified = bool(match) or is_grounded_pick
+
+                # Use canonical citation from DB whenever possible, so the AI
+                # cannot accidentally drift the citation.
+                if match:
+                    canonical = match["citation"]
+                    canonical_court = match.get("court", court)
+                    canonical_year = str(match.get("year", year))
+                    canonical_name = match["name"]
+                else:
+                    canonical = ai_citation
+                    canonical_court = court
+                    canonical_year = year
+                    canonical_name = name
+
+                if is_verified:
+                    verified_count += 1
+                    badge_label = "✅ Verified"
+                    badge_bg = "#dcfce7"
+                    badge_border = "#16a34a"
+                    badge_color = "#14532d"
+                    note = (
+                        "Citation taken from the LexiAssist verified Nigerian case database."
+                        if match else
+                        "Selected from the verified candidate set passed to the AI."
+                    )
+                else:
+                    unverified_count += 1
+                    badge_label = "⚠️ Unverified"
+                    badge_bg = "#fef2f2"
+                    badge_border = "#dc2626"
+                    badge_color = "#991b1b"
+                    note = (
+                        "Not found in the LexiAssist verified database. "
+                        "Verify on NWLR / LPELR / LawPavilion before citing or filing."
+                    )
+
+                if "Supreme" in canonical_court:
+                    court_badge = "badge-err"
+                elif "Appeal" in canonical_court:
+                    court_badge = "badge-warn"
+                else:
+                    court_badge = "badge-ok"
+
+                st.markdown(
+                    f"""
+<div class="custom-card">
+  <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:0.5rem;flex-wrap:wrap;">
+    <h4 style="margin:0;">#{i} · {esc(canonical_name)}</h4>
+    <div style="display:flex;gap:0.4rem;flex-wrap:wrap;">
+      <span class="badge {court_badge}">{esc(canonical_court)}</span>
+      <span style="display:inline-block;background:{badge_bg};border:1px solid {badge_border};
+                   color:{badge_color};padding:2px 8px;border-radius:999px;
+                   font-size:0.72rem;font-weight:700;">{badge_label}</span>
+    </div>
+  </div>
+  <div style="margin:0.4rem 0;">
+    📖 <code>{esc(canonical)}</code> · 📅 {esc(canonical_year)}
+  </div>
+  <div><strong>Ratio:</strong> {esc(ratio)}</div>
+  <div style="color:var(--la-text2);">
+    <strong>Why relevant:</strong> {esc(relevance)}
+  </div>
+  <div style="margin-top:0.4rem;font-size:0.78rem;color:{badge_color};">
+    {esc(note)}
+  </div>
+</div>""",
+                    unsafe_allow_html=True,
+                )
+
+            if ai_cases:
+                if unverified_count == 0 and verified_count > 0:
+                    st.success(
+                        f"✅ All {verified_count} case(s) above are grounded in the "
+                        f"verified Nigerian case database."
+                    )
+                elif verified_count > 0 and unverified_count > 0:
+                    st.warning(
+                        f"⚠️ {verified_count} verified · {unverified_count} unverified. "
+                        f"Treat the unverified entries as suggestions only — confirm in "
+                        f"NWLR / LPELR / LawPavilion before relying on them."
+                    )
+                else:
+                    st.error(
+                        f"🚫 None of the {unverified_count} returned case(s) could be "
+                        f"matched against the verified database. Do NOT cite without "
+                        f"independent verification."
+                    )
+            elif not grounded:
+                st.info(
+                    "ℹ️ No cases returned. The verified database had no candidates and "
+                    "the AI declined to suggest others. Try rephrasing the legal issue with "
+                    "different keywords (e.g. 'fair hearing' instead of 'natural justice'), "
+                    "or use the full **Research** flow below for a deeper memo."
+                )
     st.markdown("---")
     rc1, rc2 = st.columns([1, 1])
     with rc1:

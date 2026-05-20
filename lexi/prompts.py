@@ -44,12 +44,22 @@ IDENTITY_CORE = _load("identity_core.txt")
 STRATEGY_BLOCK = _load("strategy_block.txt")
 
 # ═══════════════════════════════════════════════════════
-# MODE PROMPTS (fully composed: identity + strategy + mode suffix)
+# MODE PROMPTS
+#
+# Composed at import time from IDENTITY_CORE + (optional) STRATEGY_BLOCK +
+# mode-specific suffix. This keeps a SINGLE source of truth for the
+# Nigerian backbone (jurisdiction, authorities, ethics, anti-hallucination
+# rules) — any future edit to identity_core.txt or strategy_block.txt
+# automatically propagates to every analysis mode.
+#
+# - brief         : identity only, no strategy block (concise answers)
+# - standard      : identity + strategy + standard mode suffix
+# - comprehensive : identity + strategy + comprehensive mode suffix
 # ═══════════════════════════════════════════════════════
 PROMPTS_BY_MODE = {
-    "brief": _load("mode_brief.txt"),
-    "standard": _load("mode_standard.txt"),
-    "comprehensive": _load("mode_comprehensive.txt"),
+    "brief":         IDENTITY_CORE + "\n" + _load("mode_brief.txt"),
+    "standard":      IDENTITY_CORE + STRATEGY_BLOCK + "\n" + _load("mode_standard.txt"),
+    "comprehensive": IDENTITY_CORE + STRATEGY_BLOCK + "\n" + _load("mode_comprehensive.txt"),
 }
 
 # ═══════════════════════════════════════════════════════
@@ -58,7 +68,7 @@ PROMPTS_BY_MODE = {
 TASK_MODIFIERS = {
     "general": "\nApply the general legal framework. Take a clear position.",
     "analysis": "\nFocus on deep issue-spotting. Apply CREAC to each issue. Distinguish facts carefully.",
-    "drafting": "\nDraft a professional Nigerian-standard document. Use [PLACEHOLDER] for missing data. Include all formality requirements (execution, stamping, filing). Do NOT add strategy/risk sections for drafting tasks.",
+    "drafting": _load("task_drafting.txt"),
     "research": "\nWrite a formal Legal Research Memorandum. For each authority: state the principle, quote the ratio (if known), and explain relevance to the query.",
     "procedure": "\nProvide step-by-step procedural guidance. Include: which court, which form/process, filing fees (if known), timelines, and common pitfalls.",
     "advisory": "\nFocus on strategic advisory. Emphasize risk mitigation, commercial impact, and optimal paths. Include risk matrix.",

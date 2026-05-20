@@ -4,8 +4,27 @@ firm branding and optional Streamlit download buttons.
 This module references ``get_firm_name`` (defined in ``lexi.helpers``);
 that lookup is done lazily inside each function to avoid a circular
 import.
+
+PDF rendering strategy (v9.1.2+):
+  1. At import time, scan the OS for a Unicode TTF font (DejaVuSans /
+     NotoSans / Liberation). If found, all subsequent ``export_pdf``
+     calls register and use it — every Naira sign, em-dash, smart quote,
+     and accented character renders correctly.
+  2. If no Unicode font is available we fall back to fpdf2's built-in
+     ``Helvetica`` core font. Helvetica is Latin-1 only, so the body is
+     pre-sanitised through a comprehensive Unicode → ASCII map
+     (``_PDF_ASCII_MAP``) instead of being silently mangled by a lossy
+     ``encode('latin-1', errors='replace')``. ₦ becomes ``NGN``, em-dash
+     becomes ``-``, etc.
+  3. fpdf2 ≥ 2.7 deprecations (``txt=``, ``ln=True``, ``rotate(...)``,
+     ``output(dest='S')``) are handled via the new API
+     (``text=``, ``new_x``/``new_y``, ``rotation()`` context manager,
+     plain ``output()``) with backward-compatible try/except fallbacks.
 """
 from __future__ import annotations
+
+import os
+from pathlib import Path
 
 from .runtime import (
     st, html_mod, datetime, BytesIO, logger,
@@ -21,83 +40,404 @@ def get_firm_name() -> str:
     from .helpers import get_firm_name as _real
     return _real()
 
+
+# ═══════════════════════════════════════════════════════
+# PDF UNICODE SUPPORT — font discovery + sanitisation
+# ═══════════════════════════════════════════════════════
+
+# Common system paths for Unicode TTF fonts on Linux/Mac (Streamlit Cloud is
+# Debian-based; DejaVu Sans is part of the base ``fonts-dejavu-core`` package
+# and is reliably present at this path).
+_FONT_CANDIDATES = [
+    # (family_label, regular, bold, italic, bold_italic)
+    ("DejaVuSans", [
+        "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
+        "/usr/share/fonts/dejavu/DejaVuSans.ttf",
+        "/Library/Fonts/DejaVuSans.ttf",
+        "/usr/local/share/fonts/DejaVuSans.ttf",
+    ], [
+        "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
+        "/usr/share/fonts/dejavu/DejaVuSans-Bold.ttf",
+        "/Library/Fonts/DejaVuSans-Bold.ttf",
+        "/usr/local/share/fonts/DejaVuSans-Bold.ttf",
+    ], [
+        "/usr/share/fonts/truetype/dejavu/DejaVuSans-Oblique.ttf",
+        "/usr/share/fonts/dejavu/DejaVuSans-Oblique.ttf",
+    ], [
+        "/usr/share/fonts/truetype/dejavu/DejaVuSans-BoldOblique.ttf",
+        "/usr/share/fonts/dejavu/DejaVuSans-BoldOblique.ttf",
+    ]),
+    ("NotoSans", [
+        "/usr/share/fonts/truetype/noto/NotoSans-Regular.ttf",
+        "/usr/share/fonts/noto/NotoSans-Regular.ttf",
+    ], [
+        "/usr/share/fonts/truetype/noto/NotoSans-Bold.ttf",
+        "/usr/share/fonts/noto/NotoSans-Bold.ttf",
+    ], [
+        "/usr/share/fonts/truetype/noto/NotoSans-Italic.ttf",
+        "/usr/share/fonts/noto/NotoSans-Italic.ttf",
+    ], [
+        "/usr/share/fonts/truetype/noto/NotoSans-BoldItalic.ttf",
+        "/usr/share/fonts/noto/NotoSans-BoldItalic.ttf",
+    ]),
+    ("LiberationSans", [
+        "/usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf",
+        "/usr/share/fonts/liberation/LiberationSans-Regular.ttf",
+    ], [
+        "/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf",
+        "/usr/share/fonts/liberation/LiberationSans-Bold.ttf",
+    ], [
+        "/usr/share/fonts/truetype/liberation/LiberationSans-Italic.ttf",
+        "/usr/share/fonts/liberation/LiberationSans-Italic.ttf",
+    ], [
+        "/usr/share/fonts/truetype/liberation/LiberationSans-BoldItalic.ttf",
+        "/usr/share/fonts/liberation/LiberationSans-BoldItalic.ttf",
+    ]),
+]
+
+
+def _find_font_files() -> tuple[str, str, str | None, str | None, str | None] | None:
+    """Return (family_label, regular_path, bold_path|None, italic_path|None,
+    bold_italic_path|None) for the first font family found, or None if no
+    Unicode font is available on this system.
+    """
+    def _first_existing(paths):
+        for p in paths:
+            if p and os.path.exists(p):
+                return p
+        return None
+
+    for label, regs, bolds, ital, bital in _FONT_CANDIDATES:
+        regular = _first_existing(regs)
+        if not regular:
+            continue
+        return (
+            label,
+            regular,
+            _first_existing(bolds),
+            _first_existing(ital),
+            _first_existing(bital),
+        )
+    return None
+
+
+# Unicode → ASCII fallback map for when no Unicode font is available.
+# Covers the punctuation Nigerian legal drafts actually use.
+_PDF_ASCII_MAP = {
+    # Currency (Helvetica core has no Naira glyph)
+    "\u20a6": "NGN ",        # ₦  Naira sign → "NGN"
+    "\u00a3": "GBP ",        # £
+    "\u20ac": "EUR ",        # €
+    "\u00a5": "JPY ",        # ¥
+    # Dashes
+    "\u2013": "-",            # – en-dash
+    "\u2014": "-",            # — em-dash
+    "\u2015": "-",            # ― horizontal bar
+    "\u2212": "-",            # − minus
+    # Quotes
+    "\u2018": "'",            # ‘
+    "\u2019": "'",            # ’
+    "\u201a": ",",            # ‚
+    "\u201b": "'",            # ‛
+    "\u201c": '"',            # “
+    "\u201d": '"',            # ”
+    "\u201e": ',,',           # „
+    "\u00ab": '"',            # «
+    "\u00bb": '"',            # »
+    "\u2032": "'",            # ′ prime
+    "\u2033": '"',            # ″ double prime
+    # Spaces / breaks
+    "\u00a0": " ",            # NBSP
+    "\u2002": " ",            # en space
+    "\u2003": " ",            # em space
+    "\u2009": " ",            # thin space
+    "\u202f": " ",            # narrow NBSP
+    "\u200b": "",             # ZWSP
+    "\u200c": "",             # ZWNJ
+    "\u200d": "",             # ZWJ
+    "\ufeff": "",             # BOM
+    # Punctuation
+    "\u2026": "...",         # …
+    "\u00b7": "-",            # · middle dot (kept simple)
+    "\u2022": "*",            # • bullet
+    "\u25aa": "*",            # ▪
+    "\u25cf": "*",            # ●
+    "\u25e6": "o",            # ◦
+    "\u00a7": "Sec.",        # § section
+    "\u00b6": "Para.",       # ¶ pilcrow
+    # Box-drawing (used in our headings)
+    "\u2550": "=", "\u2500": "-", "\u2501": "-",
+    "\u2502": "|", "\u2503": "|",
+    "\u250c": "+", "\u2510": "+", "\u2514": "+", "\u2518": "+",
+    "\u251c": "+", "\u2524": "+", "\u252c": "+", "\u2534": "+", "\u253c": "+",
+    # Arrows
+    "\u2192": "->",           # →
+    "\u2190": "<-",           # ←
+    "\u21d2": "=>",           # ⇒
+    "\u21d4": "<=>",         # ⇔
+    "\u25b8": ">",            # ▸ (used in our headings)
+    "\u25b6": ">",            # ▶
+    # Math / misc that lawyers occasionally type
+    "\u00d7": "x",            # ×
+    "\u00f7": "/",            # ÷
+    "\u2260": "!=",           # ≠
+    "\u2264": "<=",           # ≤
+    "\u2265": ">=",           # ≥
+    "\u00b1": "+/-",         # ±
+    "\u00b0": " deg",        # °
+    # Fractions (rarely used but cheap to map)
+    "\u00bc": "1/4", "\u00bd": "1/2", "\u00be": "3/4",
+    # Common ligatures
+    "\u0152": "OE", "\u0153": "oe",
+    "\u00c6": "AE", "\u00e6": "ae",
+    # Stars / warnings (we use these in disclaimers)
+    "\u2605": "*", "\u2606": "*", "\u26a0": "!",
+    "\u2713": "v", "\u2714": "v", "\u2717": "x", "\u2718": "x",
+    # Trademark / copyright / registered (Helvetica DOES have these but be safe)
+    # We deliberately don't remap (c) (R) (TM) — Helvetica handles them.
+}
+
+
+def _pdf_ascii_fallback(text: str) -> str:
+    """When no Unicode font is registered, replace troublesome unicode
+    characters with sensible ASCII equivalents (and final round-trip
+    everything else through Latin-1 to stay safe).
+    """
+    if not text:
+        return ""
+    # 1. Apply explicit map
+    out = []
+    for ch in text:
+        if ch in _PDF_ASCII_MAP:
+            out.append(_PDF_ASCII_MAP[ch])
+        else:
+            out.append(ch)
+    s = "".join(out)
+    # 2. Strip any remaining emoji / surrogate pairs / non-BMP characters
+    #    to avoid latin-1 substitution noise.
+    s = "".join(ch if ord(ch) < 0x10000 else "" for ch in s)
+    # 3. Final lossy fallback for anything outside Latin-1.
+    return s.encode("latin-1", errors="replace").decode("latin-1")
+
+
+# Cached font discovery — runs once per process.
+_FONT_INFO: dict | None = None
+
+
+def _get_pdf_font_info() -> dict:
+    """Discover available Unicode font once and cache the result.
+
+    Returns dict with keys:
+      - family:       'DejaVuSans' | 'NotoSans' | 'LiberationSans' | 'Helvetica'
+      - has_unicode:  bool
+      - reg/bold/italic/bold_italic: TTF paths (only if has_unicode)
+    """
+    global _FONT_INFO
+    if _FONT_INFO is not None:
+        return _FONT_INFO
+    found = _find_font_files()
+    if found:
+        label, reg, bold, ital, bital = found
+        _FONT_INFO = {
+            "family": label,
+            "has_unicode": True,
+            "reg": reg,
+            "bold": bold or reg,           # fall back to regular for missing variants
+            "italic": ital or reg,
+            "bold_italic": bital or bold or reg,
+        }
+        logger.info(f"PDF: Unicode font registered ({label} from {reg})")
+    else:
+        _FONT_INFO = {"family": "Helvetica", "has_unicode": False}
+        logger.warning(
+            "PDF: No Unicode TTF font found on system. Falling back to Helvetica "
+            "with ASCII-mapped sanitiser. ₦ will render as 'NGN', em-dash as '-'. "
+            "Install fonts-dejavu-core (Debian/Ubuntu) for native Unicode rendering."
+        )
+    return _FONT_INFO
+
+
+def _register_pdf_fonts(pdf, info: dict) -> str:
+    """Register Unicode fonts on a fresh FPDF instance and return the family
+    name to pass into ``set_font``.
+    """
+    if not info.get("has_unicode"):
+        return "Helvetica"
+    fam = info["family"]
+    try:
+        pdf.add_font(fam, "",  info["reg"],         uni=True)
+        pdf.add_font(fam, "B", info["bold"],        uni=True)
+        pdf.add_font(fam, "I", info["italic"],      uni=True)
+        pdf.add_font(fam, "BI", info["bold_italic"], uni=True)
+        return fam
+    except TypeError:
+        # fpdf2 ≥ 2.7 dropped the deprecated ``uni`` kwarg.
+        try:
+            pdf.add_font(fam, "",  info["reg"])
+            pdf.add_font(fam, "B", info["bold"])
+            pdf.add_font(fam, "I", info["italic"])
+            pdf.add_font(fam, "BI", info["bold_italic"])
+            return fam
+        except Exception as e:
+            logger.warning(f"PDF: failed to register {fam}, falling back to Helvetica: {e}")
+            return "Helvetica"
+    except Exception as e:
+        logger.warning(f"PDF: failed to register {fam}, falling back to Helvetica: {e}")
+        return "Helvetica"
+
+
+def _pdf_text(s: str, has_unicode: bool) -> str:
+    """Sanitise a string for the active PDF font. Identity when a Unicode
+    font is registered; ASCII-fallback otherwise.
+    """
+    if s is None:
+        return ""
+    if has_unicode:
+        # Strip null bytes only; leave everything else for the Unicode font.
+        return s.replace("\x00", "")
+    return _pdf_ascii_fallback(s)
+
+
+def _cell(pdf, w, h, txt, *, align: str = "L", new_line: bool = True, has_unicode: bool = True):
+    """Wrapper around ``pdf.cell`` that uses the modern fpdf2 API
+    (``text=``, ``new_x=``/``new_y=``) with a try/except fallback to the
+    legacy API (``txt=``, ``ln=True``) so we work on every fpdf2 ≥ 2.5.
+    """
+    safe = _pdf_text(txt, has_unicode)
+    try:
+        from fpdf.enums import XPos, YPos  # fpdf2 ≥ 2.7
+        if new_line:
+            pdf.cell(w, h, text=safe, align=align, new_x=XPos.LMARGIN, new_y=YPos.NEXT)
+        else:
+            pdf.cell(w, h, text=safe, align=align, new_x=XPos.RIGHT, new_y=YPos.TOP)
+    except Exception:
+        # Legacy API fallback
+        try:
+            pdf.cell(w, h, txt=safe, align=align, ln=1 if new_line else 0)
+        except Exception as e:
+            logger.warning(f"PDF cell render failed for {safe!r}: {e}")
+
+
+def _multi_cell(pdf, w, h, txt, *, align: str = "L", has_unicode: bool = True):
+    safe = _pdf_text(txt, has_unicode)
+    try:
+        pdf.multi_cell(w, h, text=safe, align=align)
+    except Exception:
+        try:
+            pdf.multi_cell(w, h, txt=safe, align=align)
+        except Exception as e:
+            logger.warning(f"PDF multi_cell render failed: {e}")
+
+
 # ═══════════════════════════════════════════════════════
 # EXPORT FUNCTIONS (WITH FIRM BRANDING)
 # ═══════════════════════════════════════════════════════
 def export_pdf(text: str, title: str = "LexiAssist Analysis") -> bytes:
+    """Generate a confidential, branded PDF of an AI analysis or draft.
+
+    Always uses a Unicode font when one is available on the system; otherwise
+    falls back to Helvetica with a comprehensive Unicode → ASCII sanitiser
+    so that ₦, em-dashes and smart quotes never crash the renderer.
+    """
     if not HAS_FPDF:
         return b"%PDF-1.0\nPDF generation unavailable. Install fpdf2."
+
     firm = get_firm_name()
     profile = st.session_state.get("profile", {})
     lawyer = profile.get("lawyer_name", "")
+    nba_no = profile.get("nba_enroll", "")
+    nba_branch = profile.get("nba_branch", "")
+
+    info = _get_pdf_font_info()
+    has_uni = info.get("has_unicode", False)
 
     pdf = FPDF()
     pdf.set_auto_page_break(auto=True, margin=20)
+    fam = _register_pdf_fonts(pdf, info)
     pdf.add_page()
 
-    # ── Confidentiality banner at top of every page ──
-    pdf.set_font("Helvetica", "B", 8)
+    # ── Confidentiality banner ─────────────────────────────────────
+    pdf.set_font(fam, "B", 8)
     pdf.set_text_color(180, 30, 30)
-    pdf.cell(
-        0, 5,
-        txt="STRICTLY PRIVATE & CONFIDENTIAL — ATTORNEY WORK PRODUCT — NOT FOR DISCLOSURE",
-        ln=True, align="C",
+    _cell(
+        pdf, 0, 5,
+        "STRICTLY PRIVATE & CONFIDENTIAL — ATTORNEY WORK PRODUCT — NOT FOR DISCLOSURE",
+        align="C", has_unicode=has_uni,
     )
     pdf.set_text_color(0, 0, 0)
     pdf.ln(3)
 
-    # Title
-    pdf.set_font("Helvetica", "B", 16)
-    pdf.cell(0, 12, txt=title, ln=True, align="C")
+    # ── Title ──────────────────────────────────────────────────────
+    pdf.set_font(fam, "B", 16)
+    _cell(pdf, 0, 12, title, align="C", has_unicode=has_uni)
     pdf.ln(2)
     if firm and firm != "LexiAssist":
-        pdf.set_font("Helvetica", "B", 11)
-        pdf.cell(0, 7, txt=firm, ln=True, align="C")
+        pdf.set_font(fam, "B", 11)
+        _cell(pdf, 0, 7, firm, align="C", has_unicode=has_uni)
     if lawyer:
-        pdf.set_font("Helvetica", "", 10)
-        pdf.cell(0, 6, txt=f"Counsel: {lawyer}", ln=True, align="C")
-    pdf.set_font("Helvetica", "I", 9)
-    pdf.cell(0, 6, txt=f"Generated: {datetime.now():%d %B %Y at %H:%M}", ln=True, align="C")
+        pdf.set_font(fam, "", 10)
+        counsel_line = f"Counsel: {lawyer}"
+        if nba_no:
+            counsel_line += f"  ·  SCN Enroll. No: {nba_no}"
+        if nba_branch:
+            counsel_line += f"  ·  NBA {nba_branch} Branch"
+        _cell(pdf, 0, 6, counsel_line, align="C", has_unicode=has_uni)
+    pdf.set_font(fam, "I", 9)
+    _cell(
+        pdf, 0, 6,
+        f"Generated: {datetime.now():%d %B %Y at %H:%M}",
+        align="C", has_unicode=has_uni,
+    )
     pdf.ln(6)
     pdf.set_draw_color(100, 100, 100)
     pdf.line(15, pdf.get_y(), 195, pdf.get_y())
     pdf.ln(6)
 
-    # Body
-    pdf.set_font("Helvetica", size=10)
-    clean = text.encode("latin-1", errors="replace").decode("latin-1")
-    for line in clean.split("\n"):
-        pdf.multi_cell(0, 6, txt=line)
+    # ── Body ───────────────────────────────────────────────────────
+    pdf.set_font(fam, "", 10)
+    body = text if text else ""
+    for line in body.split("\n"):
+        _multi_cell(pdf, 0, 6, line, has_unicode=has_uni)
         pdf.ln(1)
 
-    # ── Diagonal "CONFIDENTIAL" watermark across page ──
+    # ── Diagonal "CONFIDENTIAL" watermark ──────────────────────────
     try:
-        pdf.set_font("Helvetica", "B", 60)
+        pdf.set_font(fam, "B", 60)
         pdf.set_text_color(230, 230, 230)
-        pdf.rotate(45, x=105, y=150)
-        pdf.text(40, 150, "CONFIDENTIAL")
-        pdf.rotate(0)
+        # Prefer the modern context-manager API
+        if hasattr(pdf, "rotation"):
+            with pdf.rotation(45, x=105, y=150):
+                pdf.text(40, 150, _pdf_text("CONFIDENTIAL", has_uni))
+        else:
+            pdf.rotate(45, x=105, y=150)
+            pdf.text(40, 150, _pdf_text("CONFIDENTIAL", has_uni))
+            pdf.rotate(0)
         pdf.set_text_color(0, 0, 0)
     except Exception:
-        pass  # rotate() not available in all fpdf versions — silent fallback
+        # rotate() / rotation() not available — silent fallback.
+        pdf.set_text_color(0, 0, 0)
 
-    # Footer
+    # ── Footer ─────────────────────────────────────────────────────
     pdf.ln(8)
-    pdf.set_font("Helvetica", "I", 8)
+    pdf.set_font(fam, "I", 8)
     pdf.set_text_color(100, 100, 100)
-    pdf.cell(
-        0, 5,
-        txt=f"Generated by {firm} via LexiAssist v{__version__} — Verify all citations independently",
-        ln=True, align="C",
+    _cell(
+        pdf, 0, 5,
+        f"Generated by {firm} via LexiAssist v{__version__} — Verify all citations independently",
+        align="C", has_unicode=has_uni,
     )
-    pdf.cell(
-        0, 5,
-        txt="This document contains confidential information protected by attorney-client privilege.",
-        ln=True, align="C",
+    _cell(
+        pdf, 0, 5,
+        "This document contains confidential information protected by attorney-client privilege.",
+        align="C", has_unicode=has_uni,
     )
     pdf.set_text_color(0, 0, 0)
 
-    raw = pdf.output(dest="S")
+    # ── Output (handle every fpdf2 version) ───────────────────────
+    try:
+        raw = pdf.output()           # fpdf2 ≥ 2.7 returns bytearray directly
+    except TypeError:
+        raw = pdf.output(dest="S")   # older API
     if isinstance(raw, str):
         return raw.encode("latin-1", errors="replace")
     if isinstance(raw, bytearray):
@@ -383,12 +723,38 @@ def export_html(text: str, title: str = "LexiAssist Analysis") -> str:
             f"</div></body></html>")
 
 def safe_pdf_download(text: str, title: str, fname: str, key: str):
+    """Render a PDF download button with VISIBLE error reporting on failure.
+
+    Previously, any PDF generation error was silently logged and the user
+    saw a greyed-out 'PDF (unavailable)' button with no explanation. Now
+    we surface the error inline and offer a TXT fallback so the user is
+    never stuck.
+    """
     try:
         pdf_data = export_pdf(text, title)
-        st.download_button("📥 PDF", data=pdf_data, file_name=f"{fname}.pdf",
-                           mime="application/pdf", key=key, use_container_width=True)
+        if pdf_data and pdf_data[:5] == b"%PDF-":
+            st.download_button(
+                "📥 PDF", data=pdf_data, file_name=f"{fname}.pdf",
+                mime="application/pdf", key=key, use_container_width=True,
+            )
+        else:
+            # export_pdf returned the "fpdf2 missing" placeholder bytes
+            st.button("📥 PDF (fpdf2 not installed)", disabled=True,
+                      key=key, use_container_width=True)
+            st.caption("ℹ️ Install `fpdf2` to enable PDF exports — TXT/DOCX still work.")
     except Exception as e:
-        st.button("📥 PDF (unavailable)", disabled=True, key=key, use_container_width=True)
+        # Don't hide the bug — show it AND offer a TXT fallback in its place.
+        st.button("📥 PDF (failed)", disabled=True, key=key,
+                  use_container_width=True)
+        st.caption(f"⚠️ PDF generation failed: {e}")
+        try:
+            st.download_button(
+                "📥 TXT (fallback)", data=export_txt(text, title),
+                file_name=f"{fname}.txt", mime="text/plain",
+                key=f"{key}_txt_fallback", use_container_width=True,
+            )
+        except Exception:
+            pass
         logger.warning(f"PDF export failed: {e}")
 
 def safe_docx_download(text: str, title: str, fname: str, key: str,
@@ -400,6 +766,5 @@ def safe_docx_download(text: str, title: str, fname: str, key: str,
                            key=key, use_container_width=True)
     except Exception as e:
         st.button("📥 DOCX (unavailable)", disabled=True, key=key, use_container_width=True)
+        st.caption(f"⚠️ DOCX generation failed: {e}")
         logger.warning(f"DOCX export failed: {e}")
-
-
