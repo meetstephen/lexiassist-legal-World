@@ -173,22 +173,26 @@ Multiple demand letters sent. No response. Client wants to sue.""",
         )
         with st.spinner("⚡ Building matter lifecycle workflow..."):
             raw = generate(prompt, IDENTITY_CORE, "standard", "analysis")
-        try:
-            clean = raw.strip().replace("```json", "").replace("```", "").strip()
-            lifecycle_data = json.loads(clean)
-            db.save_lifecycle(case_id, lifecycle_data)
-            # Initialise progress — all stages incomplete
-            progress = {
-                str(i): False
-                for i in range(1, lifecycle_data.get("total_stages", 0) + 1)
-            }
-            existing_progress = db.load_lifecycle_progress(case_id)
-            if not existing_progress:
-                db.save_lifecycle_progress(case_id, progress)
-            st.success("✅ Lifecycle generated and saved to this case!")
-            st.rerun()
-        except Exception:
-            st.markdown(raw)
+        # parse_ai_json_or_warn surfaces a clear Streamlit error if `raw`
+        # is empty / unparseable, so the user never sees a blank screen.
+        lifecycle_data, ok = parse_ai_json_or_warn(
+            raw, fallback={}, label="lifecycle response",
+        )
+        if ok and lifecycle_data:
+            try:
+                db.save_lifecycle(case_id, lifecycle_data)
+                # Initialise progress — all stages incomplete
+                progress = {
+                    str(i): False
+                    for i in range(1, lifecycle_data.get("total_stages", 0) + 1)
+                }
+                existing_progress = db.load_lifecycle_progress(case_id)
+                if not existing_progress:
+                    db.save_lifecycle_progress(case_id, progress)
+                st.success("✅ Lifecycle generated and saved to this case!")
+                st.rerun()
+            except Exception as e:
+                st.error(f"⚠️ Could not save lifecycle: {e}")
 
     # ── Display saved lifecycle ──
     lifecycle = db.load_lifecycle(case_id)

@@ -236,14 +236,15 @@ arose in January 2024 in Lagos.""",
         with st.spinner("🔍 Scanning all clients and cases for conflicts..."):
             raw = generate(prompt, IDENTITY_CORE, "brief", "advisory")
 
-        try:
-            clean = raw.strip().replace("```json", "").replace("```", "").strip()
-            data = json.loads(clean)
+        # parse_ai_json_or_warn surfaces a clear Streamlit error if `raw`
+        # is empty / unparseable, so the user never sees a blank screen.
+        data, ok = parse_ai_json_or_warn(
+            raw, fallback={}, label="conflict-check response",
+        )
+        if ok and data:
             st.session_state["conflict_result"] = data
             st.session_state["conflict_matter"] = new_client_name
             st.rerun()
-        except Exception:
-            st.markdown(raw)
 
     # ── Display result ──
     result = st.session_state.get("conflict_result", {})

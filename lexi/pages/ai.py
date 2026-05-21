@@ -534,7 +534,22 @@ ANALYSIS:
                         st.markdown(f"**Complexity:** `{data.get('overall_complexity','—')}`")
                         st.markdown(f"**Immediate Action:** {esc(data.get('recommended_action','—'))}")
                     except Exception:
-                        st.markdown(raw)
+                        # Defensive — never leave the user staring at blank.
+                        if raw and raw.strip():
+                            st.warning(
+                                "⚠️ Could not parse the case-strength "
+                                "response as structured data. Showing raw "
+                                "AI output below:"
+                            )
+                            st.markdown(
+                                f'<div class="response-box">{esc(raw)}</div>',
+                                unsafe_allow_html=True,
+                            )
+                        else:
+                            st.error(
+                                "⚠️ The AI response came back empty. Please "
+                                "try again."
+                            )
 
                 # ── STRATEGY SIMULATOR (inside same expander) ──
                 st.markdown("---")
@@ -686,7 +701,22 @@ border-radius:0.75rem;padding:1.2rem;margin-top:1rem;">
                             )
 
                     except Exception:
-                        st.markdown(sim_raw)
+                        # Defensive — never leave the user staring at blank.
+                        if sim_raw and sim_raw.strip():
+                            st.warning(
+                                "⚠️ Could not parse the strategy simulation "
+                                "as structured data. Showing raw AI output "
+                                "below:"
+                            )
+                            st.markdown(
+                                f'<div class="response-box">{esc(sim_raw)}</div>',
+                                unsafe_allow_html=True,
+                            )
+                        else:
+                            st.error(
+                                "⚠️ The AI response came back empty. Please "
+                                "try again."
+                            )
 
         # ── SAVE TO CASE ──
         cases = st.session_state.cases
