@@ -114,7 +114,7 @@ is a company with 3 directors. No prior relationship with vendor.""",
     result = st.session_state.get("dd_result", "")
     dd_label = st.session_state.get("dd_label", "Due Diligence")
 
-    if result:
+    if result and result.strip():
         st.markdown("---")
         st.markdown(f"### 🔎 {esc(dd_label)}")
 
@@ -165,5 +165,13 @@ is a company with 3 directors. No prior relationship with vendor.""",
             inspection, official searches, or independent legal advice. All searches must be
             conducted at the relevant registries before advising clients to proceed.
         </div>""", unsafe_allow_html=True)
+    elif st.session_state.get("dd_label", "").strip() and st.session_state.get("dd_label", "") != "Due Diligence":
+        # Run was attempted but the AI returned an empty checklist —
+        # surface a friendly retry nudge instead of a silent blank.
+        st.markdown("---")
+        st.warning(
+            "⚠️ The AI returned an empty checklist. Click "
+            "**Generate Due Diligence Checklist** again to retry."
+        )
 
 
