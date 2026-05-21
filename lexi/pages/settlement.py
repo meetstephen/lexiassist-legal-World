@@ -117,7 +117,7 @@ XYZ claims ABC refused to pay the last instalment of ₦10M. ABC disputes this."
     result = st.session_state.get("sa_result", "")
     matter_label = st.session_state.get("sa_matter_label", "Settlement")
 
-    if result:
+    if result and result.strip():
         st.markdown("---")
 
         # Parse sections
@@ -204,6 +204,14 @@ XYZ claims ABC refused to pay the last instalment of ₦10M. ABC disputes this."
             All without-prejudice communications must be reviewed by counsel before transmission.
             Counsel remains professionally responsible for all advice and negotiations.
         </div>""", unsafe_allow_html=True)
+    elif st.session_state.get("sa_matter_label", "").strip():
+        # Run was attempted but the AI returned an empty body — surface
+        # a friendly retry nudge instead of a silent blank.
+        st.markdown("---")
+        st.warning(
+            "⚠️ The AI returned an empty response. Click "
+            "**Generate Settlement Strategy** again to retry."
+        )
     # ← render_settlement_advisor ends here — firm admin block removed from this scope
 
 

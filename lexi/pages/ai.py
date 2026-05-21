@@ -231,11 +231,8 @@ def render_ai():
                     '</style>'
                     f'<div class="diff">{diff_html}</div>'
                 )
-                st.markdown("##### 📊 Visual Diff")
-                st.markdown(styled_diff, unsafe_allow_html=True)
 
                 # ── AI legal significance analysis ──
-                st.markdown("##### ⚖️ Legal Significance Analysis")
                 # Compute unified diff as text for the AI
                 unified = "\n".join(
                     difflib.unified_diff(v1_lines, v2_lines, fromfile="V1", tofile="V2", lineterm="")
@@ -257,12 +254,37 @@ def render_ai():
                 )
                 with st.spinner("⚖️ Analysing legal significance of changes…"):
                     diff_analysis = generate(diff_prompt, IDENTITY_CORE, "standard", "contract_review")
-                st.markdown(f'<div class="response-box">{esc(diff_analysis)}</div>', unsafe_allow_html=True)
-                diff_fname = f"LexiAssist_ContractDiff_{datetime.now():%Y%m%d_%H%M}"
-                st.download_button(
-                    "📥 Download Analysis (TXT)", export_txt(diff_analysis, "Contract Version Analysis"),
-                    f"{diff_fname}.txt", "text/plain", key="diff_dl_txt", use_container_width=True,
+                # Persist so the diff + analysis survive download-button reruns.
+                st.session_state["diff_styled_html"] = styled_diff
+                st.session_state["diff_analysis"] = diff_analysis
+                st.rerun()
+
+            # ── Render persisted diff results (outside the button branch) ──
+            persisted_diff = st.session_state.get("diff_styled_html", "")
+            persisted_diff_analysis = st.session_state.get("diff_analysis", "")
+            if persisted_diff and persisted_diff_analysis:
+                st.markdown("##### 📊 Visual Diff")
+                st.markdown(persisted_diff, unsafe_allow_html=True)
+                st.markdown("##### ⚖️ Legal Significance Analysis")
+                st.markdown(
+                    f'<div class="response-box">{esc(persisted_diff_analysis)}</div>',
+                    unsafe_allow_html=True,
                 )
+                diff_fname = f"LexiAssist_ContractDiff_{datetime.now():%Y%m%d_%H%M}"
+                dlc1, dlc2 = st.columns([3, 1])
+                with dlc1:
+                    st.download_button(
+                        "📥 Download Analysis (TXT)",
+                        export_txt(persisted_diff_analysis, "Contract Version Analysis"),
+                        f"{diff_fname}.txt", "text/plain",
+                        key="diff_dl_txt", use_container_width=True,
+                    )
+                with dlc2:
+                    if st.button("🗑️ Clear Diff", key="diff_clear_btn",
+                                 use_container_width=True):
+                        st.session_state.pop("diff_styled_html", None)
+                        st.session_state.pop("diff_analysis", None)
+                        st.rerun()
     
     prefill = st.session_state.pop("loaded_template", "") if "loaded_template" in st.session_state and st.session_state.get("loaded_template") else ""
     query = st.text_area(
@@ -307,8 +329,21 @@ def render_ai():
     if issue_btn and query.strip():
         with st.spinner("🔍 Decomposing issues…"):
             result = run_issue_spot(query.strip())
+        # Persist so the result survives reruns from any subsequent click.
+        st.session_state["issue_spot_result"] = result
+        st.session_state["issue_spot_query"] = query.strip()
+        st.rerun()
+
+    # Render persisted issue-spot output (outside the button branch).
+    issue_result = st.session_state.get("issue_spot_result", "")
+    if issue_result and issue_result.strip():
         st.markdown("### 🔍 Issue Decomposition")
-        st.markdown(f'<div class="response-box">{esc(result)}</div>', unsafe_allow_html=True)
+        st.markdown(f'<div class="response-box">{esc(issue_result)}</div>',
+                    unsafe_allow_html=True)
+        if st.button("🗑️ Clear Issue Decomposition", key="issue_spot_clear_btn"):
+            st.session_state.pop("issue_spot_result", None)
+            st.session_state.pop("issue_spot_query", None)
+            st.rerun()
 
     # ── Main Generation (with streaming + audit + confidence) ──
     if generate_btn and query.strip():
@@ -512,13 +547,24 @@ ANALYSIS:
 """
                     with st.spinner("Calculating case strength..."):
                         raw = generate(strength_prompt, IDENTITY_CORE, "brief", "analysis")
-                    try:
-                        clean = raw.strip().replace("```json","").replace("```","").strip()
-                        data = json.loads(clean)
-                        for p in data.get("parties", []):
-                            strength = int(p.get("strength", 50))
-                            color = "#dc2626" if strength < 40 else ("#f59e0b" if strength < 65 else "#059669")
-                            bar_html = f"""
+                    # Persist parsed data so reruns (e.g. from Save / Follow-up
+                    # button clicks) don't blank the strength bars.
+                    parsed = safe_json_loads(raw, fallback=None)
+                    if parsed:
+                        st.session_state["strength_data"] = parsed
+                        st.session_state.pop("strength_raw_fb", None)
+                    else:
+                        st.session_state["strength_data"] = None
+                        st.session_state["strength_raw_fb"] = raw
+                    st.rerun()
+
+                # ── Render persisted strength assessment ──
+                strength_data = st.session_state.get("strength_data")
+                if strength_data:
+                    for p in strength_data.get("parties", []):
+                        strength = int(p.get("strength", 50))
+                        color = "#dc2626" if strength < 40 else ("#f59e0b" if strength < 65 else "#059669")
+                        bar_html = f"""
 <div style="margin-bottom:1rem;">
   <div style="display:flex;justify-content:space-between;margin-bottom:4px;">
     <strong>{esc(p['name'])}</strong>
@@ -530,26 +576,25 @@ ANALYSIS:
   </div>
   <small style="color:var(--la-text2);">{esc(p.get('reason',''))}</small>
 </div>"""
-                            st.markdown(bar_html, unsafe_allow_html=True)
-                        st.markdown(f"**Complexity:** `{data.get('overall_complexity','—')}`")
-                        st.markdown(f"**Immediate Action:** {esc(data.get('recommended_action','—'))}")
-                    except Exception:
-                        # Defensive — never leave the user staring at blank.
-                        if raw and raw.strip():
-                            st.warning(
-                                "⚠️ Could not parse the case-strength "
-                                "response as structured data. Showing raw "
-                                "AI output below:"
-                            )
-                            st.markdown(
-                                f'<div class="response-box">{esc(raw)}</div>',
-                                unsafe_allow_html=True,
-                            )
-                        else:
-                            st.error(
-                                "⚠️ The AI response came back empty. Please "
-                                "try again."
-                            )
+                        st.markdown(bar_html, unsafe_allow_html=True)
+                    st.markdown(f"**Complexity:** `{strength_data.get('overall_complexity','—')}`")
+                    st.markdown(f"**Immediate Action:** {esc(strength_data.get('recommended_action','—'))}")
+                else:
+                    strength_raw_fb = st.session_state.get("strength_raw_fb", "")
+                    if strength_raw_fb and strength_raw_fb.strip():
+                        st.warning(
+                            "⚠️ Could not parse the case-strength response. "
+                            "Showing raw AI output below:"
+                        )
+                        st.markdown(
+                            f'<div class="response-box">{esc(strength_raw_fb)}</div>',
+                            unsafe_allow_html=True,
+                        )
+                    elif "strength_raw_fb" in st.session_state:
+                        st.warning(
+                            "⚠️ The AI returned an empty response. Click "
+                            "**Generate Strength Assessment** again to retry."
+                        )
 
                 # ── STRATEGY SIMULATOR (inside same expander) ──
                 st.markdown("---")
@@ -631,29 +676,52 @@ PROPOSED ACTION: {sim_action}
 """
                     with st.spinner("🎯 Simulating strategy..."):
                         sim_raw = generate(sim_prompt, IDENTITY_CORE, "brief", "advisory")
-                    try:
-                        sim_clean = sim_raw.strip().replace("```json","").replace("```","").strip()
-                        sim_data = json.loads(sim_clean)
+                    # Persist so the simulation survives subsequent reruns.
+                    parsed_sim = safe_json_loads(sim_raw, fallback=None)
+                    if parsed_sim:
+                        st.session_state["sim_data"] = parsed_sim
+                        st.session_state["sim_action_text"] = sim_action.strip()
+                        st.session_state.pop("sim_raw_fb", None)
+                        # Save simulation to case history
+                        if st.session_state.cases:
+                            sim_text = (
+                                f"STRATEGY SIMULATION\n"
+                                f"Action: {parsed_sim.get('action','')}\n"
+                                f"Probability: {parsed_sim.get('probability_of_success',0)}%\n"
+                                f"Verdict: {parsed_sim.get('verdict','')}\n"
+                                f"Reasoning: {parsed_sim.get('reasoning','')}\n"
+                            )
+                            add_to_history(
+                                f"[Strategy Sim] {sim_action[:80]}",
+                                sim_text, "advisory", "brief",
+                            )
+                    else:
+                        st.session_state["sim_data"] = None
+                        st.session_state["sim_raw_fb"] = sim_raw
+                    st.rerun()
 
-                        prob = int(sim_data.get("probability_of_success", 50))
-                        verdict = sim_data.get("verdict", "RISKY")
+                # ── Render persisted simulation result ──
+                sim_data = st.session_state.get("sim_data")
+                if sim_data:
+                    prob = int(sim_data.get("probability_of_success", 50))
+                    verdict = sim_data.get("verdict", "RISKY")
 
-                        if verdict == "RECOMMENDED":
-                            verdict_color = "#059669"
-                            verdict_bg = "#f0fdf4"
-                            verdict_icon = "✅"
-                        elif verdict == "DO NOT PROCEED":
-                            verdict_color = "#dc2626"
-                            verdict_bg = "#fef2f2"
-                            verdict_icon = "🚫"
-                        else:
-                            verdict_color = "#d97706"
-                            verdict_bg = "#fffbeb"
-                            verdict_icon = "⚠️"
+                    if verdict == "RECOMMENDED":
+                        verdict_color = "#059669"
+                        verdict_bg = "#f0fdf4"
+                        verdict_icon = "✅"
+                    elif verdict == "DO NOT PROCEED":
+                        verdict_color = "#dc2626"
+                        verdict_bg = "#fef2f2"
+                        verdict_icon = "🚫"
+                    else:
+                        verdict_color = "#d97706"
+                        verdict_bg = "#fffbeb"
+                        verdict_icon = "⚠️"
 
-                        prob_color = "#dc2626" if prob < 40 else ("#f59e0b" if prob < 65 else "#059669")
+                    prob_color = "#dc2626" if prob < 40 else ("#f59e0b" if prob < 65 else "#059669")
 
-                        st.markdown(f"""
+                    st.markdown(f"""
 <div style="background:{verdict_bg};border:2px solid {verdict_color};
 border-radius:0.75rem;padding:1.2rem;margin-top:1rem;">
   <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:0.8rem;">
@@ -668,55 +736,39 @@ border-radius:0.75rem;padding:1.2rem;margin-top:1rem;">
   <p style="margin:0;">{esc(sim_data.get('reasoning',''))}</p>
 </div>""", unsafe_allow_html=True)
 
-                        sr1, sr2 = st.columns(2)
-                        with sr1:
-                            st.markdown("**🔴 Risks:**")
-                            for r in sim_data.get("risks", []):
-                                st.markdown(f"- {esc(r)}")
-                            st.markdown("**⚔️ Opponent Will:**")
-                            for c in sim_data.get("opponent_counter_strategy", []):
-                                st.markdown(f"- {esc(c)}")
-                        with sr2:
-                            st.markdown("**🛡️ Our Counter:**")
-                            for cc in sim_data.get("our_counter_to_counter", []):
-                                st.markdown(f"- {esc(cc)}")
-                            if sim_data.get("nigerian_authority"):
-                                st.markdown(f"**📖 Authority:** {esc(sim_data['nigerian_authority'])}")
+                    sr1, sr2 = st.columns(2)
+                    with sr1:
+                        st.markdown("**🔴 Risks:**")
+                        for r in sim_data.get("risks", []):
+                            st.markdown(f"- {esc(r)}")
+                        st.markdown("**⚔️ Opponent Will:**")
+                        for c in sim_data.get("opponent_counter_strategy", []):
+                            st.markdown(f"- {esc(c)}")
+                    with sr2:
+                        st.markdown("**🛡️ Our Counter:**")
+                        for cc in sim_data.get("our_counter_to_counter", []):
+                            st.markdown(f"- {esc(cc)}")
+                        if sim_data.get("nigerian_authority"):
+                            st.markdown(f"**📖 Authority:** {esc(sim_data['nigerian_authority'])}")
 
-                        if sim_data.get("better_alternative"):
-                            st.info(f"💡 **Better Alternative:** {sim_data['better_alternative']}")
-
-                        # Save simulation to case history
-                        if st.session_state.cases:
-                            sim_text = (
-                                f"STRATEGY SIMULATION\n"
-                                f"Action: {sim_data.get('action','')}\n"
-                                f"Probability: {prob}%\n"
-                                f"Verdict: {verdict}\n"
-                                f"Reasoning: {sim_data.get('reasoning','')}\n"
-                            )
-                            add_to_history(
-                                f"[Strategy Sim] {sim_action[:80]}",
-                                sim_text, "advisory", "brief",
-                            )
-
-                    except Exception:
-                        # Defensive — never leave the user staring at blank.
-                        if sim_raw and sim_raw.strip():
-                            st.warning(
-                                "⚠️ Could not parse the strategy simulation "
-                                "as structured data. Showing raw AI output "
-                                "below:"
-                            )
-                            st.markdown(
-                                f'<div class="response-box">{esc(sim_raw)}</div>',
-                                unsafe_allow_html=True,
-                            )
-                        else:
-                            st.error(
-                                "⚠️ The AI response came back empty. Please "
-                                "try again."
-                            )
+                    if sim_data.get("better_alternative"):
+                        st.info(f"💡 **Better Alternative:** {sim_data['better_alternative']}")
+                else:
+                    sim_raw_fb = st.session_state.get("sim_raw_fb", "")
+                    if sim_raw_fb and sim_raw_fb.strip():
+                        st.warning(
+                            "⚠️ Could not parse the strategy simulation. "
+                            "Showing raw AI output below:"
+                        )
+                        st.markdown(
+                            f'<div class="response-box">{esc(sim_raw_fb)}</div>',
+                            unsafe_allow_html=True,
+                        )
+                    elif "sim_raw_fb" in st.session_state:
+                        st.warning(
+                            "⚠️ The AI returned an empty response. Click "
+                            "**Simulate** again to retry."
+                        )
 
         # ── SAVE TO CASE ──
         cases = st.session_state.cases
@@ -748,7 +800,23 @@ border-radius:0.75rem;padding:1.2rem;margin-top:1rem;">
                 if st.button("Run Critique", key="run_critique_btn"):
                     with st.spinner("Assessing quality…"):
                         critique = run_critique(st.session_state.original_query, response)
-                    st.markdown(f'<div class="response-box">{esc(critique)}</div>', unsafe_allow_html=True)
+                    st.session_state["critique_result"] = critique
+                    st.rerun()
+                # Render persisted critique outside the button branch.
+                critique_result = st.session_state.get("critique_result", "")
+                if critique_result and critique_result.strip():
+                    st.markdown(
+                        f'<div class="response-box">{esc(critique_result)}</div>',
+                        unsafe_allow_html=True,
+                    )
+                    if st.button("🗑️ Clear Critique", key="critique_clear_btn"):
+                        st.session_state.pop("critique_result", None)
+                        st.rerun()
+                elif "critique_result" in st.session_state:
+                    st.warning(
+                        "⚠️ The critique came back empty. Click "
+                        "**Run Critique** again to retry."
+                    )
 
         # Follow-up
         st.markdown("### 🔄 Follow-Up Question")

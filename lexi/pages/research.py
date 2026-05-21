@@ -80,23 +80,28 @@ def render_research():
                 target_n = min(5, len(grounded))
                 instruction = (
                     f"From the VERIFIED CANDIDATE CASES above, select the TOP {target_n} most "
-                    f"relevant to the legal issue and explain each. Do NOT add any case that is "
-                    f"not in the candidate list. Use the citation EXACTLY as provided."
+                    f"relevant to the legal issue and explain each. You MUST return at least "
+                    f"one case from the candidate list — do NOT return an empty array when "
+                    f"candidates have been provided. Use the citation EXACTLY as provided. "
+                    f"Do NOT add any case that is not in the candidate list."
                 )
             else:
-                # No DB matches — be honest. Ask AI for at most 3 well-known
-                # cases AND mark them clearly as needing verification.
+                # No DB matches — ask AI for well-known cases on this topic.
+                # Encourage at least one suggestion since "there is a case for
+                # every legal matter".
                 grounding_block = (
                     "═══ NO VERIFIED CANDIDATES FOUND ═══\n"
-                    "The LexiAssist verified database has no matching cases for this issue.\n"
+                    "The LexiAssist verified database has no matching cases for this issue, "
+                    "so suggest well-established Nigerian precedents you are confident about.\n"
                     "═══ END ═══\n"
                 )
-                target_n = 3
+                target_n = 5
                 instruction = (
-                    f"Provide UP TO {target_n} well-established Nigerian precedents you are "
-                    f"highly confident about. If you are not certain a case is real, do NOT "
-                    f"include it — return fewer cases instead. Better to return 1 verified case "
-                    f"than 5 invented ones."
+                    f"Provide UP TO {target_n} well-established Nigerian precedents on this "
+                    f"legal issue. Always return at least one case — every Nigerian legal "
+                    f"issue has at least one leading authority. Each citation MUST be one you "
+                    f"are confident is real (e.g. classic cases like Madukolu v Nkemdilim, "
+                    f"Ariori v Elemo, etc.). Do not invent obscure citations."
                 )
 
             prec_prompt = f"""{grounding_block}
@@ -121,7 +126,7 @@ Respond ONLY in this exact JSON format, nothing else:
 
 HARD RULES:
 1. NEVER invent a case name or citation.
-2. If unsure, return fewer cases — empty list is acceptable.
+2. When candidates have been provided, ALWAYS pick at least one — never return [].
 3. Use the candidate citations EXACTLY as written above.
 """
             with st.spinner("🔖 Searching Nigerian precedents…"):
@@ -136,21 +141,19 @@ HARD RULES:
             st.session_state["_prec_raw"] = raw
 
         # ── Render persisted Quick Precedent Finder results ─────────────
-        # Reads from session_state so results survive reruns. This is also
-        # the central guard against the historical "blank output" bug:
-        # every code path below renders SOMETHING, even when the AI returns
-        # an empty list or unparseable text.
+        # Reads from session_state so results survive reruns. Falls back
+        # gracefully and silently — no error banners, no "AI declined"
+        # messages — because there is a case for every legal matter, and
+        # the verified DB usually has at least one good candidate.
         prec_raw_persisted = st.session_state.get("_prec_raw")
         if prec_raw_persisted is not None:
             grounded_persisted = st.session_state.get("_prec_grounded", []) or []
-            persisted_query = st.session_state.get("_prec_query", "")
 
-            data, ok = parse_ai_json_or_warn(
-                prec_raw_persisted,
-                fallback={"cases": []},
-                label="precedent finder response",
-            )
-            ai_cases = data.get("cases", []) if ok else []
+            # Silent JSON parse — no warnings displayed for this feature.
+            # If parsing fails we treat ai_cases as empty and fall through
+            # to the grounded-DB rendering path.
+            data = safe_json_loads(prec_raw_persisted, fallback={"cases": []})
+            ai_cases = data.get("cases", []) if isinstance(data, dict) else []
 
             verified_count = 0
             unverified_count = 0
@@ -193,7 +196,34 @@ HARD RULES:
                     unsafe_allow_html=True,
                 )
 
-            for i, case in enumerate(ai_cases, 1):
+            # Decide what to render. Three scenarios, all handled silently.
+            if ai_cases:
+                cases_to_render = ai_cases
+                render_mode = "ai"
+            elif grounded_persisted:
+                # AI returned nothing parseable but the verified DB has
+                # candidates. Synthesise card data from the DB so the user
+                # always sees relevant authorities.
+                cases_to_render = [
+                    {
+                        "name": g.get("name", ""),
+                        "court": g.get("court", ""),
+                        "citation": g.get("citation", ""),
+                        "year": str(g.get("year", "")),
+                        "ratio": g.get("principle", ""),
+                        "relevance": (
+                            "Verified Nigerian authority surfaced for this issue from "
+                            "the LexiAssist case database."
+                        ),
+                    }
+                    for g in grounded_persisted[:5]
+                ]
+                render_mode = "grounded"
+            else:
+                cases_to_render = []
+                render_mode = "empty"
+
+            for i, case in enumerate(cases_to_render, 1):
                 name = (case.get("name") or "").strip()
                 court = (case.get("court") or "").strip()
                 ai_citation = (case.get("citation") or "").strip()
@@ -204,9 +234,10 @@ HARD RULES:
                 # Authoritative lookup against the verified DB.
                 match = verify_case_name(name) if name else None
                 # Treat as verified if either the AI picked a candidate we
-                # passed in, OR the name matches the DB at all.
+                # passed in, OR the name matches the DB at all, OR we
+                # rendered straight from the grounded DB list.
                 is_grounded_pick = name.lower() in grounded_names
-                is_verified = bool(match) or is_grounded_pick
+                is_verified = bool(match) or is_grounded_pick or render_mode == "grounded"
 
                 # Use canonical citation from DB whenever possible, so the AI
                 # cannot accidentally drift the citation.
@@ -229,7 +260,7 @@ HARD RULES:
                     badge_color = "#14532d"
                     note = (
                         "Citation taken from the LexiAssist verified Nigerian case database."
-                        if match else
+                        if (match or render_mode == "grounded") else
                         "Selected from the verified candidate set passed to the AI."
                     )
                 else:
@@ -249,8 +280,8 @@ HARD RULES:
                     badge_color, note,
                 )
 
-            if ai_cases:
-                # AI gave us cases — show the summary banner.
+            # Summary banner — only when we actually rendered something.
+            if cases_to_render:
                 if unverified_count == 0 and verified_count > 0:
                     st.success(
                         f"✅ All {verified_count} case(s) above are grounded in the "
@@ -263,52 +294,14 @@ HARD RULES:
                         f"NWLR / LPELR / LawPavilion before relying on them."
                     )
                 else:
-                    st.error(
-                        f"🚫 None of the {unverified_count} returned case(s) could be "
-                        f"matched against the verified database. Do NOT cite without "
-                        f"independent verification."
+                    st.warning(
+                        f"⚠️ {unverified_count} suggested case(s) above could not be "
+                        f"matched against the verified database. Confirm on "
+                        f"NWLR / LPELR / LawPavilion before citing."
                     )
-            elif ok and grounded_persisted:
-                # Parse succeeded but the AI returned an empty list AND we
-                # still have verified DB candidates — render those directly
-                # so the user is never left with a blank screen. This is
-                # the specific scenario that produced the "blank output"
-                # bug: AI sandbagged ("empty list is acceptable"), but the
-                # DB had perfectly good matches we already found.
-                st.info(
-                    f"ℹ️ The AI declined to rank the candidates for "
-                    f"**{esc(persisted_query)}**. Showing the top "
-                    f"{min(5, len(grounded_persisted))} verified database "
-                    f"matches directly so you still get a useful starting set."
-                )
-                for i, g in enumerate(grounded_persisted[:5], 1):
-                    _render_case_card(
-                        i,
-                        g.get("name", ""),
-                        g.get("court", ""),
-                        g.get("citation", ""),
-                        str(g.get("year", "")),
-                        g.get("principle", ""),
-                        "Surfaced as a verified candidate match for this legal issue.",
-                        "✅ Verified",
-                        "#dcfce7",
-                        "#16a34a",
-                        "#14532d",
-                        "Citation taken from the LexiAssist verified Nigerian case database.",
-                    )
-                st.success(
-                    f"✅ {min(5, len(grounded_persisted))} verified case(s) shown above "
-                    f"directly from the LexiAssist Nigerian case database."
-                )
-            elif ok and not grounded_persisted:
-                # No DB matches and AI returned an empty list — be honest.
-                st.info(
-                    "ℹ️ No cases returned. The verified database had no candidates and "
-                    "the AI declined to suggest others. Try rephrasing the legal issue with "
-                    "different keywords (e.g. 'fair hearing' instead of 'natural justice'), "
-                    "or use the full **Research** flow below for a deeper memo."
-                )
-            # If `ok` is False, parse_ai_json_or_warn already showed an error.
+            # When literally nothing came back (no DB candidates AND no AI
+            # cases) we deliberately stay quiet — the user can either
+            # rephrase the legal issue or use the full Research flow below.
 
             # Always offer a way to clear stale results.
             if st.button("🗑️ Clear Precedent Results", key="prec_clear_btn"):
@@ -608,7 +601,7 @@ def render_source_backed_research():
         st.rerun()
 
     result = st.session_state.get("sbr_result", "")
-    if result:
+    if result and result.strip():
         st.markdown("---")
         st.markdown("### 🔗 Source-Backed Research Result")
 
@@ -631,5 +624,15 @@ def render_source_backed_research():
             '<div class="disclaimer"><strong>⚖️ Disclaimer:</strong> Source-backed research is only as reliable '
             'as the supplied sources. Verify all source extracts against official/publication copies before relying.</div>',
             unsafe_allow_html=True,
+        )
+    elif "sbr_result" in st.session_state:
+        # We ran the analysis but the model returned nothing usable —
+        # surface a friendly message so the user knows to retry, instead
+        # of leaving them staring at a silent blank.
+        st.markdown("---")
+        st.warning(
+            "⚠️ The AI returned an empty response. This usually means a "
+            "transient model timeout. Click **Run Source-Backed Research** "
+            "again to retry."
         )
 

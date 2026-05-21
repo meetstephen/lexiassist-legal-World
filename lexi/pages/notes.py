@@ -141,35 +141,55 @@ Client: {client_name or '[CLIENT]'} | Ref: {matter_ref or '[REF]'}""",
         system = build_system_prompt("drafting", mode)
         with st.spinner(f"✨ Converting notes to {output_types[output_type]}..."):
             result = generate(full_prompt, system, mode, "drafting")
+
+        # Persist everything we need to re-render the result block on
+        # subsequent reruns (download / save clicks). Without this, the
+        # whole output disappears the moment the user clicks any button.
+        st.session_state["notes_result"] = result
+        st.session_state["notes_result_type"] = output_type
+        st.session_state["notes_result_label"] = output_types[output_type]
+        st.session_state["notes_result_client"] = client_name
+        st.session_state["notes_result_preview"] = notes_input[:120]
+        add_to_history(
+            f"[Notes→{output_type.title()}] {notes_input[:80]}",
+            result, "drafting", mode,
+        )
+        st.rerun()
+
+    # ── Render persisted converter result (reads from session_state so
+    # downloads and Save-to-Case clicks don't blank the page).
+    notes_result = st.session_state.get("notes_result", "")
+    if notes_result and notes_result.strip():
+        result_label = st.session_state.get("notes_result_label", "Converted Notes")
+        result_type = st.session_state.get("notes_result_type", "brief")
+        result_client = st.session_state.get("notes_result_client", "")
+        result_preview = st.session_state.get("notes_result_preview", "")
+
         st.markdown("---")
-        st.markdown(f"### {output_types[output_type]}")
-        fname = f"LexiAssist_{output_type}_{(client_name or 'client').replace(' ','_')}_{datetime.now():%Y%m%d_%H%M}"
+        st.markdown(f"### {result_label}")
+        fname = f"LexiAssist_{result_type}_{(result_client or 'client').replace(' ','_')}_{datetime.now():%Y%m%d_%H%M}"
         ex1, ex2, ex3, ex4 = st.columns(4)
         with ex1:
             st.download_button(
                 "📥 TXT",
-                export_txt(result, output_types[output_type]),
+                export_txt(notes_result, result_label),
                 f"{fname}.txt", "text/plain",
                 key="notes_dl_txt", use_container_width=True,
             )
         with ex2:
             st.download_button(
                 "📥 HTML",
-                export_html(result, output_types[output_type]),
+                export_html(notes_result, result_label),
                 f"{fname}.html", "text/html",
                 key="notes_dl_html", use_container_width=True,
             )
         with ex3:
-            safe_pdf_download(result, output_types[output_type], fname, "notes_dl_pdf")
+            safe_pdf_download(notes_result, result_label, fname, "notes_dl_pdf")
         with ex4:
-            safe_docx_download(result, output_types[output_type], fname, "notes_dl_docx")
+            safe_docx_download(notes_result, result_label, fname, "notes_dl_docx")
         st.markdown(
-            f'<div class="response-box">{esc(result)}</div>',
+            f'<div class="response-box">{esc(notes_result)}</div>',
             unsafe_allow_html=True,
-        )
-        add_to_history(
-            f"[Notes→{output_type.title()}] {notes_input[:80]}",
-            result, "drafting", mode,
         )
         cases = st.session_state.cases
         if cases:
@@ -191,12 +211,27 @@ Client: {client_name or '[CLIENT]'} | Ref: {matter_ref or '[REF]'}""",
                     idx = case_names.index(sel)
                     save_analysis_to_case(
                         cases[idx]["id"],
-                        f"[Notes→{output_type}] {notes_input[:100]}",
-                        result, "drafting", mode,
+                        f"[Notes→{result_type}] {result_preview}",
+                        notes_result, "drafting", mode,
                     )
                     st.success(f"✅ Saved to: {cases[idx].get('title','')}")
+        if st.button("🗑️ Clear Result", key="notes_clear_btn"):
+            for k in (
+                "notes_result", "notes_result_type", "notes_result_label",
+                "notes_result_client", "notes_result_preview",
+            ):
+                st.session_state.pop(k, None)
+            st.rerun()
         st.markdown("""<div class="disclaimer">
             <strong>⚖️ Disclaimer:</strong> Review all AI-generated documents
             before sending to clients or filing. Verify all legal positions
             and citations independently.
         </div>""", unsafe_allow_html=True)
+    elif "notes_result" in st.session_state:
+        # The conversion ran but came back empty — give a friendly retry
+        # nudge instead of a silent blank.
+        st.markdown("---")
+        st.warning(
+            "⚠️ The AI returned an empty response. This is usually a "
+            "transient model timeout. Click **Convert Notes** again to retry."
+        )

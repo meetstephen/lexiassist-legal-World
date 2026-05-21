@@ -115,16 +115,18 @@ with the defendant.""",
             st.session_state["wp_result"] = raw
             st.session_state["wp_role_label"] = label
             st.session_state["wp_facts_saved"] = wp_facts.strip()
-            # Add to witness log
-            st.session_state["wp_witness_log"].append({
-                "id": new_id(),
-                "name": wp_name.strip() or f"Witness {len(st.session_state['wp_witness_log'])+1}",
-                "role": wp_role.strip(),
-                "case_type": case_type_val or "Not specified",
-                "facts": wp_facts.strip(),
-                "result": raw,
-                "timestamp": datetime.now().strftime("%d %b %Y %H:%M"),
-            })
+            # Add to witness log only if the AI actually returned content
+            # — avoids polluting the log with empty entries.
+            if raw and raw.strip():
+                st.session_state["wp_witness_log"].append({
+                    "id": new_id(),
+                    "name": wp_name.strip() or f"Witness {len(st.session_state['wp_witness_log'])+1}",
+                    "role": wp_role.strip(),
+                    "case_type": case_type_val or "Not specified",
+                    "facts": wp_facts.strip(),
+                    "result": raw,
+                    "timestamp": datetime.now().strftime("%d %b %Y %H:%M"),
+                })
             st.rerun()
 
         # ── Display result ──
@@ -132,7 +134,7 @@ with the defendant.""",
         role_label = st.session_state.get("wp_role_label", "Witness")
         facts_saved = st.session_state.get("wp_facts_saved", "")
 
-        if result:
+        if result and result.strip():
             st.markdown("---")
             sec1 = _wp_extract_section(result, "EXAMINATION-IN-CHIEF")
             sec2 = _wp_extract_section(result, "CROSS-EXAMINATION")
@@ -265,6 +267,14 @@ padding:1.5rem;line-height:1.8;white-space:pre-wrap;font-size:0.95rem;">
                 drafting aid only. Review all questions against actual witness statements. Do not
                 share coaching notes or cross-exam analysis with opposing counsel.
             </div>""", unsafe_allow_html=True)
+        elif st.session_state.get("wp_facts_saved", "").strip():
+            # Facts saved but no result body — the generation came back
+            # empty. Give a friendly retry nudge instead of a silent blank.
+            st.markdown("---")
+            st.warning(
+                "⚠️ The witness brief came back empty. Click "
+                "**Prepare Witness** again to retry."
+            )
 
     # ═══════════════════════════════════════════════════
     # TAB 2 — WITNESS SESSION LOG

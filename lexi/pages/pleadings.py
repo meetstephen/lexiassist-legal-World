@@ -287,7 +287,7 @@ This is a counter-claim so defendant becomes counter-claimant.""",
     pleading_case_id = st.session_state.get("pleading_case_id", "")
     pleading_case_title = st.session_state.get("pleading_case_title", "")
 
-    if result:
+    if result and result.strip():
         st.markdown("---")
         st.markdown(f"### {pleading_title}")
         st.caption(f"Case: {esc(pleading_case_title)}")
@@ -354,3 +354,11 @@ This is a counter-claim so defendant becomes counter-claimant.""",
             against your instructions. Counsel remains responsible for all
             documents filed in court.
         </div>""", unsafe_allow_html=True)
+    elif st.session_state.get("pleading_case_title", "").strip():
+        # Run was attempted but the AI returned an empty body — surface
+        # a friendly retry nudge instead of a silent blank.
+        st.markdown("---")
+        st.warning(
+            "⚠️ The AI returned an empty draft. Click the "
+            "**Draft …** button again to retry."
+        )

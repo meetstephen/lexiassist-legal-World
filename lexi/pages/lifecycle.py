@@ -316,7 +316,10 @@ border-radius:0.75rem;padding:1.2rem;">
                         db.save_lifecycle_progress(case_id, progress)
                         st.rerun()
             with btn_col2:
-                # Generate document for this stage
+                # Generate document for this stage. Persists into session_state
+                # keyed by case+stage so download clicks don't blank the
+                # rendered draft.
+                draft_state_key = f"lc_draft_result_{case_id}_{stage_num}"
                 if st.button(
                     f"📄 Draft Stage Document",
                     key=f"lc_draft_{case_id}_{stage_num}", use_container_width=True,
@@ -333,15 +336,24 @@ border-radius:0.75rem;padding:1.2rem;">
                     system = build_system_prompt("drafting", "standard")
                     with st.spinner(f"📄 Drafting {stage.get('stage_name','')} document..."):
                         draft_result = generate(draft_prompt, system, "standard", "drafting")
-                    st.markdown(f'<div class="response-box">{esc(draft_result)}</div>',
-                                unsafe_allow_html=True)
+                    st.session_state[draft_state_key] = draft_result
                     save_analysis_to_case(
                         case_id,
                         f"[Lifecycle Stage {stage_num}] {stage.get('stage_name','')}",
                         draft_result, "drafting", "standard",
                     )
+                    st.rerun()
+
+                # Render any persisted draft for this stage (outside the
+                # button branch so download clicks keep it visible).
+                draft_result = st.session_state.get(draft_state_key, "")
+                if draft_result and draft_result.strip():
+                    st.markdown(
+                        f'<div class="response-box">{esc(draft_result)}</div>',
+                        unsafe_allow_html=True,
+                    )
                     fname = f"Stage{stage_num}_{stage.get('stage_name','').replace(' ','_')}"
-                    dl1, dl2 = st.columns(2)
+                    dl1, dl2, dl3 = st.columns([2, 2, 1])
                     with dl1:
                         st.download_button(
                             "📥 TXT", export_txt(draft_result, stage.get("stage_name", "")),
@@ -353,6 +365,18 @@ border-radius:0.75rem;padding:1.2rem;">
                             draft_result, stage.get("stage_name", ""),
                             fname, f"lc_dl_docx_{case_id}_{stage_num}",
                         )
+                    with dl3:
+                        if st.button(
+                            "🗑️", key=f"lc_clear_draft_{case_id}_{stage_num}",
+                            use_container_width=True, help="Clear this draft",
+                        ):
+                            st.session_state.pop(draft_state_key, None)
+                            st.rerun()
+                elif draft_state_key in st.session_state:
+                    st.warning(
+                        "⚠️ The draft came back empty. Click "
+                        "**Draft Stage Document** again to retry."
+                    )
 
     # ── Regenerate ──
     st.markdown("---")

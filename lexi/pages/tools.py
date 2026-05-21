@@ -181,35 +181,45 @@ FACTS: {calc_facts}
 """
         with st.spinner("⏱️ Computing limitation deadlines..."):
             raw = generate(calc_prompt, IDENTITY_CORE, "brief", "analysis")
-        try:
-            clean = raw.strip().replace("```json", "").replace("```", "").strip()
-            data = json.loads(clean)
-            causes = data.get("causes_of_action", [])
-            st.markdown("---")
-            for ca in causes:
-                status = ca.get("status", "SAFE")
-                days = int(ca.get("days_remaining", 0))
-                if status == "EXPIRED":
-                    card_color = "#fee2e2"
-                    badge_class = "badge-err"
-                    icon = "🔴"
-                    days_text = f"EXPIRED {abs(days)} days ago"
-                elif status == "URGENT":
-                    card_color = "#fef3c7"
-                    badge_class = "badge-warn"
-                    icon = "🟡"
-                    days_text = f"{days} days remaining"
-                elif status == "WARNING":
-                    card_color = "#fefce8"
-                    badge_class = "badge-warn"
-                    icon = "🟠"
-                    days_text = f"{days} days remaining"
-                else:
-                    card_color = "#f0fdf4"
-                    badge_class = "badge-ok"
-                    icon = "🟢"
-                    days_text = f"{days} days remaining"
-                st.markdown(f"""
+        # Persist parsed data so the cards survive subsequent reruns.
+        parsed = safe_json_loads(raw, fallback=None)
+        if parsed:
+            st.session_state["_calc_data"] = parsed
+            st.session_state.pop("_calc_raw_fb", None)
+        else:
+            st.session_state["_calc_data"] = None
+            st.session_state["_calc_raw_fb"] = raw
+        st.rerun()
+
+    # ── Render persisted limitation data ──
+    calc_data = st.session_state.get("_calc_data")
+    if calc_data:
+        causes = calc_data.get("causes_of_action", [])
+        st.markdown("---")
+        for ca in causes:
+            status = ca.get("status", "SAFE")
+            days = int(ca.get("days_remaining", 0))
+            if status == "EXPIRED":
+                card_color = "#fee2e2"
+                badge_class = "badge-err"
+                icon = "🔴"
+                days_text = f"EXPIRED {abs(days)} days ago"
+            elif status == "URGENT":
+                card_color = "#fef3c7"
+                badge_class = "badge-warn"
+                icon = "🟡"
+                days_text = f"{days} days remaining"
+            elif status == "WARNING":
+                card_color = "#fefce8"
+                badge_class = "badge-warn"
+                icon = "🟠"
+                days_text = f"{days} days remaining"
+            else:
+                card_color = "#f0fdf4"
+                badge_class = "badge-ok"
+                icon = "🟢"
+                days_text = f"{days} days remaining"
+            st.markdown(f"""
 <div style="background:{card_color};border-radius:0.75rem;padding:1.2rem;
 margin-bottom:1rem;border:1px solid #e5e7eb;">
   <div style="display:flex;justify-content:space-between;align-items:center;">
@@ -225,37 +235,40 @@ margin-bottom:1rem;border:1px solid #e5e7eb;">
   {f"<div>⚠️ <strong>Note:</strong> {esc(ca.get('special_notes',''))}</div>"
     if ca.get('special_notes') else ""}
 </div>""", unsafe_allow_html=True)
-            st.error(f"🚨 Most Urgent: **{data.get('most_urgent', '')}**")
-            st.warning(f"⚡ Immediate Action: {data.get('immediate_action', '')}")
+        if calc_data.get("most_urgent"):
+            st.error(f"🚨 Most Urgent: **{calc_data.get('most_urgent', '')}**")
+        if calc_data.get("immediate_action"):
+            st.warning(f"⚡ Immediate Action: {calc_data.get('immediate_action', '')}")
+        st.markdown(
+            '<div style="background:var(--la-bg2);border:1px solid #fde047;border-radius:8px;'
+            'padding:0.8rem 1rem;margin-top:1rem;font-size:0.83rem;color:#713f12;">'
+            '<strong>⚠️ Important — Verify Before Relying:</strong> These deadlines are '
+            'AI-computed estimates. Limitation periods vary by jurisdiction, cause of action, '
+            'public officer exceptions, continuing injury, fraud/concealment, and applicable '
+            'State Limitation Law. Always verify against the specific statute and consult '
+            'applicable State Limitation Law before advising a client.'
+            '</div>',
+            unsafe_allow_html=True,
+        )
+        if st.button("🗑️ Clear Calculator Result", key="calc_clear_btn"):
+            st.session_state.pop("_calc_data", None)
+            st.rerun()
+    else:
+        calc_raw_fb = st.session_state.get("_calc_raw_fb", "")
+        if calc_raw_fb and calc_raw_fb.strip():
+            st.warning(
+                "⚠️ Could not parse the limitation calculator response "
+                "as structured data. Showing raw AI output below:"
+            )
             st.markdown(
-                '<div style="background:var(--la-bg2);border:1px solid #fde047;border-radius:8px;'
-                'padding:0.8rem 1rem;margin-top:1rem;font-size:0.83rem;color:#713f12;">'
-                '<strong>⚠️ Important — Verify Before Relying:</strong> These deadlines are '
-                'AI-computed estimates. Limitation periods vary by jurisdiction, cause of action, '
-                'public officer exceptions, continuing injury, fraud/concealment, and applicable '
-                'State Limitation Law. Always verify against the specific statute and consult '
-                'applicable State Limitation Law before advising a client.'
-                '</div>',
+                f'<div class="response-box">{esc(calc_raw_fb)}</div>',
                 unsafe_allow_html=True,
             )
-        except Exception:
-            # Don't leave the user with a blank screen if the AI returned
-            # empty / unparseable output — surface a clear diagnostic.
-            if raw and raw.strip():
-                st.warning(
-                    "⚠️ Could not parse the limitation calculator response "
-                    "as structured data. Showing raw AI output below:"
-                )
-                st.markdown(
-                    f'<div class="response-box">{esc(raw)}</div>',
-                    unsafe_allow_html=True,
-                )
-            else:
-                st.error(
-                    "⚠️ The AI response came back empty. This usually means "
-                    "the model returned no content (rate limit, safety filter, "
-                    "or transient network issue). Please try again."
-                )
+        elif "_calc_raw_fb" in st.session_state:
+            st.warning(
+                "⚠️ The AI returned an empty response. Click "
+                "**Calculate Deadline** again to retry."
+            )
     # ── PRE-ACTION NOTICE CHECKER (merged into same tab) ──
     st.markdown("---")
     st.markdown("#### ⚠️ Pre-Action Notice & Compliance Checker")
@@ -322,31 +335,35 @@ CASE FACTS: {pre_facts}
             pre_raw = generate(
                 pre_prompt, IDENTITY_CORE, "brief", "procedure"
             )
-        try:
-            pre_clean = (
-                pre_raw.strip()
-                .replace("```json", "")
-                .replace("```", "")
-                .strip()
-            )
-            pre_data = json.loads(pre_clean)
+        # Persist parsed data so download button reruns don't blank the page.
+        parsed_pre = safe_json_loads(pre_raw, fallback=None)
+        if parsed_pre:
+            st.session_state["_pre_data"] = parsed_pre
+            st.session_state.pop("_pre_raw_fb", None)
+        else:
+            st.session_state["_pre_data"] = None
+            st.session_state["_pre_raw_fb"] = pre_raw
+        st.rerun()
 
-            # ── Overall status banner ──
-            overall = pre_data.get("overall_status", "PRE-ACTION REQUIRED")
-            can_sue = pre_data.get("can_sue_immediately", False)
+    # ── Render persisted pre-action data ──
+    pre_data = st.session_state.get("_pre_data")
+    if pre_data:
+        # ── Overall status banner ──
+        overall = pre_data.get("overall_status", "PRE-ACTION REQUIRED")
+        can_sue = pre_data.get("can_sue_immediately", False)
 
-            if can_sue:
-                banner_color = "#f0fdf4"
-                banner_border = "#059669"
-                banner_icon = "✅"
-                banner_text_color = "#059669"
-            else:
-                banner_color = "#fef3c7"
-                banner_border = "#f59e0b"
-                banner_icon = "⚠️"
-                banner_text_color = "#d97706"
+        if can_sue:
+            banner_color = "#f0fdf4"
+            banner_border = "#059669"
+            banner_icon = "✅"
+            banner_text_color = "#059669"
+        else:
+            banner_color = "#fef3c7"
+            banner_border = "#f59e0b"
+            banner_icon = "⚠️"
+            banner_text_color = "#d97706"
 
-            st.markdown(f"""
+        st.markdown(f"""
 <div style="background:{banner_color};border:2px solid {banner_border};
 border-radius:0.75rem;padding:1.2rem;margin:1rem 0;">
   <h4 style="margin:0;color:{banner_text_color};">
@@ -361,36 +378,36 @@ border-radius:0.75rem;padding:1.2rem;margin:1rem 0;">
   </div>
 </div>""", unsafe_allow_html=True)
 
-            # ── Requirements ──
-            reqs = pre_data.get("requirements", [])
-            if reqs:
-                st.markdown(
-                    f"##### 📋 {len(reqs)} Pre-Action Requirement(s)"
+        # ── Requirements ──
+        reqs = pre_data.get("requirements", [])
+        if reqs:
+            st.markdown(
+                f"##### 📋 {len(reqs)} Pre-Action Requirement(s)"
+            )
+            for req in reqs:
+                is_mandatory = req.get("is_mandatory", False)
+                status = req.get("status", "PENDING")
+
+                if status == "NOT APPLICABLE":
+                    req_bg = "#f8fafc"
+                    req_border = "#cbd5e1"
+                    status_badge = "badge-info"
+                elif status == "DONE":
+                    req_bg = "#f0fdf4"
+                    req_border = "#059669"
+                    status_badge = "badge-ok"
+                else:
+                    req_bg = "#fef3c7"
+                    req_border = "#f59e0b"
+                    status_badge = "badge-warn"
+
+                mandatory_html = (
+                    '<span class="badge badge-err">MANDATORY</span>'
+                    if is_mandatory
+                    else '<span class="badge badge-info">Recommended</span>'
                 )
-                for req in reqs:
-                    is_mandatory = req.get("is_mandatory", False)
-                    status = req.get("status", "PENDING")
 
-                    if status == "NOT APPLICABLE":
-                        req_bg = "#f8fafc"
-                        req_border = "#cbd5e1"
-                        status_badge = "badge-info"
-                    elif status == "DONE":
-                        req_bg = "#f0fdf4"
-                        req_border = "#059669"
-                        status_badge = "badge-ok"
-                    else:
-                        req_bg = "#fef3c7"
-                        req_border = "#f59e0b"
-                        status_badge = "badge-warn"
-
-                    mandatory_html = (
-                        '<span class="badge badge-err">MANDATORY</span>'
-                        if is_mandatory
-                        else '<span class="badge badge-info">Recommended</span>'
-                    )
-
-                    st.markdown(f"""
+                st.markdown(f"""
 <div style="background:{req_bg};border-left:4px solid {req_border};
 border-radius:0.5rem;padding:1rem;margin-bottom:0.8rem;">
   <div style="display:flex;justify-content:space-between;
@@ -419,104 +436,107 @@ border-radius:0.5rem;padding:1rem;margin-bottom:0.8rem;">
   </div>
 </div>""", unsafe_allow_html=True)
 
-            # ── Immediate actions ──
-            immediate = pre_data.get("immediate_actions", [])
-            if immediate:
-                st.markdown("##### ⚡ Immediate Actions")
-                for ia in immediate:
-                    st.markdown(f"- {esc(ia)}")
+        # ── Immediate actions ──
+        immediate = pre_data.get("immediate_actions", [])
+        if immediate:
+            st.markdown("##### ⚡ Immediate Actions")
+            for ia in immediate:
+                st.markdown(f"- {esc(ia)}")
 
-            # ── Common mistakes ──
-            mistakes = pre_data.get("common_mistakes", [])
-            if mistakes:
-                with st.expander(
-                    "🚨 Common Mistakes to Avoid", expanded=False
-                ):
-                    for m in mistakes:
-                        st.markdown(f"- {esc(m)}")
+        # ── Common mistakes ──
+        mistakes = pre_data.get("common_mistakes", [])
+        if mistakes:
+            with st.expander(
+                "🚨 Common Mistakes to Avoid", expanded=False
+            ):
+                for m in mistakes:
+                    st.markdown(f"- {esc(m)}")
 
-            # ── Export ──
-            pre_report = (
-                f"PRE-ACTION COMPLIANCE REPORT\n"
-                f"Date: {datetime.now():%d %B %Y at %H:%M}\n"
-                f"Status: {overall}\n"
-                f"Earliest Filing: "
-                f"{pre_data.get('earliest_filing_date','')}\n\n"
-                f"SUMMARY:\n{pre_data.get('summary','')}\n\n"
-                f"REQUIREMENTS:\n"
+        # ── Export ──
+        pre_report = (
+            f"PRE-ACTION COMPLIANCE REPORT\n"
+            f"Date: {datetime.now():%d %B %Y at %H:%M}\n"
+            f"Status: {overall}\n"
+            f"Earliest Filing: "
+            f"{pre_data.get('earliest_filing_date','')}\n\n"
+            f"SUMMARY:\n{pre_data.get('summary','')}\n\n"
+            f"REQUIREMENTS:\n"
+        )
+        for req in reqs:
+            pre_report += (
+                f"- {req.get('requirement','')} | "
+                f"{req.get('authority','')} | "
+                f"Deadline: {req.get('deadline_to_comply','')}\n"
+                f"  Action: {req.get('action_required','')}\n"
+                f"  If omitted: "
+                f"{req.get('consequence_of_omission','')}\n\n"
             )
-            for req in reqs:
-                pre_report += (
-                    f"- {req.get('requirement','')} | "
-                    f"{req.get('authority','')} | "
-                    f"Deadline: {req.get('deadline_to_comply','')}\n"
-                    f"  Action: {req.get('action_required','')}\n"
-                    f"  If omitted: "
-                    f"{req.get('consequence_of_omission','')}\n\n"
-                )
-            if immediate:
-                pre_report += "IMMEDIATE ACTIONS:\n"
-                for ia in immediate:
-                    pre_report += f"- {ia}\n"
+        if immediate:
+            pre_report += "IMMEDIATE ACTIONS:\n"
+            for ia in immediate:
+                pre_report += f"- {ia}\n"
 
-            pre_fname = (
-                f"PreAction_Report_{datetime.now():%Y%m%d_%H%M}"
-            )
-            pe1, pe2, pe3 = st.columns(3)
-            with pe1:
-                st.download_button(
-                    "📥 TXT Report",
-                    export_txt(
-                        pre_report,
-                        "Pre-Action Compliance Report",
-                    ),
-                    f"{pre_fname}.txt",
-                    "text/plain",
-                    key="pre_dl_txt", use_container_width=True,
-                )
-            with pe2:
-                st.download_button(
-                    "📥 HTML Report",
-                    export_html(
-                        pre_report,
-                        "Pre-Action Compliance Report",
-                    ),
-                    f"{pre_fname}.html",
-                    "text/html",
-                    key="pre_dl_html", use_container_width=True,
-                )
-            with pe3:
-                safe_pdf_download(
+        pre_fname = (
+            f"PreAction_Report_{datetime.now():%Y%m%d_%H%M}"
+        )
+        pe1, pe2, pe3, pe4 = st.columns([2, 2, 2, 1])
+        with pe1:
+            st.download_button(
+                "📥 TXT Report",
+                export_txt(
                     pre_report,
                     "Pre-Action Compliance Report",
-                    pre_fname,
-                    "pre_dl_pdf",
-                )
+                ),
+                f"{pre_fname}.txt",
+                "text/plain",
+                key="pre_dl_txt", use_container_width=True,
+            )
+        with pe2:
+            st.download_button(
+                "📥 HTML Report",
+                export_html(
+                    pre_report,
+                    "Pre-Action Compliance Report",
+                ),
+                f"{pre_fname}.html",
+                "text/html",
+                key="pre_dl_html", use_container_width=True,
+            )
+        with pe3:
+            safe_pdf_download(
+                pre_report,
+                "Pre-Action Compliance Report",
+                pre_fname,
+                "pre_dl_pdf",
+            )
+        with pe4:
+            if st.button("🗑️", key="pre_clear_btn",
+                         use_container_width=True, help="Clear results"):
+                st.session_state.pop("_pre_data", None)
+                st.rerun()
 
-            st.markdown("""<div class="disclaimer">
-                <strong>⚖️ Disclaimer:</strong>
-                Pre-action requirements vary by state, court, and
-                defendant type. Always verify requirements for the
-                specific jurisdiction and court before filing.
-            </div>""", unsafe_allow_html=True)
-
-        except Exception:
-            # Defensive: never leave the user staring at a blank screen.
-            if pre_raw and pre_raw.strip():
-                st.warning(
-                    "⚠️ Could not parse the pre-action checker response "
-                    "as structured data. Showing raw AI output below:"
-                )
-                st.markdown(
-                    f'<div class="response-box">{esc(pre_raw)}</div>',
-                    unsafe_allow_html=True,
-                )
-            else:
-                st.error(
-                    "⚠️ The AI response came back empty. This usually means "
-                    "the model returned no content (rate limit, safety filter, "
-                    "or transient network issue). Please try again."
-                )
+        st.markdown("""<div class="disclaimer">
+            <strong>⚖️ Disclaimer:</strong>
+            Pre-action requirements vary by state, court, and
+            defendant type. Always verify requirements for the
+            specific jurisdiction and court before filing.
+        </div>""", unsafe_allow_html=True)
+    else:
+        pre_raw_fb = st.session_state.get("_pre_raw_fb", "")
+        if pre_raw_fb and pre_raw_fb.strip():
+            st.warning(
+                "⚠️ Could not parse the pre-action checker response "
+                "as structured data. Showing raw AI output below:"
+            )
+            st.markdown(
+                f'<div class="response-box">{esc(pre_raw_fb)}</div>',
+                unsafe_allow_html=True,
+            )
+        elif "_pre_raw_fb" in st.session_state:
+            st.warning(
+                "⚠️ The AI returned an empty response. Click "
+                "**Check Pre-Action Requirements** again to retry."
+            )
 
     # ── Court Hierarchy ──
 
@@ -735,20 +755,30 @@ MATTER FACTS: {aml_facts}
 """
         with st.spinner("🛡️ Checking AML/CFT compliance…"):
             aml_raw = generate(aml_prompt, IDENTITY_CORE, "brief", "advisory")
-        try:
-            aml_clean = aml_raw.strip().replace("```json", "").replace("```", "").strip()
-            aml_data = json.loads(aml_clean)
-            risk = aml_data.get("risk_rating", "MEDIUM")
-            risk_colors = {"LOW": ("#f0fdf4","#059669","badge-ok"),
-                           "MEDIUM": ("#fef9c3","#d97706","badge-warn"),
-                           "HIGH": ("#fee2e2","#dc2626","badge-err"),
-                           "VERY HIGH": ("#fee2e2","#991b1b","badge-err")}
-            r_bg, r_border, r_badge = risk_colors.get(risk, risk_colors["MEDIUM"])
-            proceed = aml_data.get("proceed_advice","PROCEED WITH EDD")
-            p_colors = {"PROCEED":("#f0fdf4","#059669"), "PROCEED WITH EDD":("#fef9c3","#d97706"), "DO NOT PROCEED":("#fee2e2","#dc2626")}
-            p_bg, p_border = p_colors.get(proceed, ("#fef9c3","#d97706"))
+        # Persist parsed data so the cards/banners survive subsequent reruns.
+        parsed_aml = safe_json_loads(aml_raw, fallback=None)
+        if parsed_aml:
+            st.session_state["_aml_data"] = parsed_aml
+            st.session_state.pop("_aml_raw_fb", None)
+        else:
+            st.session_state["_aml_data"] = None
+            st.session_state["_aml_raw_fb"] = aml_raw
+        st.rerun()
 
-            st.markdown(f"""
+    # ── Render persisted AML data ──
+    aml_data = st.session_state.get("_aml_data")
+    if aml_data:
+        risk = aml_data.get("risk_rating", "MEDIUM")
+        risk_colors = {"LOW": ("#f0fdf4","#059669","badge-ok"),
+                       "MEDIUM": ("#fef9c3","#d97706","badge-warn"),
+                       "HIGH": ("#fee2e2","#dc2626","badge-err"),
+                       "VERY HIGH": ("#fee2e2","#991b1b","badge-err")}
+        r_bg, r_border, r_badge = risk_colors.get(risk, risk_colors["MEDIUM"])
+        proceed = aml_data.get("proceed_advice","PROCEED WITH EDD")
+        p_colors = {"PROCEED":("#f0fdf4","#059669"), "PROCEED WITH EDD":("#fef9c3","#d97706"), "DO NOT PROCEED":("#fee2e2","#dc2626")}
+        p_bg, p_border = p_colors.get(proceed, ("#fef9c3","#d97706"))
+
+        st.markdown(f"""
 <div style="display:flex;gap:1rem;margin:1rem 0;">
   <div style="flex:1;background:{r_bg};border:2px solid {r_border};border-radius:.75rem;padding:1rem;text-align:center;">
     <div style="font-size:1.6rem;font-weight:800;color:{r_border};">{risk}</div>
@@ -762,50 +792,52 @@ MATTER FACTS: {aml_facts}
 <p>{esc(aml_data.get('risk_summary',''))}</p>
 """, unsafe_allow_html=True)
 
-            red_flags = aml_data.get("red_flags", [])
-            if red_flags:
-                st.markdown(f"##### 🚩 {len(red_flags)} Red Flag(s) Identified")
-                for rf in red_flags:
-                    sev = rf.get("severity","Medium")
-                    sev_cls = "badge-err" if sev=="High" else ("badge-warn" if sev=="Medium" else "badge-ok")
-                    st.markdown(f"""<div class="custom-card">
-                        🚩 {esc(rf.get('flag',''))}
-                        <span class="badge {sev_cls}">{sev}</span><br>
-                        <small>{esc(rf.get('authority',''))}</small>
-                    </div>""", unsafe_allow_html=True)
+        red_flags = aml_data.get("red_flags", [])
+        if red_flags:
+            st.markdown(f"##### 🚩 {len(red_flags)} Red Flag(s) Identified")
+            for rf in red_flags:
+                sev = rf.get("severity","Medium")
+                sev_cls = "badge-err" if sev=="High" else ("badge-warn" if sev=="Medium" else "badge-ok")
+                st.markdown(f"""<div class="custom-card">
+                    🚩 {esc(rf.get('flag',''))}
+                    <span class="badge {sev_cls}">{sev}</span><br>
+                    <small>{esc(rf.get('authority',''))}</small>
+                </div>""", unsafe_allow_html=True)
 
-            obls = aml_data.get("obligations", [])
-            if obls:
-                st.markdown(f"##### ✅ {len(obls)} Compliance Obligation(s)")
-                for ob in obls:
-                    st.markdown(f"""<div class="custom-card">
-                        <strong>{esc(ob.get('obligation',''))}</strong><br>
-                        📌 {esc(ob.get('action_required',''))}<br>
-                        <small>⏰ {esc(ob.get('deadline',''))} · {esc(ob.get('authority',''))}</small>
-                    </div>""", unsafe_allow_html=True)
+        obls = aml_data.get("obligations", [])
+        if obls:
+            st.markdown(f"##### ✅ {len(obls)} Compliance Obligation(s)")
+            for ob in obls:
+                st.markdown(f"""<div class="custom-card">
+                    <strong>{esc(ob.get('obligation',''))}</strong><br>
+                    📌 {esc(ob.get('action_required',''))}<br>
+                    <small>⏰ {esc(ob.get('deadline',''))} · {esc(ob.get('authority',''))}</small>
+                </div>""", unsafe_allow_html=True)
 
-            if aml_data.get("str_required"):
-                st.error(f"🚨 **STR Required:** {aml_data.get('str_note','')} — File with NFIU within 24 hours.")
-            elif aml_data.get("str_note"):
-                st.info(f"ℹ️ **STR Note:** {aml_data.get('str_note','')}")
+        if aml_data.get("str_required"):
+            st.error(f"🚨 **STR Required:** {aml_data.get('str_note','')} — File with NFIU within 24 hours.")
+        elif aml_data.get("str_note"):
+            st.info(f"ℹ️ **STR Note:** {aml_data.get('str_note','')}")
 
-        except Exception:
-            # Defensive: never leave the user staring at a blank screen.
-            if aml_raw and aml_raw.strip():
-                st.warning(
-                    "⚠️ Could not parse the AML/CFT response as structured "
-                    "data. Showing raw AI output below:"
-                )
-                st.markdown(
-                    f'<div class="response-box">{esc(aml_raw)}</div>',
-                    unsafe_allow_html=True,
-                )
-            else:
-                st.error(
-                    "⚠️ The AI response came back empty. This usually means "
-                    "the model returned no content (rate limit, safety filter, "
-                    "or transient network issue). Please try again."
-                )
+        if st.button("🗑️ Clear AML Result", key="aml_clear_btn"):
+            st.session_state.pop("_aml_data", None)
+            st.rerun()
+    else:
+        aml_raw_fb = st.session_state.get("_aml_raw_fb", "")
+        if aml_raw_fb and aml_raw_fb.strip():
+            st.warning(
+                "⚠️ Could not parse the AML/CFT response as structured "
+                "data. Showing raw AI output below:"
+            )
+            st.markdown(
+                f'<div class="response-box">{esc(aml_raw_fb)}</div>',
+                unsafe_allow_html=True,
+            )
+        elif "_aml_raw_fb" in st.session_state:
+            st.warning(
+                "⚠️ The AI returned an empty response. Click "
+                "**Run AML Compliance Check** again to retry."
+            )
 
 
     # ══════════════════════════════════════════════════════

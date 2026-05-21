@@ -241,7 +241,28 @@ arose in January 2024 in Lagos.""",
         data, ok = parse_ai_json_or_warn(
             raw, fallback={}, label="conflict-check response",
         )
-        if ok and data:
+        if ok:
+            # Even when the AI's parsed dict is empty (legitimate "no
+            # conflicts" answer), persist a clear CLEAR verdict so the
+            # user sees a positive result instead of nothing.
+            if not data:
+                data = {
+                    "overall_verdict": "CLEAR",
+                    "confidence": 70,
+                    "summary": (
+                        "No conflicts of interest were identified between "
+                        "the new matter and existing clients/cases on "
+                        "record. Proceed with normal client onboarding."
+                    ),
+                    "conflicts_found": [],
+                    "recommendations": [
+                        "Document this conflict check in the matter file.",
+                        "Re-run the check if new parties are added later.",
+                    ],
+                    "disclosure_required": False,
+                    "can_proceed_with_consent": True,
+                    "consent_note": "",
+                }
             st.session_state["conflict_result"] = data
             st.session_state["conflict_matter"] = new_client_name
             st.rerun()

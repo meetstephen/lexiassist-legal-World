@@ -171,8 +171,14 @@ def render_cases():
 
                             sa_view, sa_export, sa_del = st.columns([2, 2, 1])
                             with sa_view:
-                                if st.button("👁️ View", key=f"view_sa_{sa['id']}", use_container_width=True):
-                                    st.markdown(f'<div class="response-box">{esc(sa["response"])}</div>', unsafe_allow_html=True)
+                                # Toggle view via session-state flag so a single
+                                # click doesn't get wiped by the next rerun.
+                                view_key = f"_view_sa_{sa['id']}"
+                                view_open = st.session_state.get(view_key, False)
+                                view_label = "👁️ Hide" if view_open else "👁️ View"
+                                if st.button(view_label, key=f"view_sa_{sa['id']}", use_container_width=True):
+                                    st.session_state[view_key] = not view_open
+                                    st.rerun()
                             with sa_export:
                                 sa_fname = f"Case_Analysis_{sa['id']}"
                                 st.download_button(
@@ -183,11 +189,20 @@ def render_cases():
                             with sa_del:
                                 if st.button("🗑️", key=f"del_sa_{sa['id']}", use_container_width=True, help="Delete this analysis"):
                                     db.delete_case_analysis(sa["id"])
+                                    st.session_state.pop(f"_view_sa_{sa['id']}", None)
                                     st.success("Deleted!")
                                     st.rerun()
+                            # Render the analysis body when the view flag is on,
+                            # outside the button branch so it persists across reruns.
+                            if st.session_state.get(f"_view_sa_{sa['id']}", False):
+                                st.markdown(
+                                    f'<div class="response-box">{esc(sa["response"])}</div>',
+                                    unsafe_allow_html=True,
+                                )
                     
                     # ── Phase 3: Case Bundle PDF Export ──────────────────────────────────
                         st.markdown("---")
+                        bundle_key = f"_case_bundle_{c['id']}"
                         if st.button(
                             "📦 Export Full Case Bundle (PDF)",
                             key=f"bundle_{c['id']}",
@@ -255,20 +270,52 @@ def render_cases():
                                 bundle_lines.append(f"{'='*60}")
 
                                 bundle_text = "\n".join(bundle_lines)
-                                bundle_fname = f"LexiAssist_CaseBundle_{c.get('title','Case').replace(' ','_')[:30]}_{datetime.now():%Y%m%d}"
+                                # Persist so download buttons survive reruns.
+                                st.session_state[bundle_key] = {
+                                    "text": bundle_text,
+                                    "n_saved": len(saved),
+                                    "n_billing": len(billing),
+                                    "title": c.get("title", ""),
+                                }
+                                st.rerun()
 
-                                bnd1, bnd2 = st.columns(2)
-                                with bnd1:
-                                    st.download_button(
-                                        "📥 Download TXT Bundle",
-                                        bundle_text.encode("utf-8"),
-                                        f"{bundle_fname}.txt", "text/plain",
-                                        key=f"bndl_txt_{c['id']}",
-                                        use_container_width=True,
-                                    )
-                                with bnd2:
-                                    safe_pdf_download(bundle_text, f"Case Bundle — {c.get('title','')}", bundle_fname, f"bndl_pdf_{c['id']}")
-                                st.success(f"✅ Bundle ready — {len(saved)} analysis(es) · {len(billing)} billing entry(ies)")
+                        # Render persisted bundle download buttons (outside the
+                        # build-button branch) so a download click doesn't blank
+                        # the row.
+                        bundle_data = st.session_state.get(bundle_key)
+                        if bundle_data:
+                            bundle_text = bundle_data["text"]
+                            bundle_fname = (
+                                f"LexiAssist_CaseBundle_"
+                                f"{bundle_data['title'].replace(' ','_')[:30]}"
+                                f"_{datetime.now():%Y%m%d}"
+                            )
+                            bnd1, bnd2, bnd3 = st.columns([2, 2, 1])
+                            with bnd1:
+                                st.download_button(
+                                    "📥 Download TXT Bundle",
+                                    bundle_text.encode("utf-8"),
+                                    f"{bundle_fname}.txt", "text/plain",
+                                    key=f"bndl_txt_{c['id']}",
+                                    use_container_width=True,
+                                )
+                            with bnd2:
+                                safe_pdf_download(
+                                    bundle_text, f"Case Bundle — {bundle_data['title']}",
+                                    bundle_fname, f"bndl_pdf_{c['id']}",
+                                )
+                            with bnd3:
+                                if st.button(
+                                    "🗑️", key=f"bndl_clear_{c['id']}",
+                                    use_container_width=True, help="Clear bundle",
+                                ):
+                                    st.session_state.pop(bundle_key, None)
+                                    st.rerun()
+                            st.success(
+                                f"✅ Bundle ready — "
+                                f"{bundle_data['n_saved']} analysis(es) · "
+                                f"{bundle_data['n_billing']} billing entry(ies)"
+                            )
                     
                     else:
                         st.info("No analyses saved to this case yet. Use 'Save to Case' in the AI Assistant or Research tab.")
