@@ -114,9 +114,15 @@ padding:2.5rem;text-align:center;color:var(--la-text2);">
 </div>""", unsafe_allow_html=True)
 
         elif "_raw" in feed_data:
-            st.warning("⚠️ Could not parse as structured data. Showing raw output:")
-            st.markdown(f'<div class="response-box">{esc(feed_data["_raw"])}</div>',
-                        unsafe_allow_html=True)
+            raw_text = feed_data.get("_raw", "")
+            if raw_text and raw_text.strip():
+                st.warning("⚠️ Could not parse as structured data. Showing raw output:")
+                st.markdown(f'<div class="response-box">{esc(raw_text)}</div>',
+                            unsafe_allow_html=True)
+            else:
+                st.error(
+                    "⚠️ The AI response came back empty. Please try again."
+                )
 
         else:
             items = feed_data.get("items", [])
@@ -422,8 +428,21 @@ paid. Matter is before the Lagos State Rent Tribunal.""",
                 st.markdown("---")
 
                 if "_raw" in scan_result:
-                    st.markdown(f'<div class="response-box">{esc(scan_result["_raw"])}</div>',
-                                unsafe_allow_html=True)
+                    raw_text = scan_result.get("_raw", "")
+                    if raw_text and raw_text.strip():
+                        st.warning(
+                            "⚠️ Could not parse the scan response as "
+                            "structured data. Showing raw AI output below:"
+                        )
+                        st.markdown(
+                            f'<div class="response-box">{esc(raw_text)}</div>',
+                            unsafe_allow_html=True,
+                        )
+                    else:
+                        st.error(
+                            "⚠️ The AI response came back empty. Please try "
+                            "again."
+                        )
                 else:
                     # Summary banner
                     summary_text = scan_result.get("scan_summary", "")

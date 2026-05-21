@@ -127,23 +127,71 @@ HARD RULES:
             with st.spinner("🔖 Searching Nigerian precedents…"):
                 raw = generate(prec_prompt, IDENTITY_CORE, "brief", "research")
 
-            # 2. Parse + verify every returned case against the DB.
-            try:
-                clean = raw.strip().replace("```json", "").replace("```", "").strip()
-                # Some models wrap with prose — extract the first JSON object.
-                _open = clean.find("{")
-                _close = clean.rfind("}")
-                if _open >= 0 and _close > _open:
-                    clean = clean[_open : _close + 1]
-                data = json.loads(clean)
-                ai_cases = data.get("cases", []) or []
-            except Exception:
-                st.markdown(raw)
-                ai_cases = []
+            # Persist the run so results survive Streamlit reruns and we
+            # can render outside this button-click branch (which means
+            # users no longer see a momentary screen that goes blank when
+            # ``prec_btn`` flips back to False on the next rerun).
+            st.session_state["_prec_query"] = prec_query.strip()
+            st.session_state["_prec_grounded"] = grounded
+            st.session_state["_prec_raw"] = raw
+
+        # ── Render persisted Quick Precedent Finder results ─────────────
+        # Reads from session_state so results survive reruns. This is also
+        # the central guard against the historical "blank output" bug:
+        # every code path below renders SOMETHING, even when the AI returns
+        # an empty list or unparseable text.
+        prec_raw_persisted = st.session_state.get("_prec_raw")
+        if prec_raw_persisted is not None:
+            grounded_persisted = st.session_state.get("_prec_grounded", []) or []
+            persisted_query = st.session_state.get("_prec_query", "")
+
+            data, ok = parse_ai_json_or_warn(
+                prec_raw_persisted,
+                fallback={"cases": []},
+                label="precedent finder response",
+            )
+            ai_cases = data.get("cases", []) if ok else []
 
             verified_count = 0
             unverified_count = 0
-            grounded_names = {g["name"].lower() for g in grounded}
+            grounded_names = {g["name"].lower() for g in grounded_persisted}
+
+            def _render_case_card(
+                idx, canonical_name, canonical_court, canonical, canonical_year,
+                ratio, relevance, badge_label, badge_bg, badge_border,
+                badge_color, note,
+            ):
+                if "Supreme" in canonical_court:
+                    court_badge = "badge-err"
+                elif "Appeal" in canonical_court:
+                    court_badge = "badge-warn"
+                else:
+                    court_badge = "badge-ok"
+                st.markdown(
+                    f"""
+<div class="custom-card">
+  <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:0.5rem;flex-wrap:wrap;">
+    <h4 style="margin:0;">#{idx} · {esc(canonical_name)}</h4>
+    <div style="display:flex;gap:0.4rem;flex-wrap:wrap;">
+      <span class="badge {court_badge}">{esc(canonical_court)}</span>
+      <span style="display:inline-block;background:{badge_bg};border:1px solid {badge_border};
+                   color:{badge_color};padding:2px 8px;border-radius:999px;
+                   font-size:0.72rem;font-weight:700;">{badge_label}</span>
+    </div>
+  </div>
+  <div style="margin:0.4rem 0;">
+    📖 <code>{esc(canonical)}</code> · 📅 {esc(canonical_year)}
+  </div>
+  <div><strong>Ratio:</strong> {esc(ratio)}</div>
+  <div style="color:var(--la-text2);">
+    <strong>Why relevant:</strong> {esc(relevance)}
+  </div>
+  <div style="margin-top:0.4rem;font-size:0.78rem;color:{badge_color};">
+    {esc(note)}
+  </div>
+</div>""",
+                    unsafe_allow_html=True,
+                )
 
             for i, case in enumerate(ai_cases, 1):
                 name = (case.get("name") or "").strip()
@@ -195,40 +243,14 @@ HARD RULES:
                         "Verify on NWLR / LPELR / LawPavilion before citing or filing."
                     )
 
-                if "Supreme" in canonical_court:
-                    court_badge = "badge-err"
-                elif "Appeal" in canonical_court:
-                    court_badge = "badge-warn"
-                else:
-                    court_badge = "badge-ok"
-
-                st.markdown(
-                    f"""
-<div class="custom-card">
-  <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:0.5rem;flex-wrap:wrap;">
-    <h4 style="margin:0;">#{i} · {esc(canonical_name)}</h4>
-    <div style="display:flex;gap:0.4rem;flex-wrap:wrap;">
-      <span class="badge {court_badge}">{esc(canonical_court)}</span>
-      <span style="display:inline-block;background:{badge_bg};border:1px solid {badge_border};
-                   color:{badge_color};padding:2px 8px;border-radius:999px;
-                   font-size:0.72rem;font-weight:700;">{badge_label}</span>
-    </div>
-  </div>
-  <div style="margin:0.4rem 0;">
-    📖 <code>{esc(canonical)}</code> · 📅 {esc(canonical_year)}
-  </div>
-  <div><strong>Ratio:</strong> {esc(ratio)}</div>
-  <div style="color:var(--la-text2);">
-    <strong>Why relevant:</strong> {esc(relevance)}
-  </div>
-  <div style="margin-top:0.4rem;font-size:0.78rem;color:{badge_color};">
-    {esc(note)}
-  </div>
-</div>""",
-                    unsafe_allow_html=True,
+                _render_case_card(
+                    i, canonical_name, canonical_court, canonical, canonical_year,
+                    ratio, relevance, badge_label, badge_bg, badge_border,
+                    badge_color, note,
                 )
 
             if ai_cases:
+                # AI gave us cases — show the summary banner.
                 if unverified_count == 0 and verified_count > 0:
                     st.success(
                         f"✅ All {verified_count} case(s) above are grounded in the "
@@ -246,13 +268,53 @@ HARD RULES:
                         f"matched against the verified database. Do NOT cite without "
                         f"independent verification."
                     )
-            elif not grounded:
+            elif ok and grounded_persisted:
+                # Parse succeeded but the AI returned an empty list AND we
+                # still have verified DB candidates — render those directly
+                # so the user is never left with a blank screen. This is
+                # the specific scenario that produced the "blank output"
+                # bug: AI sandbagged ("empty list is acceptable"), but the
+                # DB had perfectly good matches we already found.
+                st.info(
+                    f"ℹ️ The AI declined to rank the candidates for "
+                    f"**{esc(persisted_query)}**. Showing the top "
+                    f"{min(5, len(grounded_persisted))} verified database "
+                    f"matches directly so you still get a useful starting set."
+                )
+                for i, g in enumerate(grounded_persisted[:5], 1):
+                    _render_case_card(
+                        i,
+                        g.get("name", ""),
+                        g.get("court", ""),
+                        g.get("citation", ""),
+                        str(g.get("year", "")),
+                        g.get("principle", ""),
+                        "Surfaced as a verified candidate match for this legal issue.",
+                        "✅ Verified",
+                        "#dcfce7",
+                        "#16a34a",
+                        "#14532d",
+                        "Citation taken from the LexiAssist verified Nigerian case database.",
+                    )
+                st.success(
+                    f"✅ {min(5, len(grounded_persisted))} verified case(s) shown above "
+                    f"directly from the LexiAssist Nigerian case database."
+                )
+            elif ok and not grounded_persisted:
+                # No DB matches and AI returned an empty list — be honest.
                 st.info(
                     "ℹ️ No cases returned. The verified database had no candidates and "
                     "the AI declined to suggest others. Try rephrasing the legal issue with "
                     "different keywords (e.g. 'fair hearing' instead of 'natural justice'), "
                     "or use the full **Research** flow below for a deeper memo."
                 )
+            # If `ok` is False, parse_ai_json_or_warn already showed an error.
+
+            # Always offer a way to clear stale results.
+            if st.button("🗑️ Clear Precedent Results", key="prec_clear_btn"):
+                for k in ("_prec_raw", "_prec_grounded", "_prec_query"):
+                    st.session_state.pop(k, None)
+                st.rerun()
     st.markdown("---")
     rc1, rc2 = st.columns([1, 1])
     with rc1:

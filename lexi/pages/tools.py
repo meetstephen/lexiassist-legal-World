@@ -239,7 +239,23 @@ margin-bottom:1rem;border:1px solid #e5e7eb;">
                 unsafe_allow_html=True,
             )
         except Exception:
-            st.markdown(raw)
+            # Don't leave the user with a blank screen if the AI returned
+            # empty / unparseable output — surface a clear diagnostic.
+            if raw and raw.strip():
+                st.warning(
+                    "⚠️ Could not parse the limitation calculator response "
+                    "as structured data. Showing raw AI output below:"
+                )
+                st.markdown(
+                    f'<div class="response-box">{esc(raw)}</div>',
+                    unsafe_allow_html=True,
+                )
+            else:
+                st.error(
+                    "⚠️ The AI response came back empty. This usually means "
+                    "the model returned no content (rate limit, safety filter, "
+                    "or transient network issue). Please try again."
+                )
     # ── PRE-ACTION NOTICE CHECKER (merged into same tab) ──
     st.markdown("---")
     st.markdown("#### ⚠️ Pre-Action Notice & Compliance Checker")
@@ -485,7 +501,22 @@ border-radius:0.5rem;padding:1rem;margin-bottom:0.8rem;">
             </div>""", unsafe_allow_html=True)
 
         except Exception:
-            st.markdown(pre_raw)
+            # Defensive: never leave the user staring at a blank screen.
+            if pre_raw and pre_raw.strip():
+                st.warning(
+                    "⚠️ Could not parse the pre-action checker response "
+                    "as structured data. Showing raw AI output below:"
+                )
+                st.markdown(
+                    f'<div class="response-box">{esc(pre_raw)}</div>',
+                    unsafe_allow_html=True,
+                )
+            else:
+                st.error(
+                    "⚠️ The AI response came back empty. This usually means "
+                    "the model returned no content (rate limit, safety filter, "
+                    "or transient network issue). Please try again."
+                )
 
     # ── Court Hierarchy ──
 
@@ -759,7 +790,22 @@ MATTER FACTS: {aml_facts}
                 st.info(f"ℹ️ **STR Note:** {aml_data.get('str_note','')}")
 
         except Exception:
-            st.markdown(aml_raw)
+            # Defensive: never leave the user staring at a blank screen.
+            if aml_raw and aml_raw.strip():
+                st.warning(
+                    "⚠️ Could not parse the AML/CFT response as structured "
+                    "data. Showing raw AI output below:"
+                )
+                st.markdown(
+                    f'<div class="response-box">{esc(aml_raw)}</div>',
+                    unsafe_allow_html=True,
+                )
+            else:
+                st.error(
+                    "⚠️ The AI response came back empty. This usually means "
+                    "the model returned no content (rate limit, safety filter, "
+                    "or transient network issue). Please try again."
+                )
 
 
     # ══════════════════════════════════════════════════════
@@ -1025,9 +1071,23 @@ def _render_tools_checklist() -> None:
         )
         st.caption("⚠️ AI-generated checklist. Verify all steps and fees against current court rules before filing.")
 
-    elif chk_raw_fb:
+    elif chk_raw_fb is not None and "_last_checklist_raw" in st.session_state:
         st.markdown("---")
-        st.markdown(f'<div class="response-box">{esc(chk_raw_fb)}</div>', unsafe_allow_html=True)
+        if chk_raw_fb and chk_raw_fb.strip():
+            st.warning(
+                "⚠️ Could not parse the checklist response as structured "
+                "data. Showing raw AI output below:"
+            )
+            st.markdown(
+                f'<div class="response-box">{esc(chk_raw_fb)}</div>',
+                unsafe_allow_html=True,
+            )
+        else:
+            st.error(
+                "⚠️ The AI response came back empty. This usually means the "
+                "model returned no content (rate limit, safety filter, or a "
+                "transient error). Please try again."
+            )
 
 
 
@@ -1234,6 +1294,20 @@ def _render_tools_authority() -> None:
         )
         st.caption("⚠️ AI-generated verification. Always independently confirm all authorities before relying on them in any court filing or client advice.")
 
-    elif av_raw_fb:
+    elif av_raw_fb is not None and "_av_raw" in st.session_state:
         st.markdown("---")
-        st.markdown(f'<div class="response-box">{esc(av_raw_fb)}</div>', unsafe_allow_html=True)
+        if av_raw_fb and av_raw_fb.strip():
+            st.warning(
+                "⚠️ Could not parse the authority-verification response as "
+                "structured data. Showing raw AI output below:"
+            )
+            st.markdown(
+                f'<div class="response-box">{esc(av_raw_fb)}</div>',
+                unsafe_allow_html=True,
+            )
+        else:
+            st.error(
+                "⚠️ The AI response came back empty. This usually means the "
+                "model returned no content (rate limit, safety filter, or a "
+                "transient error). Please try again."
+            )
