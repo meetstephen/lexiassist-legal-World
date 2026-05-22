@@ -277,6 +277,48 @@ def find_relevant_verified_cases(query: str, top_k: int = 5) -> list[dict]:
     return _real(query, top_k=top_k)
 
 
+def build_case_context(query: str, top_k: int = 6) -> str:
+    """Retrieve the most relevant verified Nigerian cases for a query and
+    format as grounding context. Mirrors ``build_rag_context()`` (which does
+    the same for statutes) so AI calls are grounded against real case law.
+
+    The injected block tells the AI to PREFER these cases over its own memory
+    — the cases here have been hand-curated, so citations cannot drift.
+
+    Returns empty string if no relevant verified cases are found, which lets
+    the AI fall back to its own knowledge.
+    """
+    if not query or not query.strip():
+        return ""
+
+    from .citations import find_relevant_verified_cases
+    matches = find_relevant_verified_cases(query, top_k=top_k)
+    if not matches:
+        return ""
+
+    lines = [
+        "═══ VERIFIED NIGERIAN CASE AUTHORITIES (from LexiAssist verified database) ═══",
+        "The following cases are directly relevant to this query and are GUARANTEED",
+        "to exist (citations have been hand-verified). Prefer these over any case",
+        "you might recall from memory. Use the citations EXACTLY as shown.",
+        "If you cite any case NOT in this list, you must be highly confident it is real",
+        "(landmark Nigerian decisions only — never invent obscure citations).",
+        "",
+    ]
+    for i, c in enumerate(matches, 1):
+        name = c.get("name", "")
+        citation = c.get("citation", "")
+        court = c.get("court", "")
+        year = c.get("year", "")
+        principle = c.get("principle", "")
+        lines.append(f"[{i}] {name} {citation} ({court}, {year})")
+        if principle:
+            lines.append(f"    Principle: {principle}")
+        lines.append("")
+    lines.append("═══ END VERIFIED CASE AUTHORITIES ═══")
+    return "\n".join(lines)
+
+
 def render_online_case_card(idx: int, case: dict) -> str:
     """Render a single online case result as styled HTML."""
     tier = case.get("confidence_tier", "needs_verification")

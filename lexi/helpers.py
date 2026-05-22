@@ -201,6 +201,21 @@ def build_system_prompt(task: str, mode: str, query: str = "") -> str:
         if rag_ctx:
             system = rag_ctx + "\n\n" + system
 
+    # ── Phase 3: Case-law grounding — inject verified Nigerian cases ──
+    # Mirrors RAG above but for case law. Only enabled for tasks where case
+    # citations matter (research, analysis, advisory, interpretation,
+    # contract review) — drafting tasks skip this because pleadings &
+    # operative documents should not have ratio-decidendi blocks injected.
+    if query and task in ("research", "analysis", "advisory", "interpret", "contract_review", "general"):
+        try:
+            from .web_search import build_case_context
+            case_ctx = build_case_context(query)
+            if case_ctx:
+                system = case_ctx + "\n\n" + system
+        except Exception:
+            # Case grounding is a nice-to-have; never let it break a query.
+            pass
+
     return system
 
 
@@ -397,7 +412,11 @@ def run_issue_spot(query: str) -> str:
 
 
 def run_research(query: str, mode: str) -> str:
-    system = build_system_prompt("research", mode)
+    # Pass query into build_system_prompt so the system prompt is grounded
+    # against verified Nigerian statutes (RAG) AND verified Nigerian cases
+    # (case-law grounding). Without this, the AI was operating from memory
+    # only — which is exactly the hallucination risk we want to eliminate.
+    system = build_system_prompt("research", mode, query=query)
     return generate(query, system, mode, "research")
 
 
