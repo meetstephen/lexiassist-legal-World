@@ -286,7 +286,53 @@ def render_ai():
                         st.session_state.pop("diff_analysis", None)
                         st.rerun()
     
+    # ── Example queries (one-click prefill) ────────────────────────────
+    # Lawyers in their first 5 minutes don't know what to type. These four
+    # chips demonstrate the AI's strongest capabilities — limitation maths,
+    # pre-action procedure, drafting, contract review — across a Nigerian
+    # legal context. Click → fills the text area → user can edit or run.
+    EXAMPLE_QUERIES = [
+        ("⏳ Limitation",
+         "Compute the limitation period: my client was injured in a road "
+         "accident on 15 March 2022 in Lagos. The negligent driver works "
+         "for the Federal Ministry of Health. No action has been filed "
+         "yet. What deadlines apply, and which Limitation Law governs?"),
+        ("📨 Pre-action",
+         "Client wants to sue Lagos State Government for breach of a "
+         "contract worth ₦50M, terminated in January 2024. No pre-action "
+         "steps taken yet. Walk me through every pre-action requirement "
+         "I must satisfy, in order, with statutory authority and "
+         "consequences of omission."),
+        ("📜 Drafting",
+         "Draft a Memorandum of Understanding between two Nigerian "
+         "private companies for a joint venture in Lagos: shared "
+         "R&D, 60/40 profit split, 3-year term, Lagos arbitration "
+         "clause. Use [PLACEHOLDER] for missing details."),
+        ("📑 Contract risk",
+         'Review this clause for risks acting for the Client: '
+         '"The Service Provider may suspend or terminate this Agreement '
+         'at any time, with or without cause, without liability to the '
+         'Client." Give a risk grade, who benefits, and a counter-clause.'),
+    ]
     prefill = st.session_state.pop("loaded_template", "") if "loaded_template" in st.session_state and st.session_state.get("loaded_template") else ""
+    # If the user clicked an example chip on the previous run, that text now
+    # lives in _ai_example_prefill and we use it as the seed value here.
+    if not prefill and st.session_state.get("_ai_example_prefill"):
+        prefill = st.session_state.pop("_ai_example_prefill", "")
+
+    if not st.session_state.get("ai_query_ta", "") and not prefill:
+        st.caption("✨ Try one of these to see what LexiAssist can do:")
+        ex_cols = st.columns(len(EXAMPLE_QUERIES))
+        for col, (label, text) in zip(ex_cols, EXAMPLE_QUERIES):
+            with col:
+                if st.button(
+                    label, key=f"ai_example_{label}",
+                    use_container_width=True,
+                    help="Click to load this example into the query box below.",
+                ):
+                    st.session_state["_ai_example_prefill"] = text
+                    st.rerun()
+
     query = st.text_area(
         "Your Legal Query",
         value=prefill,

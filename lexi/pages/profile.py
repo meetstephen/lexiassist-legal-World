@@ -608,6 +608,133 @@ def render_profile():
                 unsafe_allow_html=True,
             )
 
+            # ── Firm-wide announcement banner ────────────────────────────
+            # Lets the admin push a single message to every user's screen
+            # without emailing them. Common uses during the trial:
+            #   "Maintenance tonight 21:00–22:00"
+            #   "Try the new ⚡ Lifecycle Automation page"
+            #   "v9.1.2 deployed — see release notes"
+            st.markdown("---")
+            st.markdown("##### 📣 Firm-Wide Announcement")
+            st.caption(
+                "Pin a short message to the top of every user's page until "
+                "it expires or you clear it. Useful for maintenance windows, "
+                "release notes, and trial reminders."
+            )
+            current = get_db().get_announcement() or {}
+            with st.form("firm_announcement_form"):
+                ann_text = st.text_area(
+                    "Message",
+                    value=current.get("text", ""),
+                    height=80,
+                    placeholder=(
+                        "e.g. Scheduled maintenance tomorrow 21:00–22:00 WAT. "
+                        "AI calls may pause briefly. — IT Team"
+                    ),
+                    key="ann_text_ta",
+                )
+                ac1, ac2, ac3 = st.columns([1.2, 1.2, 1.2])
+                with ac1:
+                    ann_level = st.selectbox(
+                        "Level",
+                        ["info", "success", "warning"],
+                        index=["info", "success", "warning"].index(
+                            current.get("level", "info")
+                        ),
+                        key="ann_level_sel",
+                        help="info = blue · success = green · warning = amber",
+                    )
+                with ac2:
+                    # Default expiry: 7 days from now
+                    from datetime import timedelta as _td
+                    _default_expires = current.get("expires", "")
+                    try:
+                        _default_expires_d = (
+                            date.fromisoformat(_default_expires)
+                            if _default_expires
+                            else date.today() + _td(days=7)
+                        )
+                    except Exception:
+                        _default_expires_d = date.today() + _td(days=7)
+                    ann_expires = st.date_input(
+                        "Expires on",
+                        value=_default_expires_d,
+                        min_value=date.today(),
+                        key="ann_expires_inp",
+                        help="Banner auto-hides after this date.",
+                    )
+                with ac3:
+                    ann_active = st.checkbox(
+                        "Active",
+                        value=current.get("active", True),
+                        key="ann_active_chk",
+                        help="Uncheck to hide the banner without deleting.",
+                    )
+
+                af1, af2 = st.columns(2)
+                with af1:
+                    save_ann = st.form_submit_button(
+                        "💾 Publish Announcement", type="primary",
+                        use_container_width=True,
+                    )
+                with af2:
+                    clear_ann = st.form_submit_button(
+                        "🗑️ Clear Announcement",
+                        use_container_width=True,
+                    )
+
+                if save_ann:
+                    if not ann_text.strip():
+                        st.error("❌ Message cannot be empty.")
+                    else:
+                        ok = get_db().set_announcement({
+                            "text":       ann_text.strip(),
+                            "level":      ann_level,
+                            "expires":    ann_expires.isoformat(),
+                            "active":     bool(ann_active),
+                            "updated_by": st.session_state.get(
+                                "current_username", "admin"
+                            ),
+                            "updated_at": datetime.now().isoformat(),
+                        })
+                        if ok:
+                            try:
+                                get_db().append_audit(
+                                    "ANNOUNCEMENT_PUBLISHED",
+                                    f"level={ann_level} expires={ann_expires.isoformat()} "
+                                    f"active={ann_active} chars={len(ann_text.strip())}",
+                                )
+                            except Exception:
+                                pass
+                            st.success(
+                                "✅ Announcement published. Users will see it "
+                                "on their next page load."
+                            )
+                            st.rerun()
+                        else:
+                            st.error("❌ Could not save announcement. Try again.")
+
+                if clear_ann:
+                    if get_db().clear_announcement():
+                        try:
+                            get_db().append_audit(
+                                "ANNOUNCEMENT_CLEARED", ""
+                            )
+                        except Exception:
+                            pass
+                        st.success("✅ Announcement cleared for all users.")
+                        st.rerun()
+                    else:
+                        st.error("❌ Could not clear announcement.")
+
+            # Live preview so admin can confirm before publishing
+            if current and current.get("active"):
+                st.caption(
+                    f"Currently live · level={current.get('level','info')} · "
+                    f"expires {current.get('expires','—')} · "
+                    f"published by @{current.get('updated_by','?')}"
+                )
+
 
 
 
