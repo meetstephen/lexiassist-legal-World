@@ -69,6 +69,33 @@ UPLOAD_TYPES = ["pdf", "docx", "doc", "txt", "xlsx", "xls", "csv", "json", "rtf"
 COST_PER_1M_INPUT = 0.15
 COST_PER_1M_OUTPUT = 0.60
 
+# ═══════════════════════════════════════════════════════
+# CASE TYPE OPTIONS (shared across pages)
+# ═══════════════════════════════════════════════════════
+CASE_TYPE_OPTIONS = [
+    "Breach of Contract",
+    "Land / Property Dispute",
+    "Criminal Defence",
+    "Employment / Wrongful Termination",
+    "Fundamental Rights Enforcement",
+    "Debt Recovery",
+    "Matrimonial / Family Law",
+    "Company / Commercial Dispute",
+    "Defamation",
+    "Personal Injury / Negligence",
+    "Election Petition",
+    "Judicial Review / Certiorari",
+    "Tenancy / Landlord-Tenant",
+    "Probate / Estate Administration",
+    "Insurance / Subrogation",
+    "Banking / Financial Dispute",
+    "Intellectual Property",
+    "Admiralty / Maritime",
+    "Environmental Law",
+    "Tax Dispute",
+    "Other (describe below)",
+]
+
 
 # ═══════════════════════════════════════════════════════
 # FX RATE — USD → NGN

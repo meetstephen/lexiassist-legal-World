@@ -165,6 +165,10 @@ def render_tasks():
             linked_case_title = case_names.get(task.get("linked_case_id",""), "")
 
             with st.container():
+                overdue_html = '<br><small style="color:#dc2626;font-weight:600;">⚠️ OVERDUE</small>' if is_overdue else ''
+                case_html = f'<br><small style="color:var(--la-text2);">📁 {esc(linked_case_title)}</small>' if linked_case_title else ''
+                assigned_html = f'<br><small style="color:var(--la-text2);">👤 {esc(task.get("assigned_to",""))}</small>' if task.get("assigned_to") else ''
+                notes_html = f'<div style="margin-top:0.4rem;font-size:0.82rem;color:var(--la-text2);">{esc(task.get("notes",""))}</div>' if task.get("notes") else ''
                 st.markdown(
                     f'<div style="background:var(--la-card);border:1px solid {border_c};'
                     f'border-left:4px solid {pcolour};border-radius:8px;'
@@ -172,9 +176,9 @@ def render_tasks():
                     f'<div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:0.4rem;">'
                     f'<div>'
                     f'<strong style="font-size:0.95rem;">{esc(task.get("title",""))}</strong>'
-                    f'{"<br><small style=\'color:#dc2626;font-weight:600;\'>⚠️ OVERDUE</small>" if is_overdue else ""}'
-                    f'{"<br><small style=\'color:var(--la-text2);\'>📁 " + esc(linked_case_title) + "</small>" if linked_case_title else ""}'
-                    f'{"<br><small style=\'color:var(--la-text2);\'>👤 " + esc(task.get("assigned_to","")) + "</small>" if task.get("assigned_to") else ""}'
+                    f'{overdue_html}'
+                    f'{case_html}'
+                    f'{assigned_html}'
                     f'</div>'
                     f'<div style="display:flex;flex-direction:column;align-items:flex-end;gap:0.25rem;">'
                     f'<span style="background:{scolour}22;color:{scolour};border:1px solid {scolour}44;'
@@ -185,7 +189,7 @@ def render_tasks():
                     f'{esc(task.get("priority","Medium"))}</span>'
                     f'<span style="font-size:0.78rem;color:var(--la-text2);">📅 {esc(due_str)}</span>'
                     f'</div></div>'
-                    f'{"<div style=\'margin-top:0.4rem;font-size:0.82rem;color:var(--la-text2);\'>" + esc(task.get("notes","")) + "</div>" if task.get("notes") else ""}'
+                    f'{notes_html}'
                     f'</div>',
                     unsafe_allow_html=True,
                 )

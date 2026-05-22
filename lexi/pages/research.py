@@ -40,12 +40,13 @@ def render_research():
         key="research_query_ta",
     )
 
-    # ── Quick Precedent Finder (grounded against verified Nigerian case DB) ──
+    # ── Quick Precedent Finder (combines local verified DB + online AI knowledge) ──
     with st.expander("🔖 Quick Precedent Finder", expanded=False):
         st.caption(
-            "Returns Nigerian cases grounded against LexiAssist's verified case "
-            "database. Every result is tagged ✅ Verified or ⚠️ Unverified — "
-            "the AI is forbidden from inventing citations."
+            "Combines LexiAssist's verified case database with AI online knowledge "
+            "to find relevant Nigerian cases. Verified cases from the local database "
+            "are always prioritised. All results are tagged with confidence tiers: "
+            "✅ Verified · 🟡 High Confidence · ⚠️ Needs Verification."
         )
         prec_cols = st.columns([3, 1])
         with prec_cols[0]:
@@ -62,250 +63,98 @@ def render_research():
                 disabled=not prec_query.strip(), use_container_width=True,
                 type="primary",
             )
+
         if prec_btn and prec_query.strip():
-            # 1. Retrieval — pull candidates from the verified DB so the AI is
-            #    ranking real cases, not inventing them.
-            grounded = find_relevant_verified_cases(prec_query.strip(), top_k=8)
-            if grounded:
-                grounding_block = (
-                    "═══ VERIFIED CANDIDATE CASES (from the LexiAssist verified Nigerian case database) ═══\n"
-                    "These are the ONLY cases you should rank and explain. Use the citation EXACTLY as given.\n"
-                    "Do NOT invent additional cases.\n\n"
-                    + "\n".join(
-                        f"- {g['name']} {g['citation']} ({g['court']}, {g['year']}) — {g['principle']}"
-                        for g in grounded
-                    )
-                    + "\n═══ END CANDIDATES ═══\n"
-                )
-                target_n = min(5, len(grounded))
-                instruction = (
-                    f"From the VERIFIED CANDIDATE CASES above, select the TOP {target_n} most "
-                    f"relevant to the legal issue and explain each. You MUST return at least "
-                    f"one case from the candidate list — do NOT return an empty array when "
-                    f"candidates have been provided. Use the citation EXACTLY as provided. "
-                    f"Do NOT add any case that is not in the candidate list."
-                )
-            else:
-                # No DB matches — ask AI for well-known cases on this topic.
-                # Encourage at least one suggestion since "there is a case for
-                # every legal matter".
-                grounding_block = (
-                    "═══ NO VERIFIED CANDIDATES FOUND ═══\n"
-                    "The LexiAssist verified database has no matching cases for this issue, "
-                    "so suggest well-established Nigerian precedents you are confident about.\n"
-                    "═══ END ═══\n"
-                )
-                target_n = 5
-                instruction = (
-                    f"Provide UP TO {target_n} well-established Nigerian precedents on this "
-                    f"legal issue. Always return at least one case — every Nigerian legal "
-                    f"issue has at least one leading authority. Each citation MUST be one you "
-                    f"are confident is real (e.g. classic cases like Madukolu v Nkemdilim, "
-                    f"Ariori v Elemo, etc.). Do not invent obscure citations."
-                )
+            from ..web_search import search_cases_online, render_online_case_card
 
-            prec_prompt = f"""{grounding_block}
+            # Always combine local DB + online search
+            with st.spinner("🔖 Searching Nigerian precedents (verified DB + online)…"):
+                combined_results = search_cases_online(prec_query.strip(), max_results=10)
 
-LEGAL ISSUE: {prec_query.strip()}
-
-{instruction}
-
-Respond ONLY in this exact JSON format, nothing else:
-{{
-  "cases": [
-    {{
-      "name": "Full case name (X v Y)",
-      "citation": "(year) volume report (Pt. X) page",
-      "court": "Supreme Court | Court of Appeal | Federal High Court | National Industrial Court",
-      "year": "YYYY",
-      "ratio": "One sentence — the legal principle established",
-      "relevance": "One sentence — why this case applies to the issue"
-    }}
-  ]
-}}
-
-HARD RULES:
-1. NEVER invent a case name or citation.
-2. When candidates have been provided, ALWAYS pick at least one — never return [].
-3. Use the candidate citations EXACTLY as written above.
-"""
-            with st.spinner("🔖 Searching Nigerian precedents…"):
-                raw = generate(prec_prompt, IDENTITY_CORE, "brief", "research")
-
-            # Persist the run so results survive Streamlit reruns and we
-            # can render outside this button-click branch (which means
-            # users no longer see a momentary screen that goes blank when
-            # ``prec_btn`` flips back to False on the next rerun).
+            st.session_state["_prec_online_results"] = combined_results
             st.session_state["_prec_query"] = prec_query.strip()
-            st.session_state["_prec_grounded"] = grounded
-            st.session_state["_prec_raw"] = raw
+            st.session_state["_prec_mode"] = "combined"
+            # Clear any old-style results
+            st.session_state.pop("_prec_raw", None)
+            st.session_state.pop("_prec_grounded", None)
+            st.rerun()
 
-        # ── Render persisted Quick Precedent Finder results ─────────────
-        # Reads from session_state so results survive reruns. Falls back
-        # gracefully and silently — no error banners, no "AI declined"
-        # messages — because there is a case for every legal matter, and
-        # the verified DB usually has at least one good candidate.
-        prec_raw_persisted = st.session_state.get("_prec_raw")
-        if prec_raw_persisted is not None:
-            grounded_persisted = st.session_state.get("_prec_grounded", []) or []
+        # ── Render persisted results ─────────────────────────────────────
+        prec_mode = st.session_state.get("_prec_mode")
 
-            # Silent JSON parse — no warnings displayed for this feature.
-            # If parsing fails we treat ai_cases as empty and fall through
-            # to the grounded-DB rendering path.
-            data = safe_json_loads(prec_raw_persisted, fallback={"cases": []})
-            ai_cases = data.get("cases", []) if isinstance(data, dict) else []
+        if prec_mode in ("online", "combined"):
+            from ..web_search import render_online_case_card
+            online_results = st.session_state.get("_prec_online_results", [])
 
-            verified_count = 0
-            unverified_count = 0
-            grounded_names = {g["name"].lower() for g in grounded_persisted}
+            if online_results:
+                # Summary stats
+                verified_n = sum(1 for r in online_results if r["confidence_tier"] == "verified")
+                high_conf_n = sum(1 for r in online_results if r["confidence_tier"] == "high_confidence")
+                needs_ver_n = sum(1 for r in online_results if r["confidence_tier"] == "needs_verification")
+                local_n = sum(1 for r in online_results if r.get("source") == "local_db")
+                online_n = sum(1 for r in online_results if r.get("source") == "online")
 
-            def _render_case_card(
-                idx, canonical_name, canonical_court, canonical, canonical_year,
-                ratio, relevance, badge_label, badge_bg, badge_border,
-                badge_color, note,
-            ):
-                if "Supreme" in canonical_court:
-                    court_badge = "badge-err"
-                elif "Appeal" in canonical_court:
-                    court_badge = "badge-warn"
-                else:
-                    court_badge = "badge-ok"
+                summary_parts = []
+                if verified_n:
+                    summary_parts.append(f"✅ {verified_n} verified")
+                if high_conf_n:
+                    summary_parts.append(f"🟡 {high_conf_n} high confidence")
+                if needs_ver_n:
+                    summary_parts.append(f"⚠️ {needs_ver_n} needs verification")
+
+                source_info = ""
+                if local_n and online_n:
+                    source_info = f" &nbsp;|&nbsp; 📁 {local_n} from DB · 🌐 {online_n} online"
+                elif local_n:
+                    source_info = f" &nbsp;|&nbsp; 📁 {local_n} from verified DB"
+
                 st.markdown(
-                    f"""
-<div class="custom-card">
-  <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:0.5rem;flex-wrap:wrap;">
-    <h4 style="margin:0;">#{idx} · {esc(canonical_name)}</h4>
-    <div style="display:flex;gap:0.4rem;flex-wrap:wrap;">
-      <span class="badge {court_badge}">{esc(canonical_court)}</span>
-      <span style="display:inline-block;background:{badge_bg};border:1px solid {badge_border};
-                   color:{badge_color};padding:2px 8px;border-radius:999px;
-                   font-size:0.72rem;font-weight:700;">{badge_label}</span>
-    </div>
-  </div>
-  <div style="margin:0.4rem 0;">
-    📖 <code>{esc(canonical)}</code> · 📅 {esc(canonical_year)}
-  </div>
-  <div><strong>Ratio:</strong> {esc(ratio)}</div>
-  <div style="color:var(--la-text2);">
-    <strong>Why relevant:</strong> {esc(relevance)}
-  </div>
-  <div style="margin-top:0.4rem;font-size:0.78rem;color:{badge_color};">
-    {esc(note)}
-  </div>
-</div>""",
+                    f'<div style="background:var(--la-bg2);border:1px solid var(--la-border);'
+                    f'border-radius:8px;padding:0.6rem 1rem;margin-bottom:0.8rem;font-size:0.85rem;">'
+                    f'<strong>📊 Results:</strong> {" · ".join(summary_parts)}{source_info}'
+                    f'</div>',
                     unsafe_allow_html=True,
                 )
 
-            # Decide what to render. Three scenarios, all handled silently.
-            if ai_cases:
-                cases_to_render = ai_cases
-                render_mode = "ai"
-            elif grounded_persisted:
-                # AI returned nothing parseable but the verified DB has
-                # candidates. Synthesise card data from the DB so the user
-                # always sees relevant authorities.
-                cases_to_render = [
-                    {
-                        "name": g.get("name", ""),
-                        "court": g.get("court", ""),
-                        "citation": g.get("citation", ""),
-                        "year": str(g.get("year", "")),
-                        "ratio": g.get("principle", ""),
-                        "relevance": (
-                            "Verified Nigerian authority surfaced for this issue from "
-                            "the LexiAssist case database."
-                        ),
-                    }
-                    for g in grounded_persisted[:5]
-                ]
-                render_mode = "grounded"
-            else:
-                cases_to_render = []
-                render_mode = "empty"
+                for i, case in enumerate(online_results, 1):
+                    st.markdown(render_online_case_card(i, case), unsafe_allow_html=True)
 
-            for i, case in enumerate(cases_to_render, 1):
-                name = (case.get("name") or "").strip()
-                court = (case.get("court") or "").strip()
-                ai_citation = (case.get("citation") or "").strip()
-                year = (case.get("year") or "").strip()
-                ratio = (case.get("ratio") or "").strip()
-                relevance = (case.get("relevance") or "").strip()
+                # Research notes
+                notes = st.session_state.get("_online_research_notes", "")
+                if notes:
+                    st.info(f"📝 **Research Notes:** {notes}")
 
-                # Authoritative lookup against the verified DB.
-                match = verify_case_name(name) if name else None
-                # Treat as verified if either the AI picked a candidate we
-                # passed in, OR the name matches the DB at all, OR we
-                # rendered straight from the grounded DB list.
-                is_grounded_pick = name.lower() in grounded_names
-                is_verified = bool(match) or is_grounded_pick or render_mode == "grounded"
+                suggested = st.session_state.get("_online_suggested_statutes", [])
+                if suggested:
+                    st.markdown("**📜 Also consider these statutes:**")
+                    for s in suggested:
+                        st.markdown(f"- {s}")
 
-                # Use canonical citation from DB whenever possible, so the AI
-                # cannot accidentally drift the citation.
-                if match:
-                    canonical = match["citation"]
-                    canonical_court = match.get("court", court)
-                    canonical_year = str(match.get("year", year))
-                    canonical_name = match["name"]
-                else:
-                    canonical = ai_citation
-                    canonical_court = court
-                    canonical_year = year
-                    canonical_name = name
-
-                if is_verified:
-                    verified_count += 1
-                    badge_label = "✅ Verified"
-                    badge_bg = "#dcfce7"
-                    badge_border = "#16a34a"
-                    badge_color = "#14532d"
-                    note = (
-                        "Citation taken from the LexiAssist verified Nigerian case database."
-                        if (match or render_mode == "grounded") else
-                        "Selected from the verified candidate set passed to the AI."
+                # Summary message
+                if needs_ver_n > 0 and verified_n > 0:
+                    st.warning(
+                        f"⚠️ {verified_n} verified case(s) prioritised from the local database. "
+                        f"{needs_ver_n} additional case(s) from online search require independent "
+                        f"verification on NWLR / LPELR / LawPavilion before citing."
                     )
-                else:
-                    unverified_count += 1
-                    badge_label = "⚠️ Unverified"
-                    badge_bg = "#fef2f2"
-                    badge_border = "#dc2626"
-                    badge_color = "#991b1b"
-                    note = (
-                        "Not found in the LexiAssist verified database. "
-                        "Verify on NWLR / LPELR / LawPavilion before citing or filing."
+                elif needs_ver_n > 0:
+                    st.warning(
+                        f"⚠️ {needs_ver_n} case(s) above require independent verification. "
+                        f"Check NWLR / LPELR / LawPavilion before citing in any filing."
                     )
-
-                _render_case_card(
-                    i, canonical_name, canonical_court, canonical, canonical_year,
-                    ratio, relevance, badge_label, badge_bg, badge_border,
-                    badge_color, note,
-                )
-
-            # Summary banner — only when we actually rendered something.
-            if cases_to_render:
-                if unverified_count == 0 and verified_count > 0:
+                elif high_conf_n > 0 and verified_n > 0:
                     st.success(
-                        f"✅ All {verified_count} case(s) above are grounded in the "
-                        f"verified Nigerian case database."
+                        f"✅ {verified_n} case(s) verified from the local database. "
+                        f"{high_conf_n} additional case(s) have valid citation format — "
+                        f"confirm on NWLR/LPELR before relying."
                     )
-                elif verified_count > 0 and unverified_count > 0:
-                    st.warning(
-                        f"⚠️ {verified_count} verified · {unverified_count} unverified. "
-                        f"Treat the unverified entries as suggestions only — confirm in "
-                        f"NWLR / LPELR / LawPavilion before relying on them."
-                    )
-                else:
-                    st.warning(
-                        f"⚠️ {unverified_count} suggested case(s) above could not be "
-                        f"matched against the verified database. Confirm on "
-                        f"NWLR / LPELR / LawPavilion before citing."
-                    )
-            # When literally nothing came back (no DB candidates AND no AI
-            # cases) we deliberately stay quiet — the user can either
-            # rephrase the legal issue or use the full Research flow below.
+                elif verified_n > 0 and high_conf_n == 0 and needs_ver_n == 0:
+                    st.success(f"✅ All {verified_n} case(s) are verified in the local database.")
 
-            # Always offer a way to clear stale results.
             if st.button("🗑️ Clear Precedent Results", key="prec_clear_btn"):
-                for k in ("_prec_raw", "_prec_grounded", "_prec_query"):
+                for k in ("_prec_raw", "_prec_grounded", "_prec_query",
+                          "_prec_online_results", "_prec_mode",
+                          "_online_research_notes", "_online_suggested_statutes"):
                     st.session_state.pop(k, None)
                 st.rerun()
     st.markdown("---")

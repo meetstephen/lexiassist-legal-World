@@ -228,10 +228,11 @@ def main():
 
     # ── Keep-alive: client-side ping while tab is open ──────────────────
     # Strategy: Two layers prevent Streamlit Cloud from sleeping the app.
-    # 1. This JS fires a GET to /?healthcheck=1 every 7 min while any user
-    #    has a tab open — the primary keep-alive mechanism.
+    # 1. This JS fires a GET to /?healthcheck=1 every 4 min while any user
+    #    has a tab open — the primary keep-alive mechanism. Also pings on
+    #    visibility change (user returns to tab).
     # 2. A GitHub Actions cron (keep_alive.yml) pings the healthcheck every
-    #    6 hours as a cold-start safety net for zero-user periods.
+    #    14 minutes as a safety net for zero-user periods.
     # No Puppeteer/Selenium/headless browser needed — a simple HTTP GET
     # to the healthcheck endpoint is sufficient to prevent deep sleep.
     try:
@@ -241,13 +242,15 @@ def main():
             (function() {
               if (window._lexiPingStarted) return;
               window._lexiPingStarted = true;
-              setInterval(function() {
-                fetch(window.location.origin + '/?healthcheck=1', {
-                  method: 'GET',
-                  cache: 'no-store',
-                  credentials: 'omit'
-                }).catch(function() {});
-              }, 420000); // 7 minutes
+              var baseUrl = window.location.origin + '/?healthcheck=1';
+              function ping() {
+                fetch(baseUrl, {method:'GET',cache:'no-store',credentials:'omit'}).catch(function(){});
+              }
+              setInterval(ping, 240000);
+              document.addEventListener('visibilitychange', function() {
+                if (!document.hidden) { ping(); }
+              });
+              setTimeout(ping, 5000);
             })();
             </script>
             """,
