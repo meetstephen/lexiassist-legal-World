@@ -660,6 +660,56 @@ section[data-testid="stSidebar"] .stTextArea textarea::placeholder{{
 [data-baseweb="menu"] li:hover,[data-baseweb="popover"] li:hover,
 [data-baseweb="menu"] [role="option"]:hover{{
   background-color:{acc}18!important;color:var(--la-acc)!important;}}
+/* ── CRITICAL: Dropdown HIGHLIGHTED / FOCUSED / SELECTED states ──
+   BaseWeb uses [aria-selected] for the currently-selected option and
+   [data-highlighted] / [aria-activedescendant] for the keyboard- or
+   scroll-focused option. Without these rules the focus indicator
+   defaults to white in BaseWeb's stylesheet — invisible on dark themes
+   and washing out items on light themes. */
+[data-baseweb="menu"] [role="option"][aria-selected="true"],
+[data-baseweb="popover"] [role="option"][aria-selected="true"],
+[data-baseweb="menu"] li[aria-selected="true"],
+[data-baseweb="popover"] li[aria-selected="true"]{{
+  background-color:{acc}28!important;
+  color:var(--la-acc)!important;
+  font-weight:600!important;
+  border-left:3px solid var(--la-acc)!important;
+  padding-left:calc(1rem - 3px)!important;}}
+[data-baseweb="menu"] [role="option"][data-highlighted="true"],
+[data-baseweb="popover"] [role="option"][data-highlighted="true"],
+[data-baseweb="menu"] [role="option"][aria-selected="true"][data-highlighted="true"],
+[data-baseweb="menu"] li[data-highlighted="true"],
+[data-baseweb="popover"] li[data-highlighted="true"]{{
+  background-color:{acc}38!important;
+  color:var(--la-acc)!important;
+  outline:none!important;}}
+[data-baseweb="menu"] [role="option"]:focus,
+[data-baseweb="popover"] [role="option"]:focus,
+[data-baseweb="menu"] [role="option"]:focus-visible,
+[data-baseweb="popover"] [role="option"]:focus-visible{{
+  background-color:{acc}38!important;
+  color:var(--la-acc)!important;
+  outline:2px solid var(--la-acc)!important;
+  outline-offset:-2px!important;}}
+/* MultiSelect — highlighted option in the dropdown panel */
+.stMultiSelect [data-baseweb="menu"] [role="option"][aria-selected="true"],
+.stMultiSelect [data-baseweb="popover"] [role="option"][aria-selected="true"]{{
+  background-color:{acc}28!important;color:var(--la-acc)!important;}}
+/* Radio list item highlight (the "list of items" with focus bar) */
+.stRadio [role="radiogroup"] [role="radio"][aria-checked="true"],
+.stRadio [role="radiogroup"] label[data-checked="true"]{{
+  background-color:{acc}18!important;
+  border-left:3px solid var(--la-acc)!important;
+  padding-left:calc(0.5rem - 3px)!important;
+  border-radius:var(--r-sm)!important;}}
+/* Streamlit's virtual list (large dropdowns) — focused row */
+[data-baseweb="virtual-list"] > div > div:hover,
+[data-baseweb="virtual-list"] [role="option"]:hover{{
+  background-color:{acc}18!important;color:var(--la-acc)!important;}}
+[data-baseweb="virtual-list"] [role="option"][aria-selected="true"],
+[data-baseweb="virtual-list"] [role="option"][data-highlighted="true"]{{
+  background-color:{acc}28!important;color:var(--la-acc)!important;
+  font-weight:600!important;}}
 /* ── File uploader — fully functional & visible on all themes ── */
 /* Dropzone area */
 [data-testid="stFileUploaderDropzone"],
@@ -1197,5 +1247,36 @@ a:hover, .stMarkdown a:hover {{
 /* Ensure divider/hr is visible */
 hr, .stMarkdown hr, [data-testid="stSeparator"] {{
   border-color:var(--la-border)!important;}}
+
+/* ══════════════════════════════════════════════════════════════════════
+   DISABLED INPUTS — ensure text stays readable on dark themes
+   (the doc-preview text area in AI Assistant uses disabled=True)
+   ══════════════════════════════════════════════════════════════════════ */
+.stTextArea textarea:disabled,
+.stTextInput input:disabled,
+.stNumberInput input:disabled,
+textarea[disabled],
+input[disabled] {{
+  background-color:var(--la-bg2)!important;
+  color:var(--la-text)!important;
+  opacity:0.85!important;
+  -webkit-text-fill-color:var(--la-text)!important;
+  cursor:not-allowed!important;
+  border:1px solid var(--la-border)!important;}}
+
+/* Dropdown scrollbar — make it visible on dark themes */
+[data-baseweb="menu"]::-webkit-scrollbar,
+[data-baseweb="popover"]::-webkit-scrollbar,
+[data-baseweb="virtual-list"]::-webkit-scrollbar {{
+  width:8px!important;height:8px!important;}}
+[data-baseweb="menu"]::-webkit-scrollbar-thumb,
+[data-baseweb="popover"]::-webkit-scrollbar-thumb,
+[data-baseweb="virtual-list"]::-webkit-scrollbar-thumb {{
+  background:{acc}66!important;
+  border-radius:var(--r-pill)!important;}}
+[data-baseweb="menu"]::-webkit-scrollbar-thumb:hover,
+[data-baseweb="popover"]::-webkit-scrollbar-thumb:hover,
+[data-baseweb="virtual-list"]::-webkit-scrollbar-thumb:hover {{
+  background:var(--la-acc)!important;}}
 </style>"""
 
