@@ -209,7 +209,7 @@ Multiple demand letters sent. No response. Client wants to sue.""",
 
     # Progress bar
     st.markdown(f"""
-<div style="background:#e5e7eb;border-radius:999px;height:16px;margin:0.5rem 0 1.5rem 0;">
+<div style="background:rgba(128,128,128,0.25);border-radius:999px;height:16px;margin:0.5rem 0 1.5rem 0;">
   <div style="width:{pct}%;background:#059669;height:16px;border-radius:999px;
   transition:width 0.5s;"></div>
 </div>""", unsafe_allow_html=True)
@@ -227,7 +227,8 @@ Multiple demand letters sent. No response. Client wants to sue.""",
                 st.markdown(f"- {esc(risk)}")
 
     st.markdown(f"""
-<div style="background:#f0fdf4;border-left:4px solid #059669;
+<div style="background:rgba(5,150,105,0.10);color:var(--la-text);
+border-left:4px solid #059669;
 padding:1rem;border-radius:0.5rem;margin-bottom:1.5rem;">
   <strong>⚡ Immediate Next Step:</strong> {esc(lifecycle.get('immediate_next_step', ''))}
 </div>""", unsafe_allow_html=True)

@@ -448,10 +448,11 @@ paid. Matter is before the Lagos State Rent Tribunal.""",
                     summary_text = scan_result.get("scan_summary", "")
                     if summary_text:
                         st.markdown(f"""
-<div style="background:#f0fdf4;border:2px solid #059669;border-radius:0.75rem;
+<div style="background:rgba(5,150,105,0.10);color:var(--la-text);
+border:2px solid #059669;border-radius:0.75rem;
 padding:1rem 1.4rem;margin-bottom:1.2rem;">
-  <strong style="color:#059669;">🎯 Scan Summary:</strong>
-  <span style="font-size:0.95rem;"> {esc(summary_text)}</span>
+  <strong style="color:#16a34a;">🎯 Scan Summary:</strong>
+  <span style="font-size:0.95rem;color:var(--la-text);"> {esc(summary_text)}</span>
 </div>""", unsafe_allow_html=True)
 
                     scan_items = scan_result.get("items", [])

@@ -1027,26 +1027,145 @@ div[class*="stAlert"]{{
 @media (prefers-reduced-motion:reduce){{
   *,*::before,*::after{{animation-duration:.01ms!important;transition-duration:.01ms!important;}}}}
 
-/* ── Mobile ── */
+/* ══════════════════════════════════════════════════════════════════════
+   MOBILE RESPONSIVENESS — Lawyers will use this app on their phones.
+   Streamlit's defaults are decent but multi-column dashboards, hero
+   banners, inline-flex headers and 6-metric stat rows all need help.
+   ══════════════════════════════════════════════════════════════════════ */
+
+/* Tablet & phone (≤ 768px) ---------------------------------------------- */
 @media (max-width:768px){{
   .stApp{{font-size:{mobile_font}px!important;}}
+
+  /* ── Page chrome: tighten padding so content gets more room ── */
+  .block-container,
+  [data-testid="stMainBlockContainer"],
+  .main .block-container{{
+    padding-left:.7rem!important;padding-right:.7rem!important;
+    padding-top:1rem!important;padding-bottom:2rem!important;
+    max-width:100%!important;}}
+
+  /* Hide Streamlit's native top toolbar / deploy badge to reclaim
+     vertical space — only on small screens; desktop keeps it. */
+  [data-testid="stToolbar"]{{display:none!important;}}
+
+  /* ── Hero banners (.hero used in legacy login; .lexi-hero in home) ── */
   .hero{{padding:1.4rem 1.3rem!important;border-radius:var(--r-lg)!important;}}
   .hero h1{{font-size:1.9rem!important;}}
   .hero::after{{font-size:6rem!important;}}
   .hero p{{font-size:.88rem!important;}}
+  .lexi-hero{{padding:1.5rem 1.3rem 1.3rem!important;}}
+  .lexi-hero h1{{font-size:2.1rem!important;}}
+  .lexi-hero p{{font-size:.85rem!important;}}
+  .lexi-hero-watermark{{font-size:5rem!important;right:.5rem!important;opacity:.05!important;}}
+
+  /* ── Page header ── */
   .page-header{{padding:1rem 1.2rem!important;}}
   .page-header h2{{font-size:1.1rem!important;}}
+  .page-header p{{font-size:.82rem!important;}}
+
+  /* ── Cards, response box, custom panels: tighter padding ── */
+  .stat-card{{padding:.85rem .7rem!important;}}
   .stat-card .stat-value{{font-size:1.45rem!important;}}
   .custom-card{{padding:.75rem .9rem!important;}}
-  .response-box{{padding:1rem!important;font-size:.88rem!important;}}
-  .stButton>button{{width:100%!important;min-height:2.4rem!important;}}
-  div[data-testid="stTabs"] button{{font-size:.72rem!important;padding:.35rem .5rem!important;}}
+  .response-box{{padding:1rem!important;font-size:.88rem!important;
+    line-height:1.65!important;}}
   .login-card{{padding:1.3rem 1rem!important;}}
-  [data-testid="stMetric"]{{padding:.7rem .9rem!important;}}}}
+  .tool-card{{padding:.7rem .9rem!important;}}
+  .history-item{{padding:.6rem .8rem!important;}}
+  [data-testid="stMetric"]{{padding:.7rem .9rem!important;}}
+
+  /* ── Buttons: full-width, large touch target (44px is iOS guideline) ── */
+  .stButton>button,
+  .stDownloadButton>button,
+  .stFormSubmitButton>button{{
+    width:100%!important;min-height:2.6rem!important;
+    font-size:.92rem!important;}}
+
+  /* Tabs: smaller font but keep horizontal scroll (already configured) */
+  div[data-testid="stTabs"] button{{
+    font-size:.74rem!important;padding:.4rem .6rem!important;}}
+
+  /* ── COLUMNS: stack to single column on phones ──
+     Streamlit's stHorizontalBlock should wrap by default, but we make
+     it explicit so 6-metric rows on the home page don't squeeze each
+     stat-card to 50px wide on a 360px screen. */
+  div[data-testid="stHorizontalBlock"]{{
+    flex-wrap:wrap!important;
+    gap:.5rem!important;
+    flex-direction:row!important;}}
+  div[data-testid="stHorizontalBlock"]>div[data-testid="stColumn"],
+  div[data-testid="stHorizontalBlock"]>div[data-testid="column"]{{
+    flex:1 1 100%!important;
+    width:100%!important;
+    min-width:100%!important;
+    max-width:100%!important;}}
+
+  /* ── Inline flex headers (verdict cards, conflict cards, simulator,
+     authority verification, beta-feedback inbox cards): wrap on small
+     screens so the right-side badges don't push off-screen. ── */
+  div[style*="display:flex"][style*="justify-content:space-between"]{{
+    flex-wrap:wrap!important;gap:.4rem!important;}}
+
+  /* ── Forms: tighter internal padding ── */
+  [data-testid="stForm"]{{padding:.8rem!important;}}
+
+  /* ── Expanders: tighter ── */
+  [data-testid="stExpander"] summary{{padding:.55rem .75rem!important;}}
+
+  /* ── Dataframes & HTML tables: scrollable horizontally on phones ── */
+  .stDataFrame,
+  [data-testid="stDataFrame"],
+  [data-testid="stTable"]{{
+    overflow-x:auto!important;-webkit-overflow-scrolling:touch!important;}}
+  /* HTML tables rendered with unsafe_allow_html (e.g. contract diff) */
+  .stMarkdown table,
+  .diff,
+  .diff table{{
+    display:block!important;overflow-x:auto!important;
+    -webkit-overflow-scrolling:touch!important;max-width:100%!important;
+    font-size:.7rem!important;}}
+
+  /* ── Selectbox / multiselect: full width and reasonable touch height ── */
+  .stSelectbox,.stMultiSelect{{width:100%!important;}}
+  .stTextInput input,.stTextArea textarea,
+  .stNumberInput input,.stDateInput input{{
+    font-size:16px!important;  /* Stops iOS Safari auto-zoom on focus */
+    min-height:2.4rem!important;}}
+
+  /* ── Radio + checkbox lists: better tap targets ── */
+  .stRadio>div>label,
+  .stCheckbox>label{{
+    padding:.4rem .3rem!important;line-height:1.45!important;}}
+
+  /* ── Sidebar uploader inside collapsed sidebar — already handled ── */
+
+  /* ── File-uploader dropzone: allow vertical stacking of label + button ── */
+  [data-testid="stFileUploaderDropzone"]{{
+    flex-direction:column!important;align-items:stretch!important;
+    text-align:center!important;}}
+}}
+
+/* Phone (≤ 480px) -- extra tightening for small handsets ---------------- */
 @media (max-width:480px){{
-  .hero h1{{font-size:1.6rem!important;}}
-  .stat-card .stat-value{{font-size:1.15rem!important;}}
-  .badge{{font-size:.64rem!important;}}}}
+  .block-container,
+  [data-testid="stMainBlockContainer"]{{
+    padding-left:.55rem!important;padding-right:.55rem!important;}}
+
+  .hero h1,.lexi-hero h1{{font-size:1.7rem!important;}}
+  .lexi-hero{{padding:1.3rem 1.1rem 1.1rem!important;}}
+  .lexi-hero-watermark{{font-size:3.8rem!important;}}
+  .page-header h2{{font-size:1rem!important;}}
+  .stat-card .stat-value{{font-size:1.2rem!important;}}
+  .stat-card .stat-label{{font-size:.66rem!important;}}
+  .response-box{{padding:.85rem!important;font-size:.85rem!important;}}
+  .badge{{font-size:.64rem!important;padding:.15rem .45rem!important;}}
+  .custom-card{{padding:.65rem .8rem!important;}}
+  div[data-testid="stTabs"] button{{font-size:.7rem!important;padding:.35rem .45rem!important;}}
+  /* Streamlit metric value: prevent overflow */
+  [data-testid="stMetricValue"]{{font-size:1.3rem!important;}}
+  [data-testid="stMetricLabel"] p{{font-size:.7rem!important;}}
+}}
 
 /* ── Streamlit 1.38+ structural fixes ── */
 /* Fix column gap and alignment */

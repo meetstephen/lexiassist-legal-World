@@ -1,6 +1,6 @@
 [project]
 name = "lexiassist"
-version = "9.1.1"
+version = "9.1.2"
 description = "LexiAssist — Elite AI Legal Workflow Engine for Nigerian Lawyers"
 requires-python = ">=3.12"
 

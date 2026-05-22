@@ -463,29 +463,30 @@ def render_confidence_panel(scores: dict) -> str:
     overall = scores.get("overall", 0)
 
     if overall >= 8:
-        bar_color = "#059669"; label = "HIGH CONFIDENCE"; bg = "#f0fdf4"
+        bar_color = "#16a34a"; label = "HIGH CONFIDENCE"; bg = "rgba(5,150,105,0.10)"
     elif overall >= 6:
-        bar_color = "#d97706"; label = "MODERATE CONFIDENCE"; bg = "#fffbeb"
+        bar_color = "#f59e0b"; label = "MODERATE CONFIDENCE"; bg = "rgba(245,158,11,0.10)"
     elif overall >= 4:
-        bar_color = "#ea580c"; label = "LOW CONFIDENCE — VERIFY"; bg = "#fff7ed"
+        bar_color = "#fb923c"; label = "LOW CONFIDENCE — VERIFY"; bg = "rgba(234,88,12,0.10)"
     else:
-        bar_color = "#dc2626"; label = "VERY LOW — DO NOT RELY"; bg = "#fef2f2"
+        bar_color = "#ef4444"; label = "VERY LOW — DO NOT RELY"; bg = "rgba(220,38,38,0.10)"
 
     def axis_bar(name: str, score: int) -> str:
-        ax_color = "#059669" if score >= 7 else ("#d97706" if score >= 5 else "#dc2626")
+        ax_color = "#16a34a" if score >= 7 else ("#f59e0b" if score >= 5 else "#ef4444")
         return f"""
 <div style="margin-bottom:0.45rem;">
   <div style="display:flex;justify-content:space-between;font-size:0.78rem;margin-bottom:2px;">
     <span style="color:var(--la-text2);font-weight:500;">{esc(name)}</span>
     <span style="color:{ax_color};font-weight:700;">{score}/10</span>
   </div>
-  <div style="background:#e5e7eb;border-radius:999px;height:6px;">
+  <div style="background:rgba(128,128,128,0.25);border-radius:999px;height:6px;">
     <div style="width:{score*10}%;background:{ax_color};height:6px;border-radius:999px;"></div>
   </div>
 </div>"""
 
     return f"""
-<div style="background:{bg};border:1.5px solid {bar_color};border-radius:0.7rem;
+<div style="background:{bg};color:var(--la-text);
+border:1.5px solid {bar_color};border-radius:0.7rem;
 padding:1rem 1.2rem;margin:1rem 0;">
   <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:0.7rem;">
     <strong style="color:{bar_color};">📊 AI Confidence Score</strong>

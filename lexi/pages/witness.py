@@ -152,33 +152,37 @@ with the defendant.""",
 
                 with s1_tab:
                     st.markdown(f"""
-<div style="background:#f0fdf4;border-left:4px solid #059669;border-radius:0.75rem;
+<div style="background:rgba(5,150,105,0.10);color:var(--la-text);
+border-left:4px solid #059669;border-radius:0.75rem;
 padding:1.5rem;line-height:1.8;">
-  <h4 style="margin:0 0 1rem 0;color:#059669;">📋 Examination-in-Chief — {esc(role_label)}</h4>
-  <div style="white-space:pre-wrap;font-size:0.95rem;">{esc(sec1)}</div>
+  <h4 style="margin:0 0 1rem 0;color:#16a34a;">📋 Examination-in-Chief — {esc(role_label)}</h4>
+  <div style="white-space:pre-wrap;font-size:0.95rem;color:var(--la-text);">{esc(sec1)}</div>
 </div>""", unsafe_allow_html=True)
 
                 with s2_tab:
                     st.markdown(f"""
-<div style="background:#fef2f2;border-left:4px solid #dc2626;border-radius:0.75rem;
+<div style="background:rgba(220,38,38,0.10);color:var(--la-text);
+border-left:4px solid #dc2626;border-radius:0.75rem;
 padding:1.5rem;line-height:1.8;">
-  <h4 style="margin:0 0 1rem 0;color:#dc2626;">⚔️ Cross-Examination Risks</h4>
-  <div style="white-space:pre-wrap;font-size:0.95rem;">{esc(sec2)}</div>
+  <h4 style="margin:0 0 1rem 0;color:#ef4444;">⚔️ Cross-Examination Risks</h4>
+  <div style="white-space:pre-wrap;font-size:0.95rem;color:var(--la-text);">{esc(sec2)}</div>
 </div>""", unsafe_allow_html=True)
 
                 with s3_tab:
                     st.markdown(f"""
-<div style="background:#fffbeb;border-left:4px solid #f59e0b;border-radius:0.75rem;
+<div style="background:rgba(245,158,11,0.10);color:var(--la-text);
+border-left:4px solid #f59e0b;border-radius:0.75rem;
 padding:1.5rem;line-height:1.8;">
-  <h4 style="margin:0 0 1rem 0;color:#d97706;">🧭 Coaching Notes for the Witness</h4>
-  <div style="white-space:pre-wrap;font-size:0.95rem;">{esc(sec3)}</div>
+  <h4 style="margin:0 0 1rem 0;color:#f59e0b;">🧭 Coaching Notes for the Witness</h4>
+  <div style="white-space:pre-wrap;font-size:0.95rem;color:var(--la-text);">{esc(sec3)}</div>
 </div>""", unsafe_allow_html=True)
 
                 with s4_tab:
                     st.markdown("""
-<div style="background:#eff6ff;border-left:4px solid #3b82f6;border-radius:0.6rem;
+<div style="background:rgba(59,130,246,0.10);color:var(--la-text);
+border-left:4px solid #3b82f6;border-radius:0.6rem;
 padding:0.9rem 1.2rem;margin-bottom:1rem;">
-  <strong style="color:#1d4ed8;">↩️ Re-Examination Questions</strong><br>
+  <strong style="color:#3b82f6;">↩️ Re-Examination Questions</strong><br>
   <small style="color:var(--la-text2);">Generated from the cross-examination attack points above.
   Re-examination is limited to matters arising from cross-examination (Evidence Act 2011, s.215).</small>
 </div>""", unsafe_allow_html=True)
@@ -201,7 +205,8 @@ padding:0.9rem 1.2rem;margin-bottom:1rem;">
                             st.rerun()
                     else:
                         st.markdown(f"""
-<div style="background:#eff6ff;border-left:4px solid #3b82f6;border-radius:0.75rem;
+<div style="background:rgba(59,130,246,0.10);color:var(--la-text);
+border-left:4px solid #3b82f6;border-radius:0.75rem;
 padding:1.5rem;line-height:1.8;white-space:pre-wrap;font-size:0.95rem;">
 {esc(reexam_result)}</div>""", unsafe_allow_html=True)
                         re1, re2 = st.columns(2)
@@ -301,15 +306,18 @@ padding:1.5rem;line-height:1.8;white-space:pre-wrap;font-size:0.95rem;">
                         lt1, lt2, lt3 = st.tabs(["📋 Exam-in-Chief", "⚔️ Cross-Exam Risks", "🧭 Coaching"])
                         with lt1:
                             st.markdown(f'<div style="white-space:pre-wrap;font-size:0.9rem;'
-                                        f'background:#f0fdf4;padding:1rem;border-radius:0.5rem;">'
+                                        f'background:rgba(5,150,105,0.10);color:var(--la-text);'
+                                        f'padding:1rem;border-radius:0.5rem;">'
                                         f'{esc(log_sec1)}</div>', unsafe_allow_html=True)
                         with lt2:
                             st.markdown(f'<div style="white-space:pre-wrap;font-size:0.9rem;'
-                                        f'background:#fef2f2;padding:1rem;border-radius:0.5rem;">'
+                                        f'background:rgba(220,38,38,0.10);color:var(--la-text);'
+                                        f'padding:1rem;border-radius:0.5rem;">'
                                         f'{esc(log_sec2)}</div>', unsafe_allow_html=True)
                         with lt3:
                             st.markdown(f'<div style="white-space:pre-wrap;font-size:0.9rem;'
-                                        f'background:#fffbeb;padding:1rem;border-radius:0.5rem;">'
+                                        f'background:rgba(245,158,11,0.10);color:var(--la-text);'
+                                        f'padding:1rem;border-radius:0.5rem;">'
                                         f'{esc(log_sec3)}</div>', unsafe_allow_html=True)
                     else:
                         st.markdown(f'<div class="response-box" style="font-size:0.88rem;">'
