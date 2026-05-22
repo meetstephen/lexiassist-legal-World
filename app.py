@@ -86,6 +86,7 @@ from lexi.pages.settlement import render_settlement_advisor
 from lexi.pages.due_diligence import render_due_diligence
 from lexi.pages.user_management import render_user_management
 from lexi.pages.legal import render_privacy_policy, render_terms_of_service
+from lexi.pages.help import render_help
 
 
 # ═══════════════════════════════════════════════════════
@@ -226,6 +227,55 @@ def main():
 
         _maybe_send_hearing_reminders()
 
+    # ── Firm-wide admin announcement banner (set in Profile → Firm Admin) ──
+    # Shows above page content until: admin clears it, the expiry date passes,
+    # or the user dismisses it (session-only). Three colour levels: info, success,
+    # warning. Markdown is escaped — no HTML injection from the announcement body.
+    try:
+        _ann = db.get_announcement() or {}
+        _ann_text = (_ann.get("text") or "").strip()
+        _ann_active = bool(_ann.get("active", False))
+        _ann_expires = (_ann.get("expires") or "").strip()
+        _ann_id = (_ann.get("updated_at") or "")  # acts as a stable dismiss key
+
+        # Auto-hide if expired (compare ISO date strings — lexicographic works)
+        if _ann_expires and _ann_expires < datetime.now().date().isoformat():
+            _ann_active = False
+
+        # Per-session dismissal
+        _dismissed = st.session_state.get("_ann_dismissed_id", "") == _ann_id
+
+        if _ann_text and _ann_active and not _dismissed:
+            _level = (_ann.get("level") or "info").lower()
+            _level_meta = {
+                "info":    ("#3b82f6", "ℹ️"),
+                "success": ("#16a34a", "📣"),
+                "warning": ("#f59e0b", "⚠️"),
+            }.get(_level, ("#3b82f6", "ℹ️"))
+            _accent, _icon = _level_meta
+
+            ac1, ac2 = st.columns([20, 1], gap="small")
+            with ac1:
+                st.markdown(
+                    f'<div style="background:var(--la-card);'
+                    f'border:1px solid var(--la-border);'
+                    f'border-left:4px solid {_accent};'
+                    f'border-radius:8px;padding:0.55rem 1rem;'
+                    f'margin-bottom:0.8rem;font-size:0.86rem;color:var(--la-text);">'
+                    f'<strong style="color:{_accent};">{_icon} Announcement:</strong> '
+                    f'{esc(_ann_text)}'
+                    f'</div>',
+                    unsafe_allow_html=True,
+                )
+            with ac2:
+                if st.button("✖", key=f"ann_dismiss_{_ann_id or 'x'}",
+                             help="Dismiss for this session"):
+                    st.session_state["_ann_dismissed_id"] = _ann_id
+                    st.rerun()
+    except Exception:
+        # Never let announcement rendering break the app — fail silent.
+        pass
+
     # ── Keep-alive: client-side ping while tab is open ──────────────────
     # Strategy: Two layers prevent Streamlit Cloud from sleeping the app.
     # 1. This JS fires a GET to /?healthcheck=1 every 4 min while any user
@@ -297,6 +347,7 @@ def main():
         ],
         "👤 Account": [
             ("👤 Profile",         render_profile),
+            ("❓ Help",            render_help),
             ("📜 Privacy",         render_privacy_policy),
             ("📋 Terms",           render_terms_of_service),
         ],

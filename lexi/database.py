@@ -824,6 +824,47 @@ class Database:
         row = cur.fetchone()
         return row[0] if row else 0
     
+    # ── Firm-wide Admin Announcement ────────────────────────────────────
+    # Stored in kv_store under the key 'firm_announcement' as a single-item
+    # list. Schema:
+    #   {
+    #     "text":     str,                         # announcement body (markdown OK)
+    #     "level":    "info" | "warning" | "success",
+    #     "expires":  ISO date 'YYYY-MM-DD',       # auto-hides after this date
+    #     "active":   bool,                        # admin can toggle off without deleting
+    #     "updated_by": str,                       # username
+    #     "updated_at": ISO datetime,
+    #   }
+    # An announcement is shown to all users iff active==True and date.today()
+    # ≤ expires. Users can dismiss it for the current Streamlit session via
+    # session_state; admin can clear it permanently by setting active=False.
+    def set_announcement(self, data: dict) -> bool:
+        """Save the firm-wide announcement. Returns True on success."""
+        try:
+            self._save_list_raw("firm_announcement", [data])
+            return True
+        except Exception as e:
+            logger.error(f"set_announcement failed: {e}")
+            return False
+
+    def get_announcement(self) -> dict:
+        """Return current firm-wide announcement dict, or empty dict if none."""
+        try:
+            rows = self._load_list_raw("firm_announcement") or []
+            if rows and isinstance(rows, list) and isinstance(rows[0], dict):
+                return rows[0]
+        except Exception as e:
+            logger.warning(f"get_announcement failed: {e}")
+        return {}
+
+    def clear_announcement(self) -> bool:
+        """Permanently clear the firm-wide announcement."""
+        try:
+            self._save_list_raw("firm_announcement", [])
+            return True
+        except Exception:
+            return False
+
     def cleanup_expired_sessions(self):
         """Remove expired tokens (call periodically)."""
         try:
