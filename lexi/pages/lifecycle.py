@@ -20,23 +20,7 @@ from ..helpers import *      # noqa: F401, F403
 # ═══════════════════════════════════════════════════════
 # PAGE: MATTER LIFECYCLE AUTOMATION
 # ═══════════════════════════════════════════════════════
-CASE_TYPE_OPTIONS = [
-    "Breach of Contract",
-    "Land / Property Dispute",
-    "Criminal Defence",
-    "Employment / Wrongful Termination",
-    "Fundamental Rights Enforcement",
-    "Debt Recovery",
-    "Matrimonial / Family Law",
-    "Company / Commercial Dispute",
-    "Defamation",
-    "Personal Injury / Negligence",
-    "Election Petition",
-    "Judicial Review / Certiorari",
-    "Tenancy / Landlord-Tenant",
-    "Probate / Estate Administration",
-    "Other (describe below)",
-]
+# CASE_TYPE_OPTIONS imported from constants via barrel import above
 
 LIFECYCLE_PROMPT = """
 You are a senior Nigerian litigation lawyer. Generate a complete matter lifecycle workflow

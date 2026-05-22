@@ -1075,5 +1075,127 @@ div[data-testid="stTabs"] [role="tablist"] button{{
 iframe[height="0"],iframe[style*="height: 0"]{{
   display:none!important;height:0!important;min-height:0!important;
   padding:0!important;margin:0!important;border:none!important;}}
+
+/* ══════════════════════════════════════════════════════════════════════
+   FIX: White background covering text — force all container elements
+   to use theme background instead of Streamlit's default white
+   ══════════════════════════════════════════════════════════════════════ */
+
+/* Main app container and all block containers */
+.stApp > header,
+.stApp [data-testid="stHeader"],
+.stApp > div > header {{
+  background:transparent!important;
+  background-color:transparent!important;}}
+
+/* Block containers that Streamlit wraps content in */
+.block-container,
+[data-testid="stMainBlockContainer"],
+[data-testid="block-container"],
+.main .block-container {{
+  background:transparent!important;
+  background-color:transparent!important;}}
+
+/* Form containers — often render with white bg */
+[data-testid="stForm"],
+.stForm,
+form[data-testid="stForm"] {{
+  background-color:var(--la-card)!important;
+  border:1px solid var(--la-border)!important;
+  border-radius:var(--r-lg)!important;
+  padding:1rem!important;}}
+
+/* Popover / dialog / modal backgrounds */
+[data-testid="stPopover"],
+[data-baseweb="popover"],
+[role="dialog"],
+[data-baseweb="modal"] {{
+  background-color:var(--la-card)!important;}}
+[data-baseweb="popover"] *,
+[role="dialog"] p,
+[role="dialog"] span {{
+  color:var(--la-text)!important;}}
+
+/* Toast notifications — prevent white flash */
+[data-testid="stToast"],
+[data-testid="toastContainer"],
+div[data-testid="stToast"] > div {{
+  background-color:var(--la-card)!important;
+  border:1px solid var(--la-border)!important;
+  color:var(--la-text)!important;}}
+[data-testid="stToast"] p,
+[data-testid="stToast"] span {{
+  color:var(--la-text)!important;}}
+
+/* Streamlit's main block and element containers — override white */
+[data-testid="stVerticalBlock"],
+[data-testid="element-container"],
+[data-testid="stVerticalBlockBorderWrapper"] {{
+  background:transparent!important;}}
+
+/* Column backgrounds */
+[data-testid="stColumn"],
+[data-testid="column"] {{
+  background:transparent!important;}}
+
+/* Markdown text inside all containers */
+[data-testid="stMarkdownContainer"],
+[data-testid="stMarkdownContainer"] p,
+[data-testid="stMarkdownContainer"] li,
+[data-testid="stMarkdownContainer"] span,
+[data-testid="stMarkdownContainer"] td,
+[data-testid="stMarkdownContainer"] th {{
+  color:var(--la-text)!important;
+  background-color:transparent!important;}}
+
+/* Code blocks inside markdown — ensure readable */
+[data-testid="stMarkdownContainer"] code {{
+  background-color:var(--la-bg2)!important;
+  color:var(--la-text)!important;
+  padding:0.15rem 0.4rem!important;
+  border-radius:var(--r-xs)!important;}}
+
+/* Inline HTML rendered with unsafe_allow_html — fix text in styled divs */
+.stMarkdown div,
+.stMarkdown table,
+.stMarkdown table td,
+.stMarkdown table th {{
+  color:var(--la-text)!important;}}
+
+/* Strong/bold text visibility */
+strong, b, .stMarkdown strong, .stMarkdown b {{
+  color:var(--la-text)!important;}}
+
+/* Fix white overlay on the main content area top */
+.stApp > div:first-child {{
+  background:transparent!important;}}
+
+/* Spinner overlay background */
+[data-testid="stSpinner"],
+.stSpinner {{
+  background:transparent!important;}}
+[data-testid="stSpinner"] span,
+.stSpinner span {{
+  color:var(--la-text)!important;}}
+
+/* Fix white band at top (deploy button / Streamlit branding) */
+[data-testid="stToolbar"],
+[data-testid="stStatusWidget"] {{
+  background:transparent!important;}}
+
+/* Bottom fixed container (if present) */
+[data-testid="stBottomBlockContainer"] {{
+  background-color:var(--la-bg)!important;
+  border-top:1px solid var(--la-border)!important;}}
+
+/* Link colors for visibility */
+a, .stMarkdown a {{
+  color:var(--la-acc)!important;}}
+a:hover, .stMarkdown a:hover {{
+  color:var(--la-acc2)!important;}}
+
+/* Ensure divider/hr is visible */
+hr, .stMarkdown hr, [data-testid="stSeparator"] {{
+  border-color:var(--la-border)!important;}}
 </style>"""
 

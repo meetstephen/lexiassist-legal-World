@@ -2,28 +2,37 @@ name: Keep Streamlit App Awake
 
 on:
   schedule:
-    # Every 6 hours — lightweight safety net to prevent deep cold sleep.
-    # The in-browser JS ping (app.py) handles keep-alive while any user tab
-    # is open (fires every 7 min). This workflow is only needed for the case
-    # where zero users have the app open for extended periods.
-    - cron: '0 */6 * * *'
+    # Every 14 minutes — matches Streamlit Cloud's ~15-minute idle timeout.
+    # This is a gentle, non-aggressive keep-alive that prevents sleeping
+    # without overloading resources. A simple GET to the healthcheck endpoint
+    # counts as activity for Streamlit Cloud.
+    - cron: '*/14 * * * *'
   workflow_dispatch: # Allow manual trigger
 
 jobs:
   ping:
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 2
     steps:
       - name: Ping healthcheck endpoint
         run: |
           URL="${APP_URL}/?healthcheck=1"
           echo "Pinging: $URL"
-          STATUS=$(curl -s -o /dev/null -w "%{http_code}" --max-time 30 "$URL" || echo "000")
-          echo "HTTP Status: $STATUS"
-          if [ "$STATUS" = "200" ] || [ "$STATUS" = "000" ]; then
-            echo "✅ App pinged successfully (or cold-starting)"
-          else
-            echo "⚠️ Unexpected status $STATUS — app may need attention"
-          fi
+          # Try up to 3 times with 10 second intervals
+          for i in 1 2 3; do
+            STATUS=$(curl -s -o /dev/null -w "%{http_code}" --max-time 30 "$URL" 2>/dev/null || echo "000")
+            echo "Attempt $i — HTTP Status: $STATUS"
+            if [ "$STATUS" = "200" ]; then
+              echo "✅ App is awake and responding"
+              exit 0
+            fi
+            if [ "$i" -lt 3 ]; then
+              echo "Waiting 10s before retry..."
+              sleep 10
+            fi
+          done
+          # Even if all retries fail, exit 0 — the app might be cold-starting
+          echo "⚠️ App did not respond after 3 attempts — may be cold-starting"
+          exit 0
         env:
           APP_URL: ${{ secrets.APP_URL }}

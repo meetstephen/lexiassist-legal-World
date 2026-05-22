@@ -1286,8 +1286,8 @@ def _render_tools_authority() -> None:
                 f'<strong>{icon} {esc(r.get("authority",""))}</strong>'
                 f' <span style="font-size:0.75rem;color:{colour};font-weight:600;">'
                 f'[{esc(r.get("type",""))}] — {esc(status)}</span>'
-                f'{"<br><span style=\'color:#dc2626;font-size:0.82rem;\'>⚠️ " + esc(r.get("problem","")) + "</span>" if r.get("problem") else ""}'
-                f'{"<br><span style=\'color:#16a34a;font-size:0.82rem;\'>💡 " + esc(r.get("fix","")) + "</span>" if r.get("fix") else ""}'
+                + (f'<br><span style="color:#dc2626;font-size:0.82rem;">\u26a0\ufe0f {esc(r.get("problem",""))}</span>' if r.get("problem") else '')
+                + (f'<br><span style="color:#16a34a;font-size:0.82rem;">\U0001f4a1 {esc(r.get("fix",""))}</span>' if r.get("fix") else '') +
                 f'</div>'
                 f'<div style="font-size:0.75rem;color:var(--la-text2);white-space:nowrap;">'
                 f'Confidence: <strong style="color:{colour};">{conf}%</strong>'
