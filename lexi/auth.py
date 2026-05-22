@@ -421,9 +421,13 @@ Position-taking &middot; Strategy-driven &middot; Risk-ranked &middot; Litigator
         if tab_reg is not None:
             with tab_reg: render_register_form("reg_self")
         st.markdown("</div>", unsafe_allow_html=True)
+
+        # ── Forgot Password? Self-service recovery flow ──
+        render_forgot_password_section()
+
         st.markdown(
             "<div style='text-align:center;margin-top:1.2rem;color:var(--la-text2);font-size:0.82rem;'>"
-            "Contact your firm administrator to create an account.</div>",
+            "Need a new account? Contact your firm administrator.</div>",
             unsafe_allow_html=True)
 
 
@@ -649,3 +653,400 @@ def render_setup_screen():
     st.caption("💡 **Tip:** To skip this screen permanently, add to `.streamlit/secrets.toml`:")
     st.code('GEMINI_API_KEY = "your-key-here"\nGEMINI_MODEL = "gemini-2.5-flash"\n# ALLOW_REGISTRATION = "true"  # let users self-register', language="toml")
 
+
+
+
+# ═══════════════════════════════════════════════════════
+# PASSWORD RECOVERY (self-service)
+# ═══════════════════════════════════════════════════════
+# Two-stage flow:
+#   Stage 1 — user enters their username; if found AND has email AND any
+#             admin has SMTP configured, a 6-digit one-time code is sent
+#             to the user's email. The code's hash is stored in kv_store
+#             with a 15-minute expiry.
+#   Stage 2 — user enters the code + new password; on success the password
+#             is updated and the code is consumed.
+#
+# Falls back gracefully when SMTP is not available — instructs the user
+# to ask their firm admin (who can reset passwords from User Management
+# → 🔑 Reset Password).
+#
+# Rate-limit: max 3 reset requests per username per hour to prevent abuse.
+
+
+def _generate_reset_code() -> str:
+    """Generate a 6-digit numeric code (e.g. '482910')."""
+    import secrets as _sec
+    return f"{_sec.randbelow(900_000) + 100_000:06d}"
+
+
+def _hash_reset_code(code: str, salt: str) -> str:
+    """Salted SHA-256 — same scheme as session tokens. We never store the
+    plaintext code so even DB compromise can't be used to log in."""
+    import hashlib as _h
+    return _h.sha256(f"{salt}:{code}".encode()).hexdigest()
+
+
+def _find_smtp_sender() -> tuple[str, str, str] | tuple[None, None, None]:
+    """Return (smtp_user, smtp_pass_plaintext, sender_email) for the first
+    admin user whose profile has SMTP configured. Returns (None, None, None)
+    if no admin has set up SMTP — caller must show fallback message.
+
+    Rationale: per-user SMTP lives in profile['notif_smtp_user'] /
+    notif_smtp_pass / notif_email. We pick any admin's config as the
+    firm-wide sender because the admin already trusts these credentials
+    for hearing-reminder emails.
+    """
+    db = get_db()
+    try:
+        admins = [u for u in db.list_users() if u.get("role") == "admin"]
+        for adm in admins:
+            uid = adm.get("user_id")
+            if not uid:
+                continue
+            # Profile is per-user — load this admin's profile directly
+            prof_rows = db._load_list_raw(f"u:{uid}:profile") or []
+            if not prof_rows or not isinstance(prof_rows, list):
+                continue
+            prof = prof_rows[0] if isinstance(prof_rows[0], dict) else {}
+            smtp_user = (prof.get("notif_smtp_user") or "").strip()
+            smtp_pass_enc = (prof.get("notif_smtp_pass") or "").strip()
+            if smtp_user and smtp_pass_enc:
+                smtp_pass = decrypt_secret(smtp_pass_enc)
+                if smtp_pass:
+                    return smtp_user, smtp_pass, smtp_user
+    except Exception as e:
+        logger.warning(f"Could not look up admin SMTP config: {e}")
+    return None, None, None
+
+
+def _send_reset_email(to_email: str, username: str, code: str,
+                      smtp_user: str, smtp_pass: str) -> bool:
+    """Send the password-reset code via Gmail SMTP. Returns True on success."""
+    try:
+        import smtplib as _smtplib
+        from email.mime.multipart import MIMEMultipart as _MM
+        from email.mime.text import MIMEText as _MT
+
+        msg = _MM()
+        msg["From"] = smtp_user
+        msg["To"] = to_email
+        msg["Subject"] = "🔒 LexiAssist — Password Reset Code"
+
+        body = (
+            f"Hello,\n\n"
+            f"A password reset has been requested for the LexiAssist account "
+            f"@{username}.\n\n"
+            f"Your one-time reset code is:\n\n"
+            f"        {code}\n\n"
+            f"This code expires in 15 minutes and can only be used once.\n\n"
+            f"If you did not request a password reset, please ignore this email "
+            f"and notify your firm administrator — your account remains secure.\n\n"
+            f"---\n"
+            f"LexiAssist · Elite AI Legal Engine for Nigerian Lawyers\n"
+            f"Do not reply to this email."
+        )
+        msg.attach(_MT(body, "plain"))
+
+        with _smtplib.SMTP_SSL("smtp.gmail.com", 465) as server:
+            server.login(smtp_user, smtp_pass)
+            server.sendmail(smtp_user, to_email, msg.as_string())
+        return True
+    except Exception as e:
+        logger.warning(f"Password-reset email failed: {e}")
+        return False
+
+
+def _mask_email(email: str) -> str:
+    """Mask an email for display: 'amaka@example.com' → 'a****@example.com'."""
+    if not email or "@" not in email:
+        return email
+    local, _, domain = email.partition("@")
+    if len(local) <= 1:
+        return f"*@{domain}"
+    return f"{local[0]}{'*' * (len(local) - 1)}@{domain}"
+
+
+def _request_password_reset(username: str) -> dict:
+    """Initiate a password-reset request. Returns a dict with keys:
+      - ok: bool
+      - message: str (user-facing)
+      - email_masked: str (only when ok=True)
+      - admin_contact: str (only when ok=False due to no SMTP)
+    """
+    import time as _time
+    import secrets as _sec
+
+    db = get_db()
+    uname_clean = username.strip().lower()
+    if not uname_clean:
+        return {"ok": False, "message": "Please enter a username."}
+
+    # Rate limit: max 3 requests per username per hour
+    rl_key = f"pwreset_rl:{uname_clean}"
+    rl = db._load_list_raw(rl_key) or []
+    rl_info = rl[0] if rl else {"count": 0, "first_request": _time.time()}
+    # Reset counter after 1 hour
+    if _time.time() - rl_info.get("first_request", 0) > 3600:
+        rl_info = {"count": 0, "first_request": _time.time()}
+    if rl_info.get("count", 0) >= 3:
+        wait_min = int((rl_info["first_request"] + 3600 - _time.time()) / 60) + 1
+        return {
+            "ok": False,
+            "message": f"Too many reset requests. Try again in {wait_min} minute(s) "
+                       f"or contact your firm administrator.",
+        }
+    rl_info["count"] = rl_info.get("count", 0) + 1
+    db._save_list_raw(rl_key, [rl_info])
+
+    user = db.get_user_by_username(uname_clean)
+    if not user:
+        # Don't leak whether the username exists — say the same thing either way
+        db.append_audit("PWRESET_UNKNOWN_USER", f"attempted_user={uname_clean[:60]}")
+        return {
+            "ok": False,
+            "message": "If that username exists, instructions have been sent. "
+                       "If you don't receive an email, contact your firm administrator.",
+        }
+
+    user_email = (user.get("email") or "").strip()
+    if not user_email or "@" not in user_email:
+        # Find admin contact for fallback
+        admins = [u for u in db.list_users() if u.get("role") == "admin"]
+        admin_contact = ""
+        for adm in admins:
+            ae = (adm.get("email") or "").strip()
+            if ae:
+                admin_contact = f"{adm.get('lawyer_name', '') or adm.get('username','admin')} <{ae}>"
+                break
+        db.append_audit("PWRESET_NO_EMAIL", f"user={uname_clean}")
+        return {
+            "ok": False,
+            "message": "Your account has no email on file, so a self-service reset "
+                       "is not possible. Please contact your firm administrator to "
+                       "reset your password.",
+            "admin_contact": admin_contact,
+        }
+
+    # Look up SMTP — needed to actually send the code
+    smtp_user, smtp_pass, _sender = _find_smtp_sender()
+    if not smtp_user or not smtp_pass:
+        admins = [u for u in db.list_users() if u.get("role") == "admin"]
+        admin_contact = ""
+        for adm in admins:
+            ae = (adm.get("email") or "").strip()
+            if ae:
+                admin_contact = f"{adm.get('lawyer_name', '') or adm.get('username','admin')} <{ae}>"
+                break
+        db.append_audit("PWRESET_NO_SMTP", f"user={uname_clean}")
+        return {
+            "ok": False,
+            "message": "Self-service password reset is not available because "
+                       "your firm has not configured email notifications yet. "
+                       "Please contact your firm administrator — they can reset "
+                       "your password from the User Management page.",
+            "admin_contact": admin_contact,
+        }
+
+    # Generate code, salt, and hash; store with 15-min expiry
+    code = _generate_reset_code()
+    salt = _sec.token_hex(16)
+    code_hash = _hash_reset_code(code, salt)
+    expires_at = _time.time() + 15 * 60  # 15 minutes
+
+    reset_record = {
+        "user_id": user["user_id"],
+        "username": uname_clean,
+        "code_hash": code_hash,
+        "salt": salt,
+        "expires_at": expires_at,
+        "attempts": 0,
+        "created_at": _time.time(),
+    }
+    db._save_list_raw(f"pwreset:{uname_clean}", [reset_record])
+
+    # Send the email
+    sent = _send_reset_email(user_email, uname_clean, code, smtp_user, smtp_pass)
+    if not sent:
+        db.append_audit("PWRESET_EMAIL_FAILED", f"user={uname_clean}")
+        return {
+            "ok": False,
+            "message": "We could not send the reset email at this time. "
+                       "Please try again in a few minutes or contact your firm administrator.",
+        }
+
+    db.append_audit("PWRESET_REQUESTED", f"user={uname_clean}")
+    return {
+        "ok": True,
+        "message": "A 6-digit reset code has been sent to your email. "
+                   "It expires in 15 minutes.",
+        "email_masked": _mask_email(user_email),
+    }
+
+
+def _verify_reset_code(username: str, code: str, new_password: str) -> dict:
+    """Verify the reset code and update the password. Returns {ok, message}."""
+    import time as _time
+    import hmac as _hmac
+
+    db = get_db()
+    uname_clean = username.strip().lower()
+    code_clean = code.strip()
+    if not uname_clean or not code_clean:
+        return {"ok": False, "message": "Please enter both username and code."}
+    if len(new_password) < 6:
+        return {"ok": False, "message": "New password must be at least 6 characters."}
+
+    rec_list = db._load_list_raw(f"pwreset:{uname_clean}") or []
+    if not rec_list:
+        return {
+            "ok": False,
+            "message": "No active reset request for this username. "
+                       "Request a new code first.",
+        }
+    rec = rec_list[0] if isinstance(rec_list, list) and rec_list else {}
+
+    # Expiry check
+    if _time.time() > float(rec.get("expires_at", 0)):
+        db._save_list_raw(f"pwreset:{uname_clean}", [])
+        return {
+            "ok": False,
+            "message": "Your reset code has expired. Request a new one.",
+        }
+
+    # Attempt limit (5 wrong codes per request)
+    attempts = int(rec.get("attempts", 0))
+    if attempts >= 5:
+        db._save_list_raw(f"pwreset:{uname_clean}", [])
+        db.append_audit("PWRESET_TOO_MANY_ATTEMPTS", f"user={uname_clean}")
+        return {
+            "ok": False,
+            "message": "Too many incorrect attempts. The reset request has been "
+                       "cancelled. Request a new code if you still need to reset.",
+        }
+
+    # Constant-time code comparison
+    expected = _hash_reset_code(code_clean, rec.get("salt", ""))
+    if not _hmac.compare_digest(expected, rec.get("code_hash", "")):
+        rec["attempts"] = attempts + 1
+        db._save_list_raw(f"pwreset:{uname_clean}", [rec])
+        remaining = 5 - rec["attempts"]
+        return {
+            "ok": False,
+            "message": f"Incorrect code. {remaining} attempt(s) remaining.",
+        }
+
+    # Code matches — update password, consume the reset record, clear lockout
+    user_id = rec.get("user_id", "")
+    if not user_id:
+        return {"ok": False, "message": "Reset request is malformed. Try again."}
+
+    db.update_user(user_id, {"password_hash": hash_password(new_password)})
+    db._save_list_raw(f"pwreset:{uname_clean}", [])
+    # Clear any login lockout so the user can sign in immediately
+    db._save_list_raw(f"login_lock:{uname_clean}", [])
+    db.append_audit("PWRESET_SUCCESS", f"user={uname_clean}")
+
+    return {
+        "ok": True,
+        "message": "Password reset successful. You can now sign in with your new password.",
+    }
+
+
+def render_forgot_password_section():
+    """Render the 'Forgot Password?' UI as an expander on the login screen.
+    Two-stage flow with state persisted in session_state."""
+    with st.expander("🤔 Forgot your password?", expanded=False):
+        # Stage indicator stored in session
+        stage = st.session_state.get("_pwreset_stage", "request")
+
+        if stage == "request":
+            st.caption(
+                "Enter your username. If your account has an email on file "
+                "and your firm has email notifications configured, we'll send "
+                "you a 6-digit code to reset your password."
+            )
+            with st.form("pwreset_request_form"):
+                pwr_username = st.text_input(
+                    "Username", placeholder="your.username", key="pwr_username_inp",
+                )
+                req_btn = st.form_submit_button(
+                    "📧 Send Reset Code", type="primary", use_container_width=True,
+                )
+            if req_btn:
+                if not pwr_username.strip():
+                    st.error("❌ Please enter your username.")
+                else:
+                    with st.spinner("Processing reset request…"):
+                        result = _request_password_reset(pwr_username.strip())
+                    if result["ok"]:
+                        st.success(
+                            f"✅ {result['message']} (Sent to "
+                            f"{result.get('email_masked','your email')})"
+                        )
+                        st.session_state["_pwreset_stage"] = "verify"
+                        st.session_state["_pwreset_username"] = pwr_username.strip().lower()
+                        time.sleep(0.5)
+                        st.rerun()
+                    else:
+                        st.warning(result["message"])
+                        if result.get("admin_contact"):
+                            st.info(
+                                f"📞 **Your firm admin:** {result['admin_contact']}"
+                            )
+
+        else:  # stage == "verify"
+            saved_username = st.session_state.get("_pwreset_username", "")
+            st.caption(
+                f"A 6-digit code was sent for **@{saved_username}**. "
+                f"Enter the code below along with your new password. "
+                f"The code expires in 15 minutes."
+            )
+            with st.form("pwreset_verify_form"):
+                pwr_code = st.text_input(
+                    "Reset Code", placeholder="6-digit code from email",
+                    max_chars=6, key="pwr_code_inp",
+                )
+                pwr_new = st.text_input(
+                    "New Password", type="password",
+                    placeholder="Minimum 6 characters", key="pwr_new_inp",
+                )
+                pwr_confirm = st.text_input(
+                    "Confirm New Password", type="password",
+                    key="pwr_confirm_inp",
+                )
+                vc1, vc2 = st.columns(2)
+                with vc1:
+                    verify_btn = st.form_submit_button(
+                        "🔓 Reset Password", type="primary", use_container_width=True,
+                    )
+                with vc2:
+                    cancel_btn = st.form_submit_button(
+                        "↩️ Start Over", use_container_width=True,
+                    )
+
+            if cancel_btn:
+                st.session_state.pop("_pwreset_stage", None)
+                st.session_state.pop("_pwreset_username", None)
+                st.rerun()
+
+            if verify_btn:
+                if pwr_new != pwr_confirm:
+                    st.error("❌ Passwords do not match.")
+                elif len(pwr_new) < 6:
+                    st.error("❌ Password must be at least 6 characters.")
+                elif not pwr_code.strip():
+                    st.error("❌ Enter the 6-digit code from your email.")
+                else:
+                    with st.spinner("Verifying code and updating password…"):
+                        result = _verify_reset_code(
+                            saved_username, pwr_code.strip(), pwr_new,
+                        )
+                    if result["ok"]:
+                        st.success(f"✅ {result['message']}")
+                        st.session_state.pop("_pwreset_stage", None)
+                        st.session_state.pop("_pwreset_username", None)
+                        time.sleep(1.5)
+                        st.rerun()
+                    else:
+                        st.error(f"❌ {result['message']}")
