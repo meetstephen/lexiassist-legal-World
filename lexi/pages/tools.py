@@ -240,9 +240,10 @@ margin-bottom:1rem;border:1px solid #e5e7eb;">
         if calc_data.get("immediate_action"):
             st.warning(f"⚡ Immediate Action: {calc_data.get('immediate_action', '')}")
         st.markdown(
-            '<div style="background:var(--la-bg2);border:1px solid #fde047;border-radius:8px;'
-            'padding:0.8rem 1rem;margin-top:1rem;font-size:0.83rem;color:#713f12;">'
-            '<strong>⚠️ Important — Verify Before Relying:</strong> These deadlines are '
+            '<div style="background:rgba(245,158,11,0.10);color:var(--la-text);'
+            'border:1px solid #fde047;border-radius:8px;'
+            'padding:0.8rem 1rem;margin-top:1rem;font-size:0.83rem;">'
+            '<strong style="color:#f59e0b;">⚠️ Important — Verify Before Relying:</strong> These deadlines are '
             'AI-computed estimates. Limitation periods vary by jurisdiction, cause of action, '
             'public officer exceptions, continuing injury, fraud/concealment, and applicable '
             'State Limitation Law. Always verify against the specific statute and consult '
@@ -1019,7 +1020,8 @@ def _render_tools_checklist() -> None:
                 st.markdown("#### 📎 Frontloading Requirements")
                 for f in chk_data["frontloading"]:
                     st.markdown(
-                        f'<div style="background:#fdf4ff;border:1px solid #e9d5ff;'
+                        f'<div style="background:rgba(168,85,247,0.10);color:var(--la-text);'
+                        f'border:1px solid var(--la-border);border-left:3px solid #a855f7;'
                         f'border-radius:6px;padding:0.5rem 0.8rem;margin-bottom:0.4rem;">'
                         f'📎 <strong>{esc(f.get("item", ""))}</strong><br>'
                         f'<small>{esc(f.get("notes", ""))}</small></div>',

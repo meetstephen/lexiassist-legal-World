@@ -31,8 +31,9 @@ def render_user_management():
     </div>""", unsafe_allow_html=True)
 
     db = get_db()
-    um_list, um_create, um_stats, um_audit, um_law = st.tabs([
-        "👥 All Users", "➕ Create User", "📊 Usage Stats", "🗂️ Audit Log", "📚 Law Updates"
+    um_list, um_create, um_stats, um_audit, um_law, um_feedback = st.tabs([
+        "👥 All Users", "➕ Create User", "📊 Usage Stats", "🗂️ Audit Log",
+        "📚 Law Updates", "💬 Beta Feedback",
     ])
 
     # ── All Users ──
@@ -373,7 +374,8 @@ def render_user_management():
                         st.markdown(
                             f'<div class="history-item">'
                             f'<strong>{esc(nc.get("name",""))}</strong> '
-                            f'<code style="background:#f0fdf4;padding:0.1rem 0.4rem;'
+                            f'<code style="background:rgba(5,150,105,0.15);'
+                            f'color:var(--la-text);padding:0.1rem 0.4rem;'
                             f'border-radius:3px;">{esc(nc.get("citation",""))}</code><br>'
                             f'<small>{esc(nc.get("principle",""))} · '
                             f'{esc(nc.get("court",""))} {esc(nc.get("year",""))}</small>'
@@ -443,3 +445,141 @@ def render_user_management():
                             "Citation audit will now recognise it immediately."
                         )
                         st.rerun()
+
+
+
+    # ── Beta Feedback Inbox ────────────────────────────────────────────────
+    with um_feedback:
+        st.markdown("##### 💬 Beta Feedback Inbox")
+        st.caption(
+            "All feedback submitted by users via the sidebar widget. "
+            "Use the status filter to focus on what's still open."
+        )
+
+        fc1, fc2, fc3 = st.columns([1.2, 1.2, 1.6])
+        with fc1:
+            fb_status_filter = st.selectbox(
+                "Status",
+                ["all", "open", "in_progress", "resolved", "dismissed"],
+                index=1,
+                key="um_fb_status_filter",
+            )
+        with fc2:
+            fb_cat_filter = st.selectbox(
+                "Category",
+                ["all", "🐞 Bug", "💡 Feature request", "👍 Praise", "💬 Comment / question"],
+                key="um_fb_cat_filter",
+            )
+        with fc3:
+            fb_search = st.text_input(
+                "Search messages",
+                placeholder="filter by keyword…",
+                key="um_fb_search",
+            )
+
+        items = db.list_beta_feedback(
+            limit=300,
+            status="" if fb_status_filter == "all" else fb_status_filter,
+        )
+        if fb_cat_filter != "all":
+            items = [i for i in items if i.get("category") == fb_cat_filter]
+        if fb_search.strip():
+            q = fb_search.strip().lower()
+            items = [i for i in items if q in (i.get("message", "") or "").lower()]
+
+        st.markdown(f"**{len(items)} entries shown**")
+        if not items:
+            st.info("📭 No feedback matching your filters.")
+        else:
+            # CSV export of full list
+            try:
+                import io as _io
+                import csv as _csv
+                buf = _io.StringIO()
+                writer = _csv.writer(buf)
+                writer.writerow([
+                    "timestamp", "username", "category", "severity",
+                    "page", "status", "contact_ok", "version", "message",
+                ])
+                for it in items:
+                    writer.writerow([
+                        it.get("timestamp", ""), it.get("username", ""),
+                        it.get("category", ""), it.get("severity", ""),
+                        it.get("page", ""), it.get("status", ""),
+                        "yes" if it.get("contact_ok") else "no",
+                        it.get("app_version", ""), (it.get("message", "") or "").replace("\n", " ⏎ "),
+                    ])
+                st.download_button(
+                    "📥 Export filtered as CSV",
+                    buf.getvalue(),
+                    f"lexiassist_feedback_{datetime.now():%Y%m%d_%H%M}.csv",
+                    "text/csv", key="um_fb_csv_dl",
+                )
+            except Exception:
+                pass
+
+            for fb in items:
+                sev = fb.get("severity", "normal")
+                cat = fb.get("category", "")
+                sev_color = {
+                    "blocker": "#dc2626",
+                    "high":    "#f59e0b",
+                    "normal":  "#3b82f6",
+                    "low":     "#64748b",
+                }.get(sev, "#3b82f6")
+                status_color = {
+                    "open":         "#f59e0b",
+                    "in_progress":  "#3b82f6",
+                    "resolved":     "#16a34a",
+                    "dismissed":    "#64748b",
+                }.get(fb.get("status", "open"), "#f59e0b")
+
+                with st.container():
+                    st.markdown(
+                        f'<div style="background:var(--la-card);'
+                        f'border:1px solid var(--la-border);'
+                        f'border-left:4px solid {sev_color};'
+                        f'border-radius:8px;padding:0.7rem 1rem;margin-bottom:0.5rem;">'
+                        f'<div style="display:flex;justify-content:space-between;'
+                        f'flex-wrap:wrap;gap:0.4rem;align-items:center;">'
+                        f'<strong style="font-size:0.9rem;">{esc(cat)}</strong>'
+                        f'<div style="display:flex;gap:0.4rem;">'
+                        f'<span style="background:{sev_color}22;color:{sev_color};'
+                        f'border:1px solid {sev_color}55;border-radius:999px;'
+                        f'padding:0.1rem 0.55rem;font-size:0.7rem;font-weight:700;">{esc(sev)}</span>'
+                        f'<span style="background:{status_color}22;color:{status_color};'
+                        f'border:1px solid {status_color}55;border-radius:999px;'
+                        f'padding:0.1rem 0.55rem;font-size:0.7rem;font-weight:700;">'
+                        f'{esc(fb.get("status","open"))}</span>'
+                        f'</div></div>'
+                        f'<div style="margin-top:0.4rem;font-size:0.85rem;color:var(--la-text);'
+                        f'white-space:pre-wrap;">{esc(fb.get("message",""))}</div>'
+                        f'<div style="margin-top:0.4rem;font-size:0.72rem;color:var(--la-text2);">'
+                        f'@{esc(fb.get("username","?"))} · '
+                        f'{esc(fmt_date(fb.get("timestamp","")))} · '
+                        f'page: {esc(fb.get("page","—"))} · '
+                        f'v{esc(fb.get("app_version","?"))} · '
+                        f'contact: {"yes" if fb.get("contact_ok") else "no"}'
+                        f'</div>'
+                        f'</div>',
+                        unsafe_allow_html=True,
+                    )
+
+                    sa1, sa2, sa3, sa4 = st.columns(4)
+                    fid = fb["id"]
+                    with sa1:
+                        if st.button("🛠️ In progress", key=f"fb_ip_{fid}", use_container_width=True):
+                            db.update_beta_feedback_status(fid, "in_progress")
+                            st.rerun()
+                    with sa2:
+                        if st.button("✅ Resolve", key=f"fb_rs_{fid}", use_container_width=True):
+                            db.update_beta_feedback_status(fid, "resolved")
+                            st.rerun()
+                    with sa3:
+                        if st.button("🗑️ Dismiss", key=f"fb_dm_{fid}", use_container_width=True):
+                            db.update_beta_feedback_status(fid, "dismissed")
+                            st.rerun()
+                    with sa4:
+                        if st.button("↩️ Reopen", key=f"fb_op_{fid}", use_container_width=True):
+                            db.update_beta_feedback_status(fid, "open")
+                            st.rerun()

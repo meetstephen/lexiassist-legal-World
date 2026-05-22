@@ -288,23 +288,24 @@ arose in January 2024 in Lagos.""",
     confidence = int(result.get("confidence", 0))
 
     if verdict == "CLEAR":
-        v_color = "#059669"
-        v_bg = "#f0fdf4"
+        v_color = "#16a34a"
+        v_bg = "rgba(5,150,105,0.10)"
         v_icon = "✅"
         v_border = "#059669"
     elif verdict == "POTENTIAL CONFLICT":
-        v_color = "#d97706"
-        v_bg = "#fffbeb"
+        v_color = "#f59e0b"
+        v_bg = "rgba(245,158,11,0.10)"
         v_icon = "⚠️"
         v_border = "#f59e0b"
     else:
-        v_color = "#dc2626"
-        v_bg = "#fef2f2"
+        v_color = "#ef4444"
+        v_bg = "rgba(220,38,38,0.10)"
         v_icon = "🚫"
         v_border = "#dc2626"
 
     st.markdown(f"""
-<div style="background:{v_bg};border:2px solid {v_border};
+<div style="background:{v_bg};color:var(--la-text);
+border:2px solid {v_border};
 border-radius:0.75rem;padding:1.4rem;margin-bottom:1.2rem;">
   <div style="display:flex;justify-content:space-between;align-items:center;">
     <h3 style="margin:0;color:{v_color};">{v_icon} {esc(verdict)}</h3>
@@ -312,7 +313,7 @@ border-radius:0.75rem;padding:1.4rem;margin-bottom:1.2rem;">
       {confidence}% confidence
     </span>
   </div>
-  <p style="margin:0.8rem 0 0 0;">{esc(result.get('summary',''))}</p>
+  <p style="margin:0.8rem 0 0 0;color:var(--la-text);">{esc(result.get('summary',''))}</p>
 </div>""", unsafe_allow_html=True)
 
     # ── Conflicts found ──
@@ -326,8 +327,10 @@ border-radius:0.75rem;padding:1.4rem;margin-bottom:1.2rem;">
                 else ("#d97706" if sev == "Medium" else "#059669")
             )
             st.markdown(f"""
-<div style="border-left:4px solid {sev_color};background:#fff;
+<div style="border-left:4px solid {sev_color};background:var(--la-card);
+color:var(--la-text);
 border-radius:0.5rem;padding:1rem;margin-bottom:0.8rem;
+border:1px solid var(--la-border);
 box-shadow:0 1px 4px rgba(0,0,0,0.05);">
   <div style="display:flex;justify-content:space-between;">
     <strong>{esc(cf.get('conflict_type',''))} Conflict</strong>

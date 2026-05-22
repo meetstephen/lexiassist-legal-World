@@ -823,8 +823,87 @@ class Database:
         cur = self._execute("SELECT COUNT(*) FROM statute_chunks")
         row = cur.fetchone()
         return row[0] if row else 0
-    
-    # ── Firm-wide Admin Announcement ────────────────────────────────────
+
+    # ── Beta Feedback (private-beta lawyer trial) ───────────────────────
+    def add_beta_feedback(self, entry: dict) -> bool:
+        """Persist a piece of beta feedback. Returns True on success."""
+        try:
+            self._execute(
+                "INSERT INTO beta_feedback "
+                "(id, timestamp, user_id, username, category, severity, page, "
+                "message, contact_ok, app_version, status) "
+                "VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)",
+                (
+                    entry.get("id", new_id()),
+                    entry.get("timestamp", datetime.now().isoformat()),
+                    entry.get("user_id", self._uid()),
+                    entry.get("username", ""),
+                    entry.get("category", "comment"),
+                    entry.get("severity", "normal"),
+                    entry.get("page", ""),
+                    entry.get("message", ""),
+                    bool(entry.get("contact_ok", False)),
+                    entry.get("app_version", ""),
+                    entry.get("status", "open"),
+                ),
+            )
+            self.conn.commit()
+            return True
+        except Exception as e:
+            logger.error(f"add_beta_feedback failed: {e}")
+            try:
+                self.conn.rollback()
+            except Exception:
+                pass
+            return False
+
+    def list_beta_feedback(self, limit: int = 200, status: str = "") -> list:
+        """Return all beta feedback (admin only — caller must enforce)."""
+        try:
+            if status:
+                cur = self._execute(
+                    "SELECT id, timestamp, user_id, username, category, severity, "
+                    "page, message, contact_ok, app_version, status "
+                    "FROM beta_feedback WHERE status = %s "
+                    "ORDER BY timestamp DESC LIMIT %s",
+                    (status, limit),
+                )
+            else:
+                cur = self._execute(
+                    "SELECT id, timestamp, user_id, username, category, severity, "
+                    "page, message, contact_ok, app_version, status "
+                    "FROM beta_feedback ORDER BY timestamp DESC LIMIT %s",
+                    (limit,),
+                )
+            return [
+                {
+                    "id": r[0], "timestamp": r[1], "user_id": r[2],
+                    "username": r[3], "category": r[4], "severity": r[5],
+                    "page": r[6], "message": r[7], "contact_ok": bool(r[8]),
+                    "app_version": r[9], "status": r[10],
+                }
+                for r in (cur.fetchall() or [])
+            ]
+        except Exception as e:
+            logger.warning(f"list_beta_feedback failed: {e}")
+            return []
+
+    def update_beta_feedback_status(self, feedback_id: str, status: str) -> bool:
+        try:
+            self._execute(
+                "UPDATE beta_feedback SET status = %s WHERE id = %s",
+                (status, feedback_id),
+            )
+            self.conn.commit()
+            return True
+        except Exception:
+            try:
+                self.conn.rollback()
+            except Exception:
+                pass
+            return False
+
+# ── Firm-wide Admin Announcement ────────────────────────────────────
     # Stored in kv_store under the key 'firm_announcement' as a single-item
     # list. Schema:
     #   {
@@ -864,6 +943,7 @@ class Database:
             return True
         except Exception:
             return False
+
 
     def cleanup_expired_sessions(self):
         """Remove expired tokens (call periodically)."""

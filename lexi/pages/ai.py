@@ -506,7 +506,8 @@ RESPONSE TO ANALYSE:
                     for _it in _struct.get("verified_law", []):
                         _badge = "🏛️" if _it.get("type") == "Case" else "📜"
                         st.markdown(
-                            f'<div style="background:#f0fdf4;border-left:3px solid #16a34a;'
+                            f'<div style="background:rgba(5,150,105,0.10);color:var(--la-text);'
+                            f'border-left:3px solid #16a34a;'
                             f'border-radius:6px;padding:0.4rem 0.7rem;margin-bottom:0.4rem;'
                             f'font-size:0.82rem;">{_badge} {esc(_it.get("item",""))}</div>',
                             unsafe_allow_html=True,
@@ -617,7 +618,7 @@ ANALYSIS:
     <span class="badge badge-info">{esc(p['role'])}</span>
     <strong style="color:{color};">{strength}%</strong>
   </div>
-  <div style="background:#e5e7eb;border-radius:999px;height:14px;">
+  <div style="background:rgba(128,128,128,0.25);border-radius:999px;height:14px;">
     <div style="width:{strength}%;background:{color};height:14px;border-radius:999px;"></div>
   </div>
   <small style="color:var(--la-text2);">{esc(p.get('reason',''))}</small>
@@ -753,22 +754,23 @@ PROPOSED ACTION: {sim_action}
                     verdict = sim_data.get("verdict", "RISKY")
 
                     if verdict == "RECOMMENDED":
-                        verdict_color = "#059669"
-                        verdict_bg = "#f0fdf4"
+                        verdict_color = "#16a34a"
+                        verdict_bg = "rgba(5,150,105,0.10)"
                         verdict_icon = "✅"
                     elif verdict == "DO NOT PROCEED":
-                        verdict_color = "#dc2626"
-                        verdict_bg = "#fef2f2"
+                        verdict_color = "#ef4444"
+                        verdict_bg = "rgba(220,38,38,0.10)"
                         verdict_icon = "🚫"
                     else:
-                        verdict_color = "#d97706"
-                        verdict_bg = "#fffbeb"
+                        verdict_color = "#f59e0b"
+                        verdict_bg = "rgba(245,158,11,0.10)"
                         verdict_icon = "⚠️"
 
                     prob_color = "#dc2626" if prob < 40 else ("#f59e0b" if prob < 65 else "#059669")
 
                     st.markdown(f"""
-<div style="background:{verdict_bg};border:2px solid {verdict_color};
+<div style="background:{verdict_bg};color:var(--la-text);
+border:2px solid {verdict_color};
 border-radius:0.75rem;padding:1.2rem;margin-top:1rem;">
   <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:0.8rem;">
     <h4 style="margin:0;color:{verdict_color};">
@@ -776,10 +778,10 @@ border-radius:0.75rem;padding:1.2rem;margin-top:1rem;">
     </h4>
     <span style="font-size:1.6rem;font-weight:800;color:{prob_color};">{prob}%</span>
   </div>
-  <div style="background:#e5e7eb;border-radius:999px;height:12px;margin-bottom:0.8rem;">
+  <div style="background:rgba(128,128,128,0.25);border-radius:999px;height:12px;margin-bottom:0.8rem;">
     <div style="width:{prob}%;background:{prob_color};height:12px;border-radius:999px;"></div>
   </div>
-  <p style="margin:0;">{esc(sim_data.get('reasoning',''))}</p>
+  <p style="margin:0;color:var(--la-text);">{esc(sim_data.get('reasoning',''))}</p>
 </div>""", unsafe_allow_html=True)
 
                     sr1, sr2 = st.columns(2)

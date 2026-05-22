@@ -195,7 +195,8 @@ def render_fee_calculator():
                 with sc3:
                     st.metric("Penalty (if late > 30 days)", fmt_ngn(sd_result * 0.1 + 50))
                 st.markdown(f"""
-<div style="background:#fffbeb;border-left:3px solid #f59e0b;padding:0.8rem 1rem;
+<div style="background:rgba(245,158,11,0.10);color:var(--la-text);
+border-left:3px solid #f59e0b;padding:0.8rem 1rem;
 border-radius:0.4rem;margin-top:0.5rem;font-size:0.9rem;">
   ⚠️ <strong>Reminder:</strong> Stamp duty must be paid within 30 days of execution.
   Late stamping attracts a 10% penalty plus ₦50 administrative charge.

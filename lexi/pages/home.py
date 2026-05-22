@@ -287,15 +287,9 @@ def render_home():
         z-index: 1;
         line-height: 1.6;
     }}
-    @media (max-width: 768px) {{
-        .lexi-hero h1 {{
-            font-size: 2.5rem !important;
-        }}
-        .lexi-hero-watermark {{
-            font-size: 7rem !important;
-            opacity: 0.05 !important;
-        }}
-    }}
+    /* Mobile sizing for the hero is handled centrally in lexi.themes
+       so all 10 themes pick up the same responsive rules. We do not
+       override here — that would defeat the global cascade. */
     </style>
     <div class="lexi-hero">
         <div class="lexi-hero-watermark">&#9878;</div>
@@ -444,7 +438,7 @@ def render_home():
             f'<strong>🚀 Getting Started — {completed}/4 steps complete</strong>'
             f'<span style="font-size:0.8rem;color:var(--la-text-secondary);">'
             f'{progress_pct}%</span></div>'
-            f'<div style="background:#e5e7eb;border-radius:999px;height:8px;">'
+            f'<div style="background:rgba(128,128,128,0.25);border-radius:999px;height:8px;">'
             f'<div style="width:{progress_pct}%;background:#059669;'
             f'height:8px;border-radius:999px;transition:width 0.4s;"></div>'
             f'</div></div>',

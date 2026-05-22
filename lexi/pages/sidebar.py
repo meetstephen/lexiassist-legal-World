@@ -199,6 +199,69 @@ section[data-testid="stSidebarContent"]{display:flex!important;}
             except Exception as e:
                 st.error(f"❌ Import error: {e}")
         st.divider()
+
+        # ── Beta Feedback widget — gives lawyers a frictionless way to
+        # report bugs, suggest features, or send praise during the trial ──
+        with st.expander("💬 Send Beta Feedback", expanded=False):
+            st.caption(
+                "Found a bug? Have an idea? Let us know — your feedback "
+                "shapes the next release."
+            )
+            with st.form("beta_feedback_form", clear_on_submit=True):
+                fb_category = st.selectbox(
+                    "Type",
+                    ["🐞 Bug", "💡 Feature request", "👍 Praise", "💬 Comment / question"],
+                    key="fb_cat_sel",
+                )
+                fb_severity = st.select_slider(
+                    "How important?",
+                    options=["low", "normal", "high", "blocker"],
+                    value="normal",
+                    key="fb_sev_sel",
+                    help="Blocker = stops you from working. Low = nice to have.",
+                )
+                fb_message = st.text_area(
+                    "Message",
+                    placeholder="What did you try? What did you expect? What happened?",
+                    height=100,
+                    key="fb_msg_ta",
+                )
+                fb_contact = st.checkbox(
+                    "OK to contact me about this",
+                    value=True, key="fb_contact_chk",
+                    help="If checked, the firm admin may follow up via your registered email.",
+                )
+                if st.form_submit_button("📨 Send Feedback", type="primary", use_container_width=True):
+                    if not fb_message.strip() or len(fb_message.strip()) < 5:
+                        st.error("❌ Please describe the issue in at least 5 characters.")
+                    else:
+                        # Page = current nav group, falls back to "—"
+                        cur_page = st.session_state.get("nav_group", "")
+                        ok = get_db().add_beta_feedback({
+                            "id": new_id(),
+                            "timestamp": datetime.now().isoformat(),
+                            "user_id": st.session_state.get("current_user_id", "legacy"),
+                            "username": st.session_state.get("current_username", ""),
+                            "category": fb_category,
+                            "severity": fb_severity,
+                            "page": cur_page,
+                            "message": fb_message.strip()[:5000],
+                            "contact_ok": bool(fb_contact),
+                            "app_version": __version__,
+                        })
+                        if ok:
+                            try:
+                                get_db().append_audit(
+                                    "FEEDBACK_SUBMITTED",
+                                    f"category={fb_category} severity={fb_severity} "
+                                    f"page={cur_page} len={len(fb_message.strip())}",
+                                )
+                            except Exception:
+                                pass
+                            st.success("✅ Thank you — your feedback was recorded.")
+                        else:
+                            st.error("❌ Could not save feedback right now. Please try again.")
+
         st.caption(f"⚖️ LexiAssist v{__version__} © {datetime.now().year}")
         st.caption("🇳🇬 Nigerian Law · 🤖 AI-Powered")
         # NBA Annual Practicing Certificate reminder
