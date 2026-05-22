@@ -662,7 +662,9 @@ def export_docx(text: str, title: str = "LexiAssist Analysis",
                 p=doc.add_paragraph(block["content"],style="List Bullet")
                 p.paragraph_format.space_after=Pt(3)
                 for run in p.runs: run.font.name="Calibri"; run.font.size=Pt(11); run.font.color.rgb=DARK_GREY
-            except:
+            except Exception:
+                # Some Word documents lack the "List Bullet" style — fall back to
+                # an inline bullet glyph so the export still succeeds.
                 p=doc.add_paragraph(); r=p.add_run(f"\u2022  {block['content']}")
                 r.font.name="Calibri"; r.font.size=Pt(11); r.font.color.rgb=DARK_GREY
         elif bt=="body":

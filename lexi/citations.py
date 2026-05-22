@@ -1111,25 +1111,26 @@ def render_citation_audit(audit: dict) -> str:
     unverified_count = len(audit["unverified_cases"])
 
     if unverified_count == 0 and verified_count > 0:
-        banner_color = "#059669"
-        banner_bg = "#f0fdf4"
+        banner_color = "#16a34a"
+        banner_bg = "rgba(5,150,105,0.10)"
         icon = "✅"
         msg = f"All {verified_count} case(s) cited match the verified Nigerian case database."
     elif verified_count > 0 and unverified_count > 0:
-        banner_color = "#d97706"
-        banner_bg = "#fffbeb"
+        banner_color = "#f59e0b"
+        banner_bg = "rgba(245,158,11,0.10)"
         icon = "⚠️"
         msg = (f"{verified_count} verified · {unverified_count} unverified — "
                "check unverified citations against NWLR/LPELR before relying on them.")
     else:
-        banner_color = "#dc2626"
-        banner_bg = "#fef2f2"
+        banner_color = "#ef4444"
+        banner_bg = "rgba(220,38,38,0.10)"
         icon = "🚫"
         msg = (f"{unverified_count} case citation(s) could NOT be verified against "
                "the database. Treat as UNVERIFIED — do not file without independent check.")
 
     html = f"""
-    <div style="background:{banner_bg}; border:1.5px solid {banner_color};
+    <div style="background:{banner_bg}; color:var(--la-text);
+                border:1.5px solid {banner_color};
                 border-radius:0.6rem; padding:0.9rem 1.1rem; margin:1rem 0; font-size:0.88rem;">
         <div style="display:flex; justify-content:space-between; align-items:center;">
             <strong style="color:{banner_color};">{icon} Citation Audit</strong>
@@ -1137,26 +1138,26 @@ def render_citation_audit(audit: dict) -> str:
                 {audit['citations_found']} citation(s) · {audit['case_names_found']} case name(s)
             </span>
         </div>
-        <p style="margin:0.5rem 0 0 0; color:{banner_color};">{msg}</p>
+        <p style="margin:0.5rem 0 0 0; color:var(--la-text);">{msg}</p>
     </div>"""
 
     if audit["verified_cases"]:
-        html += f'<details style="margin-top:0.5rem;"><summary style="cursor:pointer; font-size:0.85rem; color:#059669; font-weight:600;">✅ Verified Cases ({len(audit["verified_cases"])})</summary><div style="margin-top:0.5rem; font-size:0.83rem;">'
+        html += f'<details style="margin-top:0.5rem;"><summary style="cursor:pointer; font-size:0.85rem; color:#16a34a; font-weight:600;">✅ Verified Cases ({len(audit["verified_cases"])})</summary><div style="margin-top:0.5rem; font-size:0.83rem;color:var(--la-text);">'
         for vc in audit["verified_cases"]:
-            html += (f'<div style="padding:0.4rem 0; border-bottom:1px solid #e2e8f0;">'
+            html += (f'<div style="padding:0.4rem 0; border-bottom:1px solid var(--la-border);">'
                      f'<strong>{esc(vc["name"])}</strong> '
-                     f'<code style="background:#f0fdf4; padding:0.1rem 0.4rem; border-radius:3px;">{esc(vc["citation"])}</code><br>'
+                     f'<code style="background:rgba(5,150,105,0.15); color:var(--la-text); padding:0.1rem 0.4rem; border-radius:3px;">{esc(vc["citation"])}</code><br>'
                      f'<small style="color:var(--la-text2);">{esc(vc["court"])} · {vc["year"]} · {esc(vc["principle"])}</small>'
                      f'</div>')
         html += '</div></details>'
 
     if audit["unverified_cases"]:
-        html += f'<details style="margin-top:0.5rem;" open><summary style="cursor:pointer; font-size:0.85rem; color:#dc2626; font-weight:600;">⚠️ Unverified — Check Before Filing ({len(audit["unverified_cases"])})</summary><div style="margin-top:0.5rem; font-size:0.83rem;">'
+        html += f'<details style="margin-top:0.5rem;" open><summary style="cursor:pointer; font-size:0.85rem; color:#ef4444; font-weight:600;">⚠️ Unverified — Check Before Filing ({len(audit["unverified_cases"])})</summary><div style="margin-top:0.5rem; font-size:0.83rem;color:var(--la-text);">'
         for uc in audit["unverified_cases"]:
-            html += (f'<div style="padding:0.4rem 0; border-bottom:1px solid #fee2e2;">'
-                     f'<strong style="color:#991b1b;">{esc(uc)}</strong> '
-                     f'<span style="background:#fee2e2; color:#991b1b; padding:2px 6px; border-radius:3px; font-size:0.75rem;">UNVERIFIED</span><br>'
-                     f'<small style="color:#7f1d1d;">Not found in verified database. Verify on NWLR / LPELR / LawPavilion before citing.</small>'
+            html += (f'<div style="padding:0.4rem 0; border-bottom:1px solid rgba(220,38,38,0.25);">'
+                     f'<strong style="color:#ef4444;">{esc(uc)}</strong> '
+                     f'<span style="background:rgba(220,38,38,0.15); color:#ef4444; padding:2px 6px; border-radius:3px; font-size:0.75rem;">UNVERIFIED</span><br>'
+                     f'<small style="color:var(--la-text2);">Not found in verified database. Verify on NWLR / LPELR / LawPavilion before citing.</small>'
                      f'</div>')
         html += '</div></details>'
 

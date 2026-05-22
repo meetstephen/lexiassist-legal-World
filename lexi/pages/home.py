@@ -444,7 +444,7 @@ def render_home():
             f'<strong>🚀 Getting Started — {completed}/4 steps complete</strong>'
             f'<span style="font-size:0.8rem;color:var(--la-text-secondary);">'
             f'{progress_pct}%</span></div>'
-            f'<div style="background:#e5e7eb;border-radius:999px;height:8px;">'
+            f'<div style="background:rgba(128,128,128,0.25);border-radius:999px;height:8px;">'
             f'<div style="width:{progress_pct}%;background:#059669;'
             f'height:8px;border-radius:999px;transition:width 0.4s;"></div>'
             f'</div></div>',
