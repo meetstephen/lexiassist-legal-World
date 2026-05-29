@@ -612,8 +612,8 @@ def render_profile():
             # Lets the admin push a single message to every user's screen
             # without emailing them. Common uses during the trial:
             #   "Maintenance tonight 21:00–22:00"
-            #   "Try the new ⚡ Lifecycle Automation page"
-            #   "v9.1.2 deployed — see release notes"
+            #   "New: one-click document actions on the AI Assistant page"
+            #   "v9.5.0 deployed — see release notes"
             st.markdown("---")
             st.markdown("##### 📣 Firm-Wide Announcement")
             st.caption(

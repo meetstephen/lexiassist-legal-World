@@ -71,12 +71,10 @@ from lexi.pages.cases import render_cases
 from lexi.pages.calendar import render_calendar
 from lexi.pages.templates import render_templates
 from lexi.pages.clients import render_clients
-from lexi.pages.billing import render_billing
 from lexi.pages.tools import render_tools
 from lexi.pages.search import render_global_search
 from lexi.pages.conflict import render_conflict_checker
 from lexi.pages.pleadings import render_pleadings
-from lexi.pages.lifecycle import render_lifecycle
 from lexi.pages.witness import render_witness_prep
 from lexi.pages.news import render_legal_news
 from lexi.pages.notes import render_notes_converter
@@ -325,14 +323,12 @@ def main():
         "📁 Matters": [
             ("📁 Cases",           render_cases),
             ("✅ Tasks",           render_tasks),
-            ("⚡ Lifecycle",       render_lifecycle),
             ("📜 Pleadings",       render_pleadings),
             ("📅 Calendar",        render_calendar),
             ("🔍 Conflict Check",  render_conflict_checker),
         ],
-        "👥 Clients & Billing": [
+        "👥 Clients & Fees": [
             ("👥 Clients",         render_clients),
-            ("💰 Billing",         render_billing),
             ("⚖️ Fee Calculator",  render_fee_calculator),
         ],
         "🔧 Tools": [
