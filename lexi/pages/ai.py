@@ -362,6 +362,7 @@ def render_ai():
     if clear_btn:
         st.session_state.last_response = ""
         st.session_state.original_query = ""
+        st.session_state.last_reasoning_display = ""
         st.session_state.selected_history_idx = None
         st.session_state["comparison_result"] = ""
         st.session_state.compare_selections = []
@@ -414,6 +415,7 @@ def render_ai():
         st.session_state.last_response = result
         st.session_state.last_audit = audit
         st.session_state.last_confidence = confidence
+        st.session_state.last_reasoning_display = st.session_state.get("_last_reasoning", "")
         st.session_state.original_query = query.strip()
         st.session_state.last_task = task
         st.session_state.last_mode = mode
@@ -446,6 +448,22 @@ def _render_ai_response(mode: str) -> None:
             st.markdown(render_confidence_panel(confidence), unsafe_allow_html=True)
         if audit:
             st.markdown(render_citation_audit(audit), unsafe_allow_html=True)
+
+        # ── Reasoning trace (the model's native "thinking") ──
+        # Surfaced in a collapsed expander so the lawyer can audit HOW the
+        # model reached its conclusion before relying on it — collapsed by
+        # default to keep the answer front-and-centre.
+        _reasoning = st.session_state.get("last_reasoning_display", "")
+        if _reasoning and _reasoning.strip() and st.session_state.get("show_ai_reasoning", True):
+            with st.expander("🧠 How LexiAssist reasoned (internal analysis)", expanded=False):
+                st.caption(
+                    "This is the model's own reasoning trace, generated before the "
+                    "final answer. Use it to verify the logic — it is not legal advice."
+                )
+                st.markdown(
+                    render_reasoning_panel(_reasoning, streaming=False),
+                    unsafe_allow_html=True,
+                )
 
         # Export row
         fname = f"LexiAssist_Analysis_{datetime.now():%Y%m%d_%H%M}"

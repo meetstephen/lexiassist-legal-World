@@ -29,9 +29,65 @@ from .runtime import (
 from .constants import (
     SUPPORTED_MODELS, DEFAULT_MODEL,
     COST_PER_1M_INPUT, COST_PER_1M_OUTPUT,
-    RESPONSE_MODES, USD_TO_NGN,
+    RESPONSE_MODES, THINKING_BUDGETS, USD_TO_NGN,
 )
 from .database import get_db
+
+
+# ═══════════════════════════════════════════════════════
+# NATIVE THINKING / REASONING BUDGET RESOLUTION
+# ═══════════════════════════════════════════════════════
+def _resolve_thinking_budget(model: str, mode: str) -> Optional[int]:
+    """Resolve the native ``thinking_budget`` for a given model + response mode.
+
+    The base budget comes from ``THINKING_BUDGETS[mode]`` (calibrated for
+    gemini-2.5-flash) and is then clamped to the specific model's supported
+    range. This is what lets a lightweight Flash model *reason internally*
+    before answering — the reasoning lives in the model's thinking phase,
+    not in the prompt string.
+
+    Returns:
+        * an ``int`` budget (``-1`` = dynamic, ``0`` = disabled), or
+        * ``None`` when the model is not known to support a thinking budget,
+          in which case the caller MUST NOT attach a ``thinking_config``.
+
+    Per-model ranges (Gemini 2.5 series, April 2026):
+        Pro        : 128–32,768  (cannot be disabled)
+        Flash      : 0–24,576    (0 disables)
+        Flash-Lite : 512–24,576  (off by default; -1/0 allowed)
+    """
+    base = THINKING_BUDGETS.get(mode, THINKING_BUDGETS["standard"])
+    m = (model or "").lower()
+
+    # Only the Gemini 2.5 / 3 reasoning families accept a thinking budget.
+    # Attaching thinking_config to an older model (1.5 / 2.0 non-thinking)
+    # raises an API error, so we signal "don't attach" with None.
+    supports_thinking = (
+        "2.5" in m
+        or "gemini-3" in m
+        or "2.0-flash-thinking" in m
+    )
+    if not supports_thinking:
+        return None
+
+    # Pro: thinking cannot be disabled; clamp to 128–32768 (or dynamic).
+    if "pro" in m:
+        if base == -1:
+            return -1
+        return max(128, min(int(base), 32768))
+
+    # Flash-Lite: thinking is off by default; when enabling, min 512.
+    if "flash-lite" in m or "flash_lite" in m:
+        if base == -1:
+            return -1
+        if base <= 0:
+            return 0
+        return max(512, min(int(base), 24576))
+
+    # Flash (and any other 2.5/3 model): 0–24576, or dynamic.
+    if base == -1:
+        return -1
+    return max(0, min(int(base), 24576))
 
 
 # ═══════════════════════════════════════════════════════
@@ -117,6 +173,32 @@ def estimate_cost(input_text: str, output_text: str) -> float:
 
 
 # ═══════════════════════════════════════════════════════
+# REASONING PANEL (renders the model's native "thinking")
+# ═══════════════════════════════════════════════════════
+def render_reasoning_panel(reasoning: str, streaming: bool = False) -> str:
+    """Render the model's internal reasoning (thought summary) as a styled,
+    theme-aware panel. This makes the "think before answering" step visible
+    and verifiable to the lawyer, without cluttering the final answer box.
+
+    ``streaming=True`` adds a subtle live indicator while thoughts arrive.
+    """
+    text = (reasoning or "").strip()
+    if not text:
+        return ""
+    header = "🧠 Reasoning" + ("  ·  thinking…" if streaming else "")
+    cursor = '<span style="opacity:0.5;">▌</span>' if streaming else ""
+    return f"""
+<div style="background:var(--la-bg2);color:var(--la-text2);
+border:1px dashed var(--la-border);border-left:3px solid #6366f1;
+border-radius:0.6rem;padding:0.7rem 1rem;margin:0.6rem 0;
+font-size:0.82rem;line-height:1.55;">
+  <div style="font-weight:700;color:#6366f1;margin-bottom:0.35rem;
+  letter-spacing:0.02em;">{header}</div>
+  <div style="white-space:pre-wrap;">{esc(text)}{cursor}</div>
+</div>"""
+
+
+# ═══════════════════════════════════════════════════════
 # CORE GENERATION
 # ═══════════════════════════════════════════════════════
 def generate(prompt: str, system: str, mode: str, task: str = "general", query: str = "",
@@ -167,11 +249,20 @@ def generate(prompt: str, system: str, mode: str, task: str = "general", query: 
                 )
 
             # Predictive check — worst-case cost of this specific call.
+            # Thinking tokens are billed as output tokens, so include the
+            # resolved thinking budget in the worst-case output projection
+            # (dynamic/-1 is estimated conservatively) — otherwise enabling
+            # native reasoning could silently overshoot a near-empty budget.
             mode_tokens = RESPONSE_MODES.get(mode, RESPONSE_MODES["standard"]).get("tokens", 32000)
+            _think_b = _resolve_thinking_budget(st.session_state.gemini_model, mode) or 0
+            if _think_b == -1:
+                _think_tokens = 4096   # conservative estimate for "dynamic"
+            else:
+                _think_tokens = max(0, _think_b)
             input_tokens = (len(prompt) + len(system)) / 4
             projected_usd = (
                 (input_tokens / 1_000_000) * COST_PER_1M_INPUT
-                + (mode_tokens / 1_000_000) * COST_PER_1M_OUTPUT
+                + ((mode_tokens + _think_tokens) / 1_000_000) * COST_PER_1M_OUTPUT
             )
             projected_ngn = projected_usd * USD_TO_NGN
 
@@ -230,56 +321,158 @@ def generate(prompt: str, system: str, mode: str, task: str = "general", query: 
         pass
 
     mode_cfg = RESPONSE_MODES.get(mode, RESPONSE_MODES["standard"])
-    gen_config = _genai_types.GenerateContentConfig(
+
+    # ── Native "thinking loop" ──────────────────────────────────────────
+    # We push the reasoning out of the prompt string and into the model's
+    # native thinking phase: before emitting any final answer, the model
+    # spends a budget of private reasoning tokens working through the law.
+    # include_thoughts=True asks the API to return summarised reasoning so
+    # we can surface "how it reasoned" to the lawyer for verification.
+    thinking_budget = _resolve_thinking_budget(st.session_state.gemini_model, mode)
+
+    _base_cfg = dict(
         system_instruction=system,
         temperature=mode_cfg["temp"],
         top_p=0.92,
         top_k=40,
         max_output_tokens=mode_cfg["tokens"],
     )
+    # Config WITH thinking (primary) and WITHOUT (fallback if a model or
+    # API version rejects thinking_config — we never want that to kill a query).
+    gen_config_nothink = _genai_types.GenerateContentConfig(**_base_cfg)
+    gen_config = gen_config_nothink
+    if thinking_budget is not None:
+        try:
+            gen_config = _genai_types.GenerateContentConfig(
+                thinking_config=_genai_types.ThinkingConfig(
+                    thinking_budget=thinking_budget,
+                    include_thoughts=True,
+                ),
+                **_base_cfg,
+            )
+        except Exception as _tc_err:  # noqa: BLE001 — degrade gracefully
+            logger.warning(f"ThinkingConfig unavailable, proceeding without it: {_tc_err}")
+            gen_config = gen_config_nothink
+
     client = _get_genai_client(k)
 
-    def _do_generate(use_stream: bool) -> str:
-        """Single attempt. Streams to UI if stream_to is set."""
+    # Reset captured reasoning for this call (surfaced in the UI afterwards).
+    st.session_state["_last_reasoning"] = ""
+
+    def _split_parts(resp_or_chunk) -> tuple[str, str]:
+        """Return (answer_text, thought_text) from a response/stream chunk by
+        inspecting candidate parts. Falls back to ('', '') when the structure
+        isn't present so callers can use the convenience .text accessor."""
+        answer = ""
+        thought = ""
+        try:
+            cands = getattr(resp_or_chunk, "candidates", None) or []
+            if not cands:
+                return "", ""
+            content = getattr(cands[0], "content", None)
+            parts = getattr(content, "parts", None) or []
+            for part in parts:
+                ptext = getattr(part, "text", None)
+                if not ptext:
+                    continue
+                if getattr(part, "thought", False):
+                    thought += ptext
+                else:
+                    answer += ptext
+        except Exception:
+            return "", ""
+        return answer, thought
+
+    def _do_generate(use_stream: bool, config: "Any") -> str:
+        """Single attempt. Streams to UI if stream_to is set. Separates the
+        model's thinking (rendered live in a reasoning panel) from the final
+        answer (rendered in the response box), and stashes the reasoning in
+        ``st.session_state['_last_reasoning']`` for later display."""
         if use_stream and stream_to is not None:
-            full_text = ""
-            placeholder = stream_to.empty()
+            answer_text = ""
+            thought_text = ""
+            reason_ph = stream_to.empty()
+            answer_ph = stream_to.empty()
             try:
                 stream = client.models.generate_content_stream(
                     model=st.session_state.gemini_model,
                     contents=prompt,
-                    config=gen_config,
+                    config=config,
                 )
                 for chunk in stream:
-                    if chunk.text:
-                        full_text += chunk.text
-                        placeholder.markdown(
-                            f'<div class="response-box">{esc(full_text)}<span style="opacity:0.5;">▌</span></div>',
+                    a, t = _split_parts(chunk)
+                    if not a and not t:
+                        # Fallback to the convenience accessor for SDKs/models
+                        # that don't expose per-part thought flags.
+                        try:
+                            if chunk.text:
+                                a = chunk.text
+                        except Exception:
+                            a = ""
+                    if t:
+                        thought_text += t
+                    if a:
+                        answer_text += a
+                    if thought_text:
+                        reason_ph.markdown(
+                            render_reasoning_panel(thought_text, streaming=True),
                             unsafe_allow_html=True,
                         )
-                placeholder.markdown(
-                    f'<div class="response-box">{esc(full_text)}</div>',
+                    answer_ph.markdown(
+                        f'<div class="response-box">{esc(answer_text)}<span style="opacity:0.5;">▌</span></div>',
+                        unsafe_allow_html=True,
+                    )
+                # Final render (drop the cursor)
+                if thought_text:
+                    reason_ph.markdown(
+                        render_reasoning_panel(thought_text, streaming=False),
+                        unsafe_allow_html=True,
+                    )
+                else:
+                    reason_ph.empty()
+                answer_ph.markdown(
+                    f'<div class="response-box">{esc(answer_text)}</div>',
                     unsafe_allow_html=True,
                 )
-                return full_text
+                st.session_state["_last_reasoning"] = thought_text
+                return answer_text
             except Exception as e:
+                # Re-raise thinking-related errors so the caller can retry
+                # without thinking_config; otherwise fall back to non-stream.
+                _e = str(e).lower()
+                if "think" in _e or "thought" in _e or "budget" in _e:
+                    raise
                 logger.warning(f"Streaming failed, falling back to non-stream: {e}")
         # Non-streaming path
         resp = client.models.generate_content(
             model=st.session_state.gemini_model,
             contents=prompt,
-            config=gen_config,
+            config=config,
         )
-        return resp.text if resp and resp.text else ""
+        answer_text, thought_text = _split_parts(resp)
+        if not answer_text:
+            answer_text = resp.text if resp and getattr(resp, "text", None) else ""
+        if thought_text:
+            st.session_state["_last_reasoning"] = thought_text
+        return answer_text
 
     result = ""
+    active_config = gen_config
     for attempt in range(3):
         try:
-            result = _do_generate(use_stream=(stream_to is not None))
+            result = _do_generate(use_stream=(stream_to is not None), config=active_config)
             if result:
                 break
         except Exception as e:
             err_str = str(e)
+            # If the model/API rejected the thinking_config, drop it and retry
+            # immediately (don't burn an attempt or sleep on a config mismatch).
+            if active_config is gen_config and any(
+                tok in err_str.lower() for tok in ("think", "thought", "budget")
+            ):
+                logger.warning(f"Thinking config rejected by model; retrying without it: {err_str[:160]}")
+                active_config = gen_config_nothink
+                continue
             if attempt == 2:
                 return f"⚠️ Generation error after 3 attempts: {err_str[:200]}"
             time.sleep(2 * (attempt + 1))
@@ -293,7 +486,7 @@ def generate(prompt: str, system: str, mode: str, task: str = "general", query: 
         if quality_score < 5:
             logger.info(f"Quality gate triggered (score {quality_score}/10) — regenerating")
             try:
-                regen = _do_generate(use_stream=False)
+                regen = _do_generate(use_stream=False, config=active_config)
                 if regen:
                     new_score = _assess_response_quality(regen, prompt)
                     if new_score > quality_score:

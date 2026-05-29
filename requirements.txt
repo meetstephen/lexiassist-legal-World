@@ -4,7 +4,9 @@
 streamlit==1.43.2
 
 # Google Gemini AI
-google-genai>=1.0.0
+# >=1.20.0 ensures stable native "thinking" support (ThinkingConfig /
+# thinking_budget / include_thoughts) used by the reasoning engine.
+google-genai>=1.20.0
 
 # Database
 psycopg2-binary>=2.9.9

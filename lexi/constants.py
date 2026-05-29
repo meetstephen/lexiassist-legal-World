@@ -63,6 +63,35 @@ RESPONSE_MODES = {
     "comprehensive": {"label": "🔬 Comprehensive",  "desc": "Full CREAC + Strategy + Risk Ranking",  "tokens": 131072, "temp": 0.2},
 }
 
+# ═══════════════════════════════════════════════════════
+# THINKING / REASONING BUDGETS (Gemini 2.5 "thinking" tokens)
+# ═══════════════════════════════════════════════════════
+# These move the *reasoning intelligence* out of the prompt string and into
+# the model's native internal "thinking" phase. Before emitting a single word
+# of the final answer, the model is given a budget of private reasoning tokens
+# to work through the Nigerian legal framework, spot issues, and self-check
+# its citations — pushing a lightweight Flash model toward Pro-level accuracy
+# by architecture rather than by a longer prompt.
+#
+# Values below are the BASE budgets calibrated for gemini-2.5-flash. They are
+# clamped to each model's supported range at call time by
+# ``lexi.ai._resolve_thinking_budget`` (Pro: 128-32768 and cannot be disabled;
+# Flash: 0-24576; Flash-Lite: off by default, 512-24576 when enabled).
+#
+#   -1  → "dynamic": let the model decide how much to think (used for the
+#         heaviest Comprehensive mode where deep reasoning matters most).
+#    0  → thinking disabled (fastest, cheapest).
+#
+# Tuning rationale:
+#   brief         → light reasoning, keep latency low for quick answers.
+#   standard      → solid reasoning for everyday structured analysis.
+#   comprehensive → dynamic, so complex multi-issue matters get maximum thought.
+THINKING_BUDGETS = {
+    "brief":         1024,
+    "standard":      6144,
+    "comprehensive": -1,
+}
+
 UPLOAD_TYPES = ["pdf", "docx", "doc", "txt", "xlsx", "xls", "csv", "json", "rtf"]
 
 # Cost per 1M tokens (approx Gemini 2.5 Flash pricing)

@@ -48,6 +48,8 @@ from .ai import (  # noqa: F401
     _assess_response_quality,
     compute_confidence_score,
     render_confidence_panel,
+    render_reasoning_panel,
+    _resolve_thinking_budget,
     _get_genai_client,
     _resolve_api_key,
     manual_connect,
@@ -491,6 +493,9 @@ def init_session_state():
         "nf_deepdive": {},
         "nf_scan_result": None,
         "comparison_result": "",
+        "_last_reasoning": "",            # Captured model thinking (latest call)
+        "last_reasoning_display": "",     # Reasoning snapshot for the main answer
+        "show_ai_reasoning": True,        # Toggle the reasoning panel in the UI
         "tasks": [],                  # Task management list
         "_login_fail_count": 0,       # Failed login attempts this session
         "_login_locked_until": 0.0,   # Epoch time until login is unlocked
