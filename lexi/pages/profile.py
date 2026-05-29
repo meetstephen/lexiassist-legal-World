@@ -29,12 +29,12 @@ def render_profile():
     profile = st.session_state.profile
 
     _is_admin = st.session_state.get("current_user_role") == "admin"
-    _tab_labels = ["🏢 Firm Details", "🔐 Security", "🔔 Notifications", "💾 Data Management"]
+    _tab_labels = ["🏢 Firm Details", "🔐 Security", "🔔 Notifications", "🤖 AI Usage", "💾 Data Management"]
     if _is_admin:
         _tab_labels.append("⚙️ Firm Admin Settings")
     _tabs = st.tabs(_tab_labels)
-    tab_info, tab_security, tab_notif, tab_data = _tabs[:4]
-    tab_firm_admin = _tabs[4] if _is_admin else None
+    tab_info, tab_security, tab_notif, tab_usage, tab_data = _tabs[:5]
+    tab_firm_admin = _tabs[5] if _is_admin else None
 
     # ── Firm Details ──
     with tab_info:
@@ -189,7 +189,7 @@ def render_profile():
   </p>
   <p style="color:#64748b;font-size:12px;margin-top:30px;
   border-top:1px solid #e5e7eb;padding-top:10px;">
-    Sent by <strong>{esc(firm)}</strong> via LexiAssist v{__version__} ·
+    Sent by <strong>{esc(firm)}</strong> via {esc(BRAND_LABEL)} &middot;
     {datetime.now().strftime('%d %B %Y at %H:%M')}
   </p>
 </body>
@@ -310,6 +310,89 @@ def render_profile():
         st.caption("Signs you out of this device. Your data is saved.")
         if st.button("🚪 Sign Out Now", key="profile_logout_btn", use_container_width=True, type="primary"):
             do_logout()
+
+    # ── AI Usage & Cost Tracker (relocated from the removed Billing page) ──
+    # This is an account/usage concern, so it lives in the user's Profile.
+    with tab_usage:
+        st.markdown("#### 🤖 AI Usage & Cost Tracker")
+        st.caption(
+            "Your AI usage and estimated spend on this account. Costs are estimates "
+            "based on Google Gemini token pricing."
+        )
+        db = get_db()
+        summary = db.get_cost_summary()
+
+        kc1, kc2, kc3 = st.columns(3)
+        with kc1:
+            st.metric("Today", f"${summary['daily_cost']:.4f}", f"{summary['daily_calls']} calls")
+        with kc2:
+            st.metric("This Month", f"${summary['monthly_cost']:.4f}", f"{summary['monthly_calls']} calls")
+        with kc3:
+            st.metric("All Time", f"${summary['total_cost']:.4f}", f"{summary['total_calls']} calls")
+
+        st.markdown("---")
+
+        logs = db.get_cost_logs(100)
+        if logs:
+            if HAS_PLOTLY and len(logs) > 1:
+                log_df = pd.DataFrame(logs)
+                log_df["timestamp"] = pd.to_datetime(log_df["timestamp"], errors="coerce")
+                log_df["date"] = log_df["timestamp"].dt.date
+
+                daily_df = log_df.groupby("date")["estimated_cost"].sum().reset_index()
+                daily_df.columns = ["Date", "Cost ($)"]
+                if len(daily_df) > 1:
+                    fig_cost = px.bar(daily_df, x="Date", y="Cost ($)",
+                                      title="Daily AI Cost",
+                                      color_discrete_sequence=["#3b82f6"])
+                    st.plotly_chart(fig_cost, use_container_width=True)
+
+                if "task" in log_df.columns:
+                    task_df = log_df.groupby("task").agg(
+                        calls=("id", "count"),
+                        total_cost=("estimated_cost", "sum"),
+                    ).reset_index()
+                    task_df.columns = ["Task", "Calls", "Cost ($)"]
+                    fig_task = px.pie(task_df, values="Calls", names="Task",
+                                      title="API Calls by Task Type")
+                    st.plotly_chart(fig_task, use_container_width=True)
+
+                if "model" in log_df.columns:
+                    model_df = log_df.groupby("model").agg(
+                        calls=("id", "count"),
+                        total_cost=("estimated_cost", "sum"),
+                    ).reset_index()
+                    model_df.columns = ["Model", "Calls", "Cost ($)"]
+                    st.dataframe(model_df, use_container_width=True, hide_index=True)
+
+            with st.expander(f"📜 Call Log ({min(len(logs), 50)} most recent entries)", expanded=False):
+                for log in logs[:50]:
+                    task_lbl = TASK_TYPES.get(log.get("task", ""), {}).get("label", log.get("task", ""))
+                    mode_lbl = RESPONSE_MODES.get(log.get("mode", ""), {}).get("label", log.get("mode", ""))
+                    st.markdown(f"""<div class="history-item">
+                        <small>{esc(fmt_date(log.get('timestamp', '')))} ·
+                        {esc(log.get('model', ''))} ·
+                        {esc(task_lbl)} · {esc(mode_lbl)} ·
+                        In: {log.get('input_chars', 0):,}c · Out: {log.get('output_chars', 0):,}c ·
+                        <strong>${log.get('estimated_cost', 0):.5f}</strong></small><br>
+                        <small>{esc(log.get('query_preview', '')[:100])}</small>
+                    </div>""", unsafe_allow_html=True)
+
+            if st.button("📥 Export Cost Logs (CSV)", key="export_cost_csv", use_container_width=True):
+                cost_df = pd.DataFrame(logs)
+                csv_data = cost_df.to_csv(index=False)
+                st.download_button(
+                    "⬇️ Download CSV", csv_data,
+                    f"lexiassist_cost_logs_{datetime.now():%Y%m%d}.csv",
+                    "text/csv", key="dl_cost_csv", use_container_width=True,
+                )
+        else:
+            st.info("No API calls logged yet. Use the AI Assistant to generate your first analysis.")
+
+        st.caption(
+            f"💡 Costs estimated at ${COST_PER_1M_INPUT}/1M input tokens + "
+            f"${COST_PER_1M_OUTPUT}/1M output tokens (approx Gemini 2.5 Flash pricing)."
+        )
 
     # ── Data Management ──
     with tab_data:

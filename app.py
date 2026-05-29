@@ -1,5 +1,5 @@
 """
-LexiAssist v9.1.1 — Elite AI Legal Workflow Engine for Nigerian Lawyers
+LexiAssist 2.0 — Elite AI Legal Workflow Engine for Nigerian Lawyers
 Streamlit entry point. PostgreSQL persistence.
 
 Private-beta ready features:
@@ -27,17 +27,17 @@ from __future__ import annotations
 #    be the first Streamlit call in the script. We pull `st` and `__version__`
 #    from the runtime module (which performs all third-party imports) and
 #    then call `set_page_config` before importing anything else from `lexi`.
-from lexi.runtime import st, __version__, datetime, esc
+from lexi.runtime import st, __version__, BRAND_LABEL, datetime, esc
 from lexi.runtime import is_beta, is_production
 
 st.set_page_config(
-    page_title=f"LexiAssist v{__version__} — Elite AI Legal Engine for Nigerian Lawyers",
+    page_title=f"{BRAND_LABEL} — Elite AI Legal Engine for Nigerian Lawyers",
     page_icon="⚖️",
     layout="wide",
     initial_sidebar_state="expanded",
     menu_items={
         "Get Help": "https://aistudio.google.com/app/apikey",
-        "About": f"LexiAssist v{__version__} — AI-powered legal assistant for Nigerian legal practice. Powered by Google Gemini.",
+        "About": f"{BRAND_LABEL} — AI-powered legal assistant for Nigerian legal practice. Powered by Google Gemini.",
     },
 )
 
@@ -397,7 +397,7 @@ def main():
     # ── Footer (Option 3: pro-firm letterhead style) ────────────────────
     # Three lines:
     #   1. Disclaimer banner — "LexiAssist · AI-Generated Drafting Aid · Not Legal Advice · Verify all authorities"
-    #   2. Firm letterhead    — "{Firm}  |  Powered by LexiAssist v{__version__}  |  © {year}"
+    #   2. Firm letterhead    — "{Firm}  |  Powered by {BRAND_LABEL}  |  © {year}"
     #   3. Legal links        — "Privacy Notice · Terms of Service" pointing into Account tab
     # Username intentionally omitted (cleaner for screenshots / screen-shares).
     # Legal-data version, "updated", and "last act" lines are intentionally
@@ -417,7 +417,7 @@ def main():
         </div>
         <div style="margin-top:0.45rem;font-size:0.78rem;line-height:1.6;opacity:0.9;">
             <strong>{esc(firm)}</strong> &nbsp;|&nbsp;
-            Powered by LexiAssist v{esc(__version__)} &nbsp;|&nbsp;
+            Powered by {esc(BRAND_LABEL)} &nbsp;|&nbsp;
             &copy; {year}
         </div>
         <div style="margin-top:0.4rem;font-size:0.72rem;line-height:1.6;opacity:0.7;">

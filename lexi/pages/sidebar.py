@@ -4,8 +4,8 @@ from __future__ import annotations
 # Barrel import: mirrors the global namespace of the original single-file
 # app.py exactly. The original code below is unchanged.
 from ..runtime import *      # noqa: F401, F403
-# `import *` skips dunder names, so import __version__ explicitly.
-from ..runtime import __version__  # noqa: F401
+# `import *` skips dunder names, so import these explicitly.
+from ..runtime import __version__, BRAND_LABEL  # noqa: F401
 from ..crypto import *       # noqa: F401, F403
 from ..constants import *    # noqa: F401, F403
 from ..prompts import *      # noqa: F401, F403
@@ -45,8 +45,8 @@ section[data-testid="stSidebarContent"]{display:flex!important;}
     with st.sidebar:
         firm = get_firm_name()
         corp = (st.session_state.get("theme", "⚖️ Corporate") == "⚖️ Corporate")
-        name_display = firm if (firm and firm != "LexiAssist") else f"LexiAssist v{__version__}"
-        tag_display  = f"Powered by LexiAssist v{__version__}" if (firm and firm != "LexiAssist") else "Elite AI Legal Engine"
+        name_display = firm if (firm and firm != "LexiAssist") else BRAND_LABEL
+        tag_display  = f"Powered by {BRAND_LABEL}" if (firm and firm != "LexiAssist") else "Elite AI Legal Engine"
         hdr_col = "#c9a84c" if corp else "#1a2e4a"
         cap_col = "#2b3e51" if corp else "#08074a"
         div_col = "#6508e7" if corp else "#090b0e"
@@ -262,7 +262,7 @@ section[data-testid="stSidebarContent"]{display:flex!important;}
                         else:
                             st.error("❌ Could not save feedback right now. Please try again.")
 
-        st.caption(f"⚖️ LexiAssist v{__version__} © {datetime.now().year}")
+        st.caption(f"⚖️ {BRAND_LABEL} © {datetime.now().year}")
         st.caption("🇳🇬 Nigerian Law · 🤖 AI-Powered")
         # NBA Annual Practicing Certificate reminder
         today = date.today()

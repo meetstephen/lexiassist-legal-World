@@ -17,7 +17,7 @@ from .runtime import (
     HAS_DOCX, DocxDocument,
     smtplib, MIMEMultipart, MIMEText,
     safe_json_loads,
-    __version__, new_id,
+    __version__, BRAND_LABEL, new_id,
 )
 import logging
 from .crypto import encrypt_secret, decrypt_secret
@@ -116,13 +116,13 @@ def _maybe_send_hearing_reminders():
             continue
         subject = f"⚖️ Hearing Reminder ({d} day(s)): {h['title']}"
         body = (
-            f"LexiAssist v{__version__} — Hearing Reminder\n\n"
+            f"{BRAND_LABEL} — Hearing Reminder\n\n"
             f"Matter:  {h['title']}\n"
             f"Suit No: {h['suit']}\n"
             f"Court:   {h['court']}\n"
             f"Date:    {fmt_date(h['date'])}\n"
             f"Days remaining: {d}\n\n"
-            f"Please prepare accordingly.\n\n— LexiAssist v{__version__}"
+            f"Please prepare accordingly.\n\n— {BRAND_LABEL}"
         )
         try:
             msg = MIMEMultipart()
@@ -414,13 +414,15 @@ def run_issue_spot(query: str) -> str:
     return generate(query, ISSUE_SPOT_PROMPT, "brief", "analysis")
 
 
-def run_research(query: str, mode: str) -> str:
+def run_research(query: str, mode: str, use_web_search: bool = False) -> str:
     # Pass query into build_system_prompt so the system prompt is grounded
     # against verified Nigerian statutes (RAG) AND verified Nigerian cases
     # (case-law grounding). Without this, the AI was operating from memory
     # only — which is exactly the hallucination risk we want to eliminate.
+    # When use_web_search=True, the answer is additionally grounded in LIVE
+    # Google Search results (real, current sources with links).
     system = build_system_prompt("research", mode, query=query)
-    return generate(query, system, mode, "research")
+    return generate(query, system, mode, "research", use_web_search=use_web_search)
 
 
 def safe_secret(key: str, default: str = "") -> str:

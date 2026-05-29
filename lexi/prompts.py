@@ -24,7 +24,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from .runtime import __version__
+from .runtime import __version__, BRAND_VERSION
 
 # ═══════════════════════════════════════════════════════
 # FILE LOADER
@@ -33,9 +33,15 @@ _PROMPT_DIR = Path(__file__).resolve().parent / "prompt_data"
 
 
 def _load(filename: str) -> str:
-    """Load a prompt template and resolve the {version} placeholder."""
+    """Load a prompt template and resolve placeholders.
+
+    ``{version}`` resolves to the public-facing BRAND_VERSION (e.g. "2.0") so
+    the assistant identifies itself to users as "LexiAssist v2.0" rather than
+    leaking the noisy internal build number. The precise ``__version__`` is
+    still used elsewhere for data records and migrations.
+    """
     text = (_PROMPT_DIR / filename).read_text(encoding="utf-8")
-    return text.replace("{version}", __version__)
+    return text.replace("{version}", BRAND_VERSION)
 
 
 # ═══════════════════════════════════════════════════════
