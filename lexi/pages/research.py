@@ -40,13 +40,14 @@ def render_research():
         key="research_query_ta",
     )
 
-    # ── Quick Precedent Finder (combines local verified DB + online AI knowledge) ──
+    # ── Quick Precedent Finder (verified local DB + LIVE web search) ──
     with st.expander("🔖 Quick Precedent Finder", expanded=False):
         st.caption(
-            "Combines LexiAssist's verified case database with AI online knowledge "
-            "to find relevant Nigerian cases. Verified cases from the local database "
-            "are always prioritised. All results are tagged with confidence tiers: "
-            "✅ Verified · 🟡 High Confidence · ⚠️ Needs Verification."
+            "Combines LexiAssist's verified case database with a LIVE web search "
+            "to find relevant Nigerian cases — with real source links. Verified "
+            "cases from the local database are always prioritised. Results are "
+            "tagged: ✅ Verified · 🟡 High Confidence · ⚠️ Needs Verification. "
+            "Always open and confirm each source before relying on it."
         )
         prec_cols = st.columns([3, 1])
         with prec_cols[0]:
@@ -130,6 +131,14 @@ def render_research():
                     for s in suggested:
                         st.markdown(f"- {s}")
 
+                # ── Real live-web sources behind the online cases ──
+                _prec_grounding = st.session_state.get("_prec_grounding")
+                if _prec_grounding and _prec_grounding.get("sources"):
+                    st.markdown(
+                        render_sources_panel(_prec_grounding, "🌐 Live web sources searched"),
+                        unsafe_allow_html=True,
+                    )
+
                 # Summary message
                 if needs_ver_n > 0 and verified_n > 0:
                     st.warning(
@@ -153,11 +162,21 @@ def render_research():
 
             if st.button("🗑️ Clear Precedent Results", key="prec_clear_btn"):
                 for k in ("_prec_raw", "_prec_grounded", "_prec_query",
-                          "_prec_online_results", "_prec_mode",
+                          "_prec_online_results", "_prec_mode", "_prec_grounding",
                           "_online_research_notes", "_online_suggested_statutes"):
                     st.session_state.pop(k, None)
                 st.rerun()
     st.markdown("---")
+    if st.session_state.get("global_web_grounding", False):
+        st.caption("🌐 Live web grounding is ON app-wide (sidebar) — this research will search the web.")
+    else:
+        st.checkbox(
+            "🌐 Search the live web (ground this research in current online sources)",
+            key="research_use_web",
+            help="Grounds the research answer in live Google Search results and shows "
+                 "the real source links used. Best for confirming recent or "
+                 "fast-changing positions. Verify every source before relying on it.",
+        )
     rc1, rc2 = st.columns([1, 1])
     with rc1:
         research_btn = st.button(
@@ -170,14 +189,18 @@ def render_research():
 
     if clear_btn:
         st.session_state.research_results = ""
+        st.session_state.pop("_research_grounding", None)
         st.rerun()
 
     if research_btn and query.strip():
-        with st.spinner("📚 Researching…"):
+        _use_web = bool(st.session_state.get("research_use_web", False)
+                        or st.session_state.get("global_web_grounding", False))
+        with st.spinner("📚 Researching the live web…" if _use_web else "📚 Researching…"):
             start_t = time.time()
-            result = run_research(query.strip(), mode)
+            result = run_research(query.strip(), mode, use_web_search=_use_web)
             elapsed = time.time() - start_t
         st.session_state.research_results = result
+        st.session_state["_research_grounding"] = st.session_state.get("_last_grounding")
         add_to_history(f"[Research] {query.strip()}", result, "research", mode)
         st.caption(f"⏱️ {elapsed:.1f}s · {len(result.split()):,} words")
 
@@ -196,6 +219,14 @@ def render_research():
             safe_docx_download(result, "Legal Research", fname, "res_dl_docx", doc_type="research")
 
         st.markdown(f'<div class="response-box">{esc(result)}</div>', unsafe_allow_html=True)
+
+        # ── Real live-web sources (when web grounding was used) ──
+        _research_grounding = st.session_state.get("_research_grounding")
+        if _research_grounding and _research_grounding.get("sources"):
+            st.markdown(
+                render_sources_panel(_research_grounding, "🌐 Live web sources used for this research"),
+                unsafe_allow_html=True,
+            )
 
         # Save research to case
         cases = st.session_state.cases

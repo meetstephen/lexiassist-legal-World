@@ -457,14 +457,14 @@ def render_home():
             {
                 "num": 2, "icon": "👤",
                 "title": "Add your first client",
-                "desc": "Create a client record — every case, billing entry and conflict check links back to a client.",
+                "desc": "Create a client record — every case and conflict check links back to a client.",
                 "action": "Go to 👥 Clients → ➕ Add Client.",
                 "done_msg": "First client added ✓",
             },
             {
                 "num": 3, "icon": "📁",
                 "title": "Create your first case",
-                "desc": "A case ties your client, hearings, pleadings, analyses and billing together in one place.",
+                "desc": "A case ties your client, hearings, pleadings, and analyses together in one place.",
                 "action": "Go to 📁 Cases → ➕ Add Case.",
                 "done_msg": "First case created ✓",
             },

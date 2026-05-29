@@ -168,27 +168,29 @@ def search_cases_online(
             + "\n"
         )
 
-    prompt = f"""You are a senior Nigerian legal research specialist with deep knowledge of
-Nigerian case law from the Supreme Court, Court of Appeal, Federal High Court,
-National Industrial Court, and State High Courts.
+    prompt = f"""You are a senior Nigerian legal research specialist with LIVE Google Search
+access and deep knowledge of Nigerian case law from the Supreme Court, Court of
+Appeal, Federal High Court, National Industrial Court, and State High Courts.
 
-TASK: Find additional relevant Nigerian cases for the following legal issue.
-You MUST only return cases you are HIGHLY CONFIDENT are real reported decisions.
+TASK: Using live web search, find additional REAL, reported Nigerian cases for
+the following legal issue. Confirm each case against what the search results
+actually show — do not rely on memory alone.
 
 LEGAL ISSUE: {legal_issue}{case_context}
 JURISDICTION: {jurisdiction}{already_have}
 
 STRICT RULES:
-1. ONLY return cases you are confident exist in Nigerian law reports (NWLR, SC, SCNLR, FWLR, LPELR).
-2. Prefer well-known, landmark decisions that are widely cited.
+1. Base every case on what your live web search results actually show. Prefer
+   cases reported in NWLR, SC, SCNLR, FWLR, LPELR or carried by reputable
+   Nigerian legal sources (judiciary sites, law-report publishers, NBA, etc.).
+2. Strongly prefer landmark and RECENT decisions relevant to the issue.
 3. Include the FULL citation in standard Nigerian format: (YYYY) NN NWLR (Pt. NNN) NNN
-4. If you cannot recall the exact citation, use the format you are most confident about.
-5. Include a mix of Supreme Court and Court of Appeal decisions where possible.
-6. For each case, state the RATIO DECIDENDI (the legal principle established).
-7. Explain WHY the case is relevant to the specific legal issue raised.
-8. NEVER invent a case name or fabricate a citation. If unsure, omit that case entirely.
-9. Return UP TO {max(3, max_results - len(local_cases))} cases, ranked by relevance.
-10. Do NOT repeat any case already listed above.
+4. For each case, state the RATIO DECIDENDI (the legal principle established).
+5. Explain WHY the case is relevant to the specific legal issue raised.
+6. NEVER invent a case name or fabricate a citation. If the search does not
+   confirm a case, OMIT it entirely — fewer real cases beats any fabrication.
+7. Return UP TO {max(3, max_results - len(local_cases))} cases, ranked by relevance.
+8. Do NOT repeat any case already listed above.
 
 Respond ONLY in this exact JSON format:
 {{
@@ -207,7 +209,11 @@ Respond ONLY in this exact JSON format:
 }}
 """
 
-    raw = generate(prompt, identity, "standard", "research")
+    # Go ONLINE for real: ground the search in live Google Search results so
+    # the "online" cases are sourced from the web, not training memory. The
+    # real source URLs are captured for display alongside the results.
+    raw = generate(prompt, identity, "standard", "research", use_web_search=True)
+    st.session_state["_prec_grounding"] = st.session_state.get("_last_grounding")
 
     if raw and not raw.startswith(("⚠️", "🚫", "⏳")):
         data = safe_json_loads(raw, fallback={"cases": []})

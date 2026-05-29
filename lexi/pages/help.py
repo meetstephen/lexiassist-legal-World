@@ -9,7 +9,7 @@ from __future__ import annotations
 # Barrel import: mirrors the global namespace of the original single-file
 # app.py exactly. The original code below is unchanged.
 from ..runtime import *      # noqa: F401, F403
-from ..runtime import __version__  # noqa: F401
+from ..runtime import __version__, BRAND_LABEL  # noqa: F401
 from ..crypto import *       # noqa: F401, F403
 from ..constants import *    # noqa: F401, F403
 from ..prompts import *      # noqa: F401, F403
@@ -51,7 +51,7 @@ def render_help() -> None:
     with h_quick:
         st.markdown(
             f"""
-### Welcome to LexiAssist — v{__version__}
+### Welcome to {BRAND_LABEL}
 
 LexiAssist is an AI-powered workspace for Nigerian legal practice. It is
 designed to be a **drafting and analysis aid** that respects how you actually
@@ -192,9 +192,6 @@ probability of success, opponent counter-strategy, and your counter-counter.
             ("✅ Tasks",
              "Deadline + assignment tracker with overdue auto-flag, "
              "priority sort, and case linkage."),
-            ("⚡ Lifecycle Automation",
-             "Generate a complete matter workflow — stages, documents, "
-             "actions, deadline triggers — in one click."),
             ("📜 Smart Pleadings",
              "18 court document types drafted in full Nigerian format "
              "from your case file."),
@@ -206,10 +203,8 @@ probability of success, opponent counter-strategy, and your counter-counter.
              "client and case before you take a new matter. Includes "
              "fuzzy name-matching to catch alias / spelling variants."),
             ("👥 Clients",
-             "Client database — every case, billing entry, and conflict "
+             "Client database — every case and conflict "
              "check links here."),
-            ("💰 Billing",
-             "Time entries, hourly rates, invoices, AI-cost tracker."),
             ("⚖️ Fee Calculator",
              "Land scale fees · stamp duty · court filing fees for FHC, "
              "Lagos, FCT, Rivers, TAT, IST. Generates professional fee "

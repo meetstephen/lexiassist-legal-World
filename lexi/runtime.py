@@ -42,7 +42,15 @@ import streamlit as st
 #   - IDENTITY_CORE system prompt
 #   - PDF/DOCX export footers
 #   - README.md (manually kept in sync)
-__version__ = "9.4.0"
+__version__ = "9.8.0"
+
+# ── Public-facing brand version ───────────────────────────────────────
+# The internal semver above keeps climbing with every change, which looks
+# noisy to end users. ``BRAND_LABEL`` is the friendly, stable name shown in
+# the UI / exports / emails (e.g. "LexiAssist 2.0"); ``__version__`` stays as
+# the precise build number for data records, migrations and debugging.
+BRAND_VERSION = "2.0"
+BRAND_LABEL = f"LexiAssist {BRAND_VERSION}"
 
 # ── Optional / guarded imports ────────────────────────────────────────
 # Each block defines all symbols (even on import failure) so downstream

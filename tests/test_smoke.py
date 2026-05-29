@@ -65,12 +65,10 @@ PAGE_RENDERERS: dict[str, list[str]] = {
     "lexi.pages.calendar":        ["render_calendar"],
     "lexi.pages.templates":       ["render_templates"],
     "lexi.pages.clients":         ["render_clients"],
-    "lexi.pages.billing":         ["render_billing"],
     "lexi.pages.tools":           ["render_tools"],
     "lexi.pages.search":          ["render_global_search"],
     "lexi.pages.conflict":        ["render_conflict_checker"],
     "lexi.pages.pleadings":       ["render_pleadings"],
-    "lexi.pages.lifecycle":       ["render_lifecycle"],
     "lexi.pages.witness":         ["render_witness_prep"],
     "lexi.pages.news":            ["render_legal_news"],
     "lexi.pages.notes":           ["render_notes_converter"],
@@ -143,19 +141,23 @@ def test_version_consistency():
 
 def test_all_renderers_referenced_in_app_main():
     """Every render_* function declared in PAGE_RENDERERS must be referenced
-    inside app.main(), or it is dead routing code.
+    in the app entry module (app.main() OR a module-level nav wrapper that
+    main() routes to), or it is dead routing code.
 
     This catches the easy-to-miss bug where a new page module is added but
-    main() is never updated to route to it.
+    the routing is never updated to reach it.
     """
     import inspect
 
     app = _load_app_module()
-    main_src = inspect.getsource(app.main)
+    # Scan the WHOLE entry module, not just main(): some pages are reached
+    # via thin module-level wrappers (e.g. render_research_hub bundles
+    # render_research + render_source_backed_research as sub-tabs).
+    app_src = inspect.getsource(app)
     expected = sorted({fn for fns in PAGE_RENDERERS.values() for fn in fns})
-    missing = [fn for fn in expected if fn not in main_src]
+    missing = [fn for fn in expected if fn not in app_src]
     assert not missing, (
-        f"app.main() never references these render functions, so they "
+        f"app entry module never references these render functions, so they "
         f"are unreachable from the UI: {missing}"
     )
 

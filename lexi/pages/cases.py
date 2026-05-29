@@ -217,7 +217,7 @@ def render_cases():
                                 profile = st.session_state.get("profile", {})
                                 lawyer = profile.get("lawyer_name", "")
                                 bundle_lines = [
-                                    f"LEXIASSIST v{__version__} — CASE BUNDLE",
+                                    f"{BRAND_LABEL.upper()} — CASE BUNDLE",
                                     f"{'='*60}",
                                     f"Case Title    : {c.get('title','')}",
                                     f"Suit Number   : {c.get('suit_no','—')}",

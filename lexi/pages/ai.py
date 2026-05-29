@@ -37,7 +37,7 @@ def render_ai():
     # ── Imported Document Context ──
     doc_context = ""
     if st.session_state.imported_doc:
-        with st.expander(f"📎 Imported: {st.session_state.imported_doc['name']}", expanded=False):
+        with st.expander(f"📎 Imported: {st.session_state.imported_doc['name']}", expanded=True):
             doc = st.session_state.imported_doc
             _full = doc.get("full_text", "") or ""
             st.caption(f"Type: {doc['type'].upper()} · Size: {doc['size']:,} bytes · {len(_full):,} characters extracted")
@@ -49,6 +49,41 @@ def render_ai():
                     "section by section."
                 )
             st.text_area("Preview", doc["preview"], height=120, disabled=True, key="doc_preview_ta")
+
+            # ── One-click "work from this document" quick actions ──
+            # Each chip loads a ready-made instruction into the query box, sets
+            # the right task, and runs immediately — with the uploaded document
+            # already attached as context. Lawyers don't have to know what to type.
+            st.caption("⚡ Quick actions on this document:")
+            qa_defs = [
+                ("📄 Summarise", "general",
+                 "Summarise this document in plain English for a Nigerian lawyer: identify the "
+                 "parties, the purpose/nature of the document, key terms, obligations, durations, "
+                 "amounts, governing law/jurisdiction, and anything that needs immediate attention."),
+                ("⚠️ Spot Risks", "contract_review",
+                 "Review this document for legal risks and red flags from the Client's perspective "
+                 "under Nigerian law. Give a clause-by-clause risk grade (🔴/🟡/🟢), say who each "
+                 "risky clause favours, and recommend a specific fix or counter-clause for each."),
+                ("📋 Key Terms & Obligations", "general",
+                 "Extract and tabulate the key terms of this document: parties, obligations of each "
+                 "party, payment/consideration, deadlines and durations, termination rights, "
+                 "dispute-resolution/governing law, and any conditions precedent."),
+                ("🗣️ Explain to Client", "general",
+                 "Explain this document to a non-lawyer client in plain, simple English: what it is, "
+                 "what they are agreeing to, their main obligations and rights, and the three most "
+                 "important things they should be careful about before signing."),
+            ]
+            qa_cols = st.columns(len(qa_defs))
+            for _qc, (_qlabel, _qtask, _qprompt) in zip(qa_cols, qa_defs):
+                with _qc:
+                    if st.button(_qlabel, key=f"doc_qa_{_qlabel}", use_container_width=True,
+                                 help="Runs this instruction against the uploaded document."):
+                        st.session_state["_ai_example_prefill"] = _qprompt
+                        st.session_state["ai_task_sel"] = _qtask
+                        st.session_state["_ai_autorun"] = True
+                        st.session_state.pop("ai_query_ta", None)
+                        st.rerun()
+
             dc1, dc2 = st.columns(2)
             with dc1:
                 if st.button("📋 Use as Context", key="use_doc_ctx_btn", use_container_width=True):
@@ -357,13 +392,16 @@ def render_ai():
     # on, the answer is grounded in live Google Search results and real source
     # links are shown — useful to confirm a development is current or to check
     # very recent changes the model may not know about.
-    st.checkbox(
-        "🌐 Search the live web for this query",
-        key="ai_use_web_search",
-        help="Ground the answer in live Google Search results and show the real "
-             "source links used. Best for confirming recent or fast-changing "
-             "developments. Verify every source before relying on it.",
-    )
+    if st.session_state.get("global_web_grounding", False):
+        st.caption("🌐 Live web grounding is ON app-wide (sidebar) — this query will search the web.")
+    else:
+        st.checkbox(
+            "🌐 Search the live web for this query",
+            key="ai_use_web_search",
+            help="Ground the answer in live Google Search results and show the real "
+                 "source links used. Best for confirming recent or fast-changing "
+                 "developments. Verify every source before relying on it.",
+        )
 
     # ── Action Buttons ──
     bc1, bc2, bc3 = st.columns(3)
@@ -420,7 +458,10 @@ def render_ai():
             st.rerun()
 
     # ── Main Generation (with streaming + audit + confidence) ──
-    if generate_btn and query.strip():
+    # Runs on the Generate button OR a one-click document quick-action
+    # (which sets _ai_autorun + prefills the query and task above).
+    _autorun = bool(st.session_state.pop("_ai_autorun", False))
+    if (generate_btn or _autorun) and query.strip():
         st.markdown("### 📋 Analysis (streaming…)")
         stream_container = st.container()
         start_t = time.time()
@@ -432,7 +473,10 @@ def render_ai():
             full_prompt = f"DOCUMENT CONTEXT:\n{sanitize_doc_context(doc_context)[:MAX_DOC_CONTEXT_CHARS]}\n\nQUERY:\n{query.strip()}"
 
         with st.spinner(f"🧠 Streaming {mode_info['label']} analysis…"):
-            _use_web = bool(st.session_state.get("ai_use_web_search", False))
+            # Ground on the live web if EITHER the per-query box OR the
+            # app-wide sidebar switch is on.
+            _use_web = bool(st.session_state.get("ai_use_web_search", False)
+                            or st.session_state.get("global_web_grounding", False))
             result = generate(full_prompt, system, mode, task,
                               stream_to=stream_container, use_web_search=_use_web)
         elapsed = time.time() - start_t

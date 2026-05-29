@@ -17,7 +17,7 @@ from .runtime import (
     HAS_DOCX, DocxDocument,
     smtplib, MIMEMultipart, MIMEText,
     safe_json_loads,
-    __version__, new_id,
+    __version__, BRAND_LABEL, new_id,
 )
 import logging
 from .crypto import encrypt_secret, decrypt_secret
@@ -116,13 +116,13 @@ def _maybe_send_hearing_reminders():
             continue
         subject = f"⚖️ Hearing Reminder ({d} day(s)): {h['title']}"
         body = (
-            f"LexiAssist v{__version__} — Hearing Reminder\n\n"
+            f"{BRAND_LABEL} — Hearing Reminder\n\n"
             f"Matter:  {h['title']}\n"
             f"Suit No: {h['suit']}\n"
             f"Court:   {h['court']}\n"
             f"Date:    {fmt_date(h['date'])}\n"
             f"Days remaining: {d}\n\n"
-            f"Please prepare accordingly.\n\n— LexiAssist v{__version__}"
+            f"Please prepare accordingly.\n\n— {BRAND_LABEL}"
         )
         try:
             msg = MIMEMultipart()
@@ -397,12 +397,14 @@ def run_comparison(entry_a: dict, entry_b: dict) -> str:
         f"Query: {entry_b.get('query', '')}\n"
         f"Response:\n{entry_b.get('response', '')}"
     )
-    return generate(prompt, COMPARISON_PROMPT, "standard", "analysis")
+    # Internal meta-task (compares two existing texts) — no web search needed.
+    return generate(prompt, COMPARISON_PROMPT, "standard", "analysis", use_web_search=False)
 
 
 def run_critique(query: str, analysis: str) -> str:
     prompt = f"ORIGINAL QUERY:\n{query}\n\nANALYSIS TO REVIEW:\n{analysis}"
-    return generate(prompt, CRITIQUE_PROMPT, "brief", "analysis")
+    # Internal meta-task (critiques an existing analysis) — no web search needed.
+    return generate(prompt, CRITIQUE_PROMPT, "brief", "analysis", use_web_search=False)
 
 
 def run_followup(original: str, previous: str, followup: str, mode: str) -> str:
@@ -414,13 +416,15 @@ def run_issue_spot(query: str) -> str:
     return generate(query, ISSUE_SPOT_PROMPT, "brief", "analysis")
 
 
-def run_research(query: str, mode: str) -> str:
+def run_research(query: str, mode: str, use_web_search: bool = False) -> str:
     # Pass query into build_system_prompt so the system prompt is grounded
     # against verified Nigerian statutes (RAG) AND verified Nigerian cases
     # (case-law grounding). Without this, the AI was operating from memory
     # only — which is exactly the hallucination risk we want to eliminate.
+    # When use_web_search=True, the answer is additionally grounded in LIVE
+    # Google Search results (real, current sources with links).
     system = build_system_prompt("research", mode, query=query)
-    return generate(query, system, mode, "research")
+    return generate(query, system, mode, "research", use_web_search=use_web_search)
 
 
 def safe_secret(key: str, default: str = "") -> str:
@@ -500,6 +504,7 @@ def init_session_state():
         "_last_grounding": None,          # Captured live web sources (latest call)
         "last_grounding_display": None,   # Grounding snapshot for the main answer
         "ai_use_web_search": False,       # User toggle: ground answers on live web
+        "global_web_grounding": False,    # App-wide switch: put ALL AI features online
         "tasks": [],                  # Task management list
         "_login_fail_count": 0,       # Failed login attempts this session
         "_login_locked_until": 0.0,   # Epoch time until login is unlocked

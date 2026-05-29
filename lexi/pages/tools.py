@@ -40,8 +40,12 @@ def render_tools():
         unsafe_allow_html=True,
     )
 
-    tab_lim, tab_calc, tab_court, tab_maxim, tab_aml, tab_checklist, tab_authority = st.tabs(
-        ["⏳ Limitation Periods", "🧮 Deadline Calculator", "🏛️ Court Hierarchy", "📜 Legal Maxims", "🛡️ AML / SCUML", "📋 Court Process Checklist", "🔍 Authority Verification"]
+    # NOTE: Authority Verification lives in its own dedicated nav page
+    # (🔍 Authority Verify) which has the stronger deterministic DB + repealed-law
+    # + foreign-authority scanners. The duplicate tab that used to be here was
+    # removed to avoid two different verifiers diverging.
+    tab_lim, tab_calc, tab_court, tab_maxim, tab_aml, tab_checklist = st.tabs(
+        ["⏳ Limitation Periods", "🧮 Deadline Calculator", "🏛️ Court Hierarchy", "📜 Legal Maxims", "🛡️ AML / SCUML", "📋 Court Process Checklist"]
     )
 
     # ── Limitation Periods (editable) ──
@@ -66,9 +70,6 @@ def render_tools():
 
     with tab_checklist:
         _render_tools_checklist()
-
-    with tab_authority:
-        _render_tools_authority()
 
 
 
@@ -1114,229 +1115,6 @@ def _render_tools_checklist() -> None:
             )
             st.markdown(
                 f'<div class="response-box">{esc(chk_raw_fb)}</div>',
-                unsafe_allow_html=True,
-            )
-        else:
-            st.error(
-                "⚠️ The AI response came back empty. This usually means the "
-                "model returned no content (rate limit, safety filter, or a "
-                "transient error). Please try again."
-            )
-
-
-
-    # ══════════════════════════════════════════════════════
-    # TAB: AUTHORITY VERIFICATION MODE
-    # ══════════════════════════════════════════════════════
-
-
-def _render_tools_authority() -> None:
-    st.markdown("""<div class="page-header" style="margin-bottom:1rem;">
-        <h2>🔍 Authority Verification Mode</h2>
-        <p>Paste any AI-generated legal argument — LexiAssist will check every citation</p>
-    </div>""", unsafe_allow_html=True)
-
-    st.markdown(
-        '<div style="background:var(--la-bg2);border:1px solid var(--la-border);'
-        'border-left:4px solid #3b82f6;border-radius:8px;'
-        'padding:0.7rem 1rem;margin-bottom:1rem;font-size:0.83rem;color:var(--la-text);">'
-        '🔍 <strong>How it works:</strong> Paste AI-generated text or a legal argument. '
-        'LexiAssist extracts every statute, case, and rule cited, then checks each one against '
-        'its verified Nigerian legal database and flags hallucinations, repealed laws, and unverified authorities.'
-        '</div>',
-        unsafe_allow_html=True,
-    )
-
-    av_text = st.text_area(
-        "Paste AI output or legal argument to verify *",
-        height=220,
-        key="av_input_text",
-        placeholder=(
-            "Paste any legal text here — e.g. an AI-generated analysis, a draft pleading, "
-            "a research memo, or any text containing case names, statutes, or rules you want verified...\n\n"
-            "Example:\n"
-            "The applicant relies on Madukolu v Nkemdilim (1962) for the jurisdiction test. "
-            "See also CAMA 2020 s. 394. The Companies Act 1990 applies to winding-up proceedings. "
-            "Per Donoghue v Stevenson (1932), a duty of care arises..."
-        ),
-    )
-
-    if st.button("🔍 Verify All Authorities", type="primary", key="av_verify_btn", use_container_width=True):
-        if not av_text.strip():
-            st.error("❌ Please paste some text to verify.")
-        else:
-            # Build the verified cases reference for context
-            _known_cases = "\n".join(
-                f"- {name}: {info.get('citation','')} ({info.get('court','')}, {info.get('year','')})"
-                for name, info in list(VERIFIED_NIGERIAN_CASES.items())[:80]
-            )
-
-            av_prompt = (
-                "You are a Nigerian legal citation verification expert.\n\n"
-                "Extract EVERY legal authority from the text below — cases, statutes, regulations, rules, "
-                "constitutional provisions — and verify each one.\n\n"
-                "VERIFIED NIGERIAN CASES IN DATABASE:\n"
-                f"{_known_cases}\n\n"
-                "For each authority found, return this JSON array:\n"
-                '[\n'
-                '  {\n'
-                '    "authority": "Madukolu v Nkemdilim",\n'
-                '    "type": "Case",\n'
-                '    "status": "Verified",\n'
-                '    "problem": "",\n'
-                '    "fix": "Good citation — use as stated",\n'
-                '    "confidence": 95\n'
-                '  },\n'
-                '  {\n'
-                '    "authority": "Companies Act 1990",\n'
-                '    "type": "Statute",\n'
-                '    "status": "Repealed",\n'
-                '    "problem": "Repealed and replaced by CAMA 2020",\n'
-                '    "fix": "Replace with CAMA 2020 and cite the specific section",\n'
-                '    "confidence": 98\n'
-                '  },\n'
-                '  {\n'
-                '    "authority": "Donoghue v Stevenson (1932)",\n'
-                '    "type": "Case",\n'
-                '    "status": "Foreign",\n'
-                '    "problem": "English case — persuasive only, not binding in Nigerian courts",\n'
-                '    "fix": "Find Nigerian equivalent or use as persuasive authority with caveat",\n'
-                '    "confidence": 99\n'
-                '  }\n'
-                ']\n\n'
-                'Status options: "Verified" | "Unverified" | "Possible Hallucination" | "Repealed" | '
-                '"Foreign" | "Needs Section Number" | "Check Spelling"\n\n'
-                'Respond ONLY with the JSON array. No preamble.\n\n'
-                f'TEXT TO VERIFY:\n{av_text[:6000]}'
-            )
-
-            with st.spinner("🔍 Extracting and verifying authorities…"):
-                av_raw = generate(av_prompt, IDENTITY_CORE, "brief", "analysis")
-
-            try:
-                av_results = json.loads(
-                    av_raw.strip().replace("```json", "").replace("```", "").strip()
-                )
-                st.session_state["_av_results"] = av_results
-                st.session_state["_av_source_text"] = av_text.strip()
-            except Exception:
-                st.session_state["_av_results"] = None
-                st.session_state["_av_raw"] = av_raw
-
-    av_results = st.session_state.get("_av_results")
-    av_raw_fb  = st.session_state.get("_av_raw", "")
-
-    if av_results:
-        st.markdown("---")
-
-        # Summary counts
-        counts = {"Verified": 0, "Repealed": 0, "Foreign": 0,
-                  "Unverified": 0, "Possible Hallucination": 0, "Other": 0}
-        for r in av_results:
-            s = r.get("status", "Other")
-            if s in counts:
-                counts[s] += 1
-            else:
-                counts["Other"] += 1
-
-        total = len(av_results)
-        st.markdown(f"### 🔍 Verification Results — {total} authorit{'y' if total == 1 else 'ies'} found")
-
-        sc1, sc2, sc3, sc4, sc5 = st.columns(5)
-        for col, label, key, colour in [
-            (sc1, "✅ Verified",     "Verified",               "#16a34a"),
-            (sc2, "⚠️ Unverified",  "Unverified",             "#d97706"),
-            (sc3, "🚨 Hallucinated","Possible Hallucination",  "#dc2626"),
-            (sc4, "🗑️ Repealed",   "Repealed",               "#7c3aed"),
-            (sc5, "🌍 Foreign",     "Foreign",                 "#0891b2"),
-        ]:
-            with col:
-                col.markdown(
-                    f'<div style="background:var(--la-card);border:1px solid var(--la-border);'
-                    f'border-radius:8px;padding:0.6rem;text-align:center;">'
-                    f'<div style="font-size:1.4rem;font-weight:800;color:{colour};">{counts[key]}</div>'
-                    f'<div style="font-size:0.72rem;color:var(--la-text2);">{label}</div></div>',
-                    unsafe_allow_html=True,
-                )
-
-        st.markdown("")
-
-        # Status colours and icons
-        STATUS_META = {
-            "Verified":               ("#16a34a", "#f0fdf4", "#bbf7d0", "✅"),
-            "Unverified":             ("#d97706", "#fffbeb", "#fde68a", "⚠️"),
-            "Possible Hallucination": ("#dc2626", "#fef2f2", "#fecaca", "🚨"),
-            "Repealed":               ("#7c3aed", "#fdf4ff", "#e9d5ff", "🗑️"),
-            "Foreign":                ("#0891b2", "#ecfeff", "#a5f3fc", "🌍"),
-            "Needs Section Number":   ("#d97706", "#fffbeb", "#fde68a", "📌"),
-            "Check Spelling":         ("#f59e0b", "#fffbeb", "#fde68a", "✏️"),
-        }
-        DEFAULT_META = ("#64748b", "var(--la-bg2)", "var(--la-border)", "❓")
-
-        for r in av_results:
-            status = r.get("status", "Unverified")
-            colour, bg, border_c, icon = STATUS_META.get(status, DEFAULT_META)
-            conf = r.get("confidence", 0)
-
-            st.markdown(
-                f'<div style="background:{bg};border:1px solid {border_c};'
-                f'border-left:4px solid {colour};border-radius:8px;'
-                f'padding:0.75rem 1rem;margin-bottom:0.5rem;">'
-                f'<div style="display:flex;justify-content:space-between;'
-                f'align-items:flex-start;flex-wrap:wrap;gap:0.3rem;">'
-                f'<div>'
-                f'<strong>{icon} {esc(r.get("authority",""))}</strong>'
-                f' <span style="font-size:0.75rem;color:{colour};font-weight:600;">'
-                f'[{esc(r.get("type",""))}] — {esc(status)}</span>'
-                + (f'<br><span style="color:#dc2626;font-size:0.82rem;">\u26a0\ufe0f {esc(r.get("problem",""))}</span>' if r.get("problem") else '')
-                + (f'<br><span style="color:#16a34a;font-size:0.82rem;">\U0001f4a1 {esc(r.get("fix",""))}</span>' if r.get("fix") else '') +
-                f'</div>'
-                f'<div style="font-size:0.75rem;color:var(--la-text2);white-space:nowrap;">'
-                f'Confidence: <strong style="color:{colour};">{conf}%</strong>'
-                f'</div></div></div>',
-                unsafe_allow_html=True,
-            )
-
-        # Export report
-        av_export = "AUTHORITY VERIFICATION REPORT\n"
-        av_export += f"Generated: {datetime.now():%d %B %Y %H:%M}\n"
-        av_export += f"Total authorities checked: {total}\n"
-        av_export += f"Verified: {counts['Verified']} | Unverified: {counts['Unverified']} | "
-        av_export += f"Repealed: {counts['Repealed']} | Hallucinated: {counts['Possible Hallucination']} | Foreign: {counts['Foreign']}\n"
-        av_export += "=" * 60 + "\n\n"
-        for r in av_results:
-            av_export += f"AUTHORITY: {r.get('authority','')}\n"
-            av_export += f"  Type:       {r.get('type','')}\n"
-            av_export += f"  Status:     {r.get('status','')}\n"
-            av_export += f"  Confidence: {r.get('confidence',0)}%\n"
-            if r.get("problem"):
-                av_export += f"  Problem:    {r['problem']}\n"
-            if r.get("fix"):
-                av_export += f"  Fix:        {r['fix']}\n"
-            av_export += "\n"
-        av_export += "=" * 60 + "\n"
-        av_export += "⚠️ AI-generated verification. Always independently confirm before relying in court.\n"
-
-        st.markdown("---")
-        st.download_button(
-            "📥 Download Verification Report (TXT)",
-            av_export,
-            f"LexiAssist_AuthVerification_{datetime.now():%Y%m%d_%H%M}.txt",
-            "text/plain",
-            key="av_dl_btn",
-            use_container_width=True,
-        )
-        st.caption("⚠️ AI-generated verification. Always independently confirm all authorities before relying on them in any court filing or client advice.")
-
-    elif av_raw_fb is not None and "_av_raw" in st.session_state:
-        st.markdown("---")
-        if av_raw_fb and av_raw_fb.strip():
-            st.warning(
-                "⚠️ Could not parse the authority-verification response as "
-                "structured data. Showing raw AI output below:"
-            )
-            st.markdown(
-                f'<div class="response-box">{esc(av_raw_fb)}</div>',
                 unsafe_allow_html=True,
             )
         else:
