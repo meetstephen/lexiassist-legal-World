@@ -410,7 +410,7 @@ def generate(prompt: str, system: str, mode: str, task: str = "general", query: 
         except Exception as _ws_err:  # noqa: BLE001 — degrade to ungrounded
             logger.warning(f"Google Search tool unavailable, proceeding ungrounded: {_ws_err}")
 
-    def _build_cfg(with_thinking: bool, with_tools: bool):
+    def _build_cfg(with_thinking: bool, with_tools: bool) -> Any:
         """Compose a GenerateContentConfig, degrading gracefully if the
         thinking_config can't be constructed."""
         kw = dict(_base_cfg)
@@ -443,7 +443,7 @@ def generate(prompt: str, system: str, mode: str, task: str = "general", query: 
     st.session_state["_last_reasoning"] = ""
     st.session_state["_last_grounding"] = None
 
-    def _split_parts(resp_or_chunk) -> tuple[str, str]:
+    def _split_parts(resp_or_chunk: Any) -> tuple[str, str]:
         """Return (answer_text, thought_text) from a response/stream chunk by
         inspecting candidate parts. Falls back to ('', '') when the structure
         isn't present so callers can use the convenience .text accessor."""
@@ -467,7 +467,7 @@ def generate(prompt: str, system: str, mode: str, task: str = "general", query: 
             return "", ""
         return answer, thought
 
-    def _accumulate_grounding(resp_or_chunk) -> None:
+    def _accumulate_grounding(resp_or_chunk: Any) -> None:
         """Pull real source URLs / search queries from a response or stream
         chunk's grounding_metadata and merge (de-duped) into
         ``st.session_state['_last_grounding']``. No-op when there's no

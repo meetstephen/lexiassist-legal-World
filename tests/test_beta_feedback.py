@@ -62,9 +62,17 @@ def test_user_management_renders_feedback_inbox_tab():
     assert callable(getattr(mod, "render_user_management", None))
 
 
-def test_version_bumped_to_9_1_2():
-    """Sanity: version was bumped to reflect the polish release."""
+def test_version_is_valid_semver_at_or_after_baseline():
+    """Sanity: __version__ is valid semver and at/after the 9.1.2 baseline.
+
+    (Version-agnostic so routine version bumps don't break CI; we only
+    guard against an invalid string or a regression below the baseline.)
+    """
     runtime = importlib.import_module("lexi.runtime")
-    assert runtime.__version__ == "9.1.2", (
-        f"Expected version 9.1.2 after polish; got {runtime.__version__}"
+    v = runtime.__version__
+    m = re.fullmatch(r"(\d+)\.(\d+)\.(\d+)", v.strip())
+    assert m, f"__version__ must be semver MAJOR.MINOR.PATCH; got {v!r}"
+    parts = tuple(int(x) for x in m.groups())
+    assert parts >= (9, 1, 2), (
+        f"version regressed below the 9.1.2 baseline; got {v}"
     )
