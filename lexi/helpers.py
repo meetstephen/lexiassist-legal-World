@@ -24,7 +24,7 @@ from .crypto import encrypt_secret, decrypt_secret
 from .constants import (
     SUPPORTED_MODELS, DEFAULT_MODEL,
     COST_PER_1M_INPUT, COST_PER_1M_OUTPUT,
-    TASK_TYPES, RESPONSE_MODES,
+    TASK_TYPES, RESPONSE_MODES, MAX_DOC_CONTEXT_CHARS,
 )
 from .prompts import (
     IDENTITY_CORE,
@@ -598,7 +598,7 @@ def run_ai_query(query: str, task: str, mode: str, context: str = "") -> str:
     system = build_system_prompt(task, mode, query)
     full_prompt = query
     if context:
-        full_prompt = f"DOCUMENT CONTEXT:\n{sanitize_doc_context(context)[:8500]}\n\nQUERY:\n{query}"
+        full_prompt = f"DOCUMENT CONTEXT:\n{sanitize_doc_context(context)[:MAX_DOC_CONTEXT_CHARS]}\n\nQUERY:\n{query}"
     return generate(full_prompt, system, mode, task)
 
 

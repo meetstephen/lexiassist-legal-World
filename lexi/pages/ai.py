@@ -39,7 +39,15 @@ def render_ai():
     if st.session_state.imported_doc:
         with st.expander(f"📎 Imported: {st.session_state.imported_doc['name']}", expanded=False):
             doc = st.session_state.imported_doc
-            st.caption(f"Type: {doc['type'].upper()} · Size: {doc['size']:,} bytes")
+            _full = doc.get("full_text", "") or ""
+            st.caption(f"Type: {doc['type'].upper()} · Size: {doc['size']:,} bytes · {len(_full):,} characters extracted")
+            if len(_full) > MAX_DOC_CONTEXT_CHARS:
+                st.warning(
+                    f"⚠️ This document is large ({len(_full):,} chars). Only the first "
+                    f"{MAX_DOC_CONTEXT_CHARS:,} characters (~{MAX_DOC_CONTEXT_CHARS // 4000} pages) "
+                    "will be sent to the AI. For very long files, analyse the most relevant "
+                    "section by section."
+                )
             st.text_area("Preview", doc["preview"], height=120, disabled=True, key="doc_preview_ta")
             dc1, dc2 = st.columns(2)
             with dc1:
@@ -421,7 +429,7 @@ def render_ai():
         system = build_system_prompt(task, mode, query.strip())
         full_prompt = query.strip()
         if doc_context:
-            full_prompt = f"DOCUMENT CONTEXT:\n{sanitize_doc_context(doc_context)[:8500]}\n\nQUERY:\n{query.strip()}"
+            full_prompt = f"DOCUMENT CONTEXT:\n{sanitize_doc_context(doc_context)[:MAX_DOC_CONTEXT_CHARS]}\n\nQUERY:\n{query.strip()}"
 
         with st.spinner(f"🧠 Streaming {mode_info['label']} analysis…"):
             _use_web = bool(st.session_state.get("ai_use_web_search", False))

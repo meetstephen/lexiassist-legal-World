@@ -94,6 +94,14 @@ THINKING_BUDGETS = {
 
 UPLOAD_TYPES = ["pdf", "docx", "doc", "txt", "xlsx", "xls", "csv", "json", "rtf"]
 
+# Max characters of an uploaded document fed into the model as context.
+# Gemini 2.5 models have a ~1M-token window (~4M chars), so the old 8,500-char
+# cap (~3 pages) silently dropped most of a real contract/judgment. 200k chars
+# is ~50 pages / ~50k tokens — comfortably inside the window while keeping
+# per-query cost bounded. The predictive budget check in ai.generate() still
+# guards against runaway spend on very large inputs.
+MAX_DOC_CONTEXT_CHARS = 200_000
+
 # Cost per 1M tokens (approx Gemini 2.5 Flash pricing)
 COST_PER_1M_INPUT = 0.15
 COST_PER_1M_OUTPUT = 0.60
