@@ -543,13 +543,13 @@ padding:1rem 1.4rem;margin-bottom:1.2rem;">
                         si_title = si.get("title", "")
 
                         if score >= 7:
-                            score_color = "#059669"; bg = "#f0fdf4"; border = "#059669"
+                            score_color = "#10b981"; bg = "rgba(5,150,105,0.14)"; border = "#059669"
                         elif score >= 5:
-                            score_color = "#d97706"; bg = "#fffbeb"; border = "#f59e0b"
+                            score_color = "#f59e0b"; bg = "rgba(217,119,6,0.14)"; border = "#f59e0b"
                         elif score >= 1:
-                            score_color = "#64748b"; bg = "#f8fafc"; border = "#cbd5e1"
+                            score_color = "#94a3b8"; bg = "rgba(100,116,139,0.16)"; border = "#94a3b8"
                         else:
-                            score_color = "#94a3b8"; bg = "#f8fafc"; border = "#e2e8f0"
+                            score_color = "#94a3b8"; bg = "rgba(148,163,184,0.12)"; border = "#94a3b8"
 
                         fav_icons = {
                             "FAVOURABLE": "🟢 Favourable",

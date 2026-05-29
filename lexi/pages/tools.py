@@ -390,15 +390,15 @@ border-radius:0.75rem;padding:1.2rem;margin:1rem 0;">
                 status = req.get("status", "PENDING")
 
                 if status == "NOT APPLICABLE":
-                    req_bg = "#f8fafc"
-                    req_border = "#cbd5e1"
+                    req_bg = "rgba(100,116,139,0.14)"
+                    req_border = "#94a3b8"
                     status_badge = "badge-info"
                 elif status == "DONE":
-                    req_bg = "#f0fdf4"
+                    req_bg = "rgba(5,150,105,0.14)"
                     req_border = "#059669"
                     status_badge = "badge-ok"
                 else:
-                    req_bg = "#fef3c7"
+                    req_bg = "rgba(217,119,6,0.14)"
                     req_border = "#f59e0b"
                     status_badge = "badge-warn"
 

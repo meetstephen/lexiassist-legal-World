@@ -222,12 +222,15 @@ def render_ai():
                 # Style the diff table inline
                 styled_diff = (
                     '<style>'
+                    '.diff{overflow-x:auto;}'
+                    '.diff table{font-size:0.75rem;font-family:monospace;width:100%;'
+                    'color:var(--la-text);}'
+                    '.diff td,.diff th{color:var(--la-text)!important;}'
                     '.diff_header{background:#1e3a5f;color:#fff;padding:2px 6px;font-size:0.78rem;}'
                     '.diff_next{background:#374151;color:#fff;}'
-                    'td.diff_add{background:#d1fae5;}'
-                    'td.diff_chg{background:var(--la-bg2);}'
-                    'td.diff_sub{background:#fee2e2;}'
-                    '.diff table{font-size:0.75rem;font-family:monospace;width:100%;}'
+                    'td.diff_add{background:rgba(5,150,105,0.22)!important;}'
+                    'td.diff_chg{background:rgba(217,119,6,0.20)!important;}'
+                    'td.diff_sub{background:rgba(220,38,38,0.20)!important;}'
                     '</style>'
                     f'<div class="diff">{diff_html}</div>'
                 )
@@ -377,6 +380,8 @@ def render_ai():
         st.session_state.original_query = ""
         st.session_state.last_reasoning_display = ""
         st.session_state.last_grounding_display = None
+        st.session_state.pop("citation_verify_result", None)
+        st.session_state.pop("citation_verify_grounding", None)
         st.session_state.selected_history_idx = None
         st.session_state["comparison_result"] = ""
         st.session_state.compare_selections = []
@@ -433,6 +438,9 @@ def render_ai():
         st.session_state.last_confidence = confidence
         st.session_state.last_reasoning_display = st.session_state.get("_last_reasoning", "")
         st.session_state.last_grounding_display = st.session_state.get("_last_grounding")
+        # Fresh answer → drop any prior web citation-check result.
+        st.session_state.pop("citation_verify_result", None)
+        st.session_state.pop("citation_verify_grounding", None)
         st.session_state.original_query = query.strip()
         st.session_state.last_task = task
         st.session_state.last_mode = mode
@@ -465,6 +473,44 @@ def _render_ai_response(mode: str) -> None:
             st.markdown(render_confidence_panel(confidence), unsafe_allow_html=True)
         if audit:
             st.markdown(render_citation_audit(audit), unsafe_allow_html=True)
+
+            # ── One-click LIVE web verification of cited cases ──
+            # Closes the gap where a genuine case isn't in the local DB: a
+            # grounded Google Search confirms whether each cited case is real.
+            _cited = [vc.get("name") or vc.get("raw") for vc in audit.get("verified_cases", [])]
+            _cited += list(audit.get("unverified_cases", []))
+            _cited = [c for c in _cited if c]
+            if _cited:
+                if st.button(
+                    f"🔎 Verify {len(_cited)} cited case(s) on the live web",
+                    key="verify_cites_web_btn",
+                    help="Run a live Google Search to confirm each cited case is a "
+                         "real, reported Nigerian decision — with source links.",
+                ):
+                    from ..web_search import verify_citations_online
+                    _raw_cites = [c.get("raw") for c in audit.get("citations", []) if c.get("raw")]
+                    with st.spinner("🔎 Checking each citation against live web sources…"):
+                        _vr = verify_citations_online(_cited, _raw_cites)
+                    st.session_state["citation_verify_result"] = _vr or ""
+                    st.session_state["citation_verify_grounding"] = st.session_state.get("_last_grounding")
+                    st.rerun()
+
+            _cv = st.session_state.get("citation_verify_result", "")
+            if _cv and _cv.strip():
+                if _cv.startswith(("⚠️", "🚫", "⏳")):
+                    st.warning(_cv)
+                else:
+                    st.markdown("##### 🔎 Live Web Citation Check")
+                    st.markdown(f'<div class="response-box">{esc(_cv)}</div>',
+                                unsafe_allow_html=True)
+                    _cvg = st.session_state.get("citation_verify_grounding")
+                    if _cvg and _cvg.get("sources"):
+                        st.markdown(render_sources_panel(_cvg, "🌐 Sources checked"),
+                                    unsafe_allow_html=True)
+                if st.button("🗑️ Clear citation check", key="clear_cite_verify_btn"):
+                    st.session_state.pop("citation_verify_result", None)
+                    st.session_state.pop("citation_verify_grounding", None)
+                    st.rerun()
 
         # ── Live web sources (when the query was web-grounded) ──
         _grounding = st.session_state.get("last_grounding_display")

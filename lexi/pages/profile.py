@@ -169,13 +169,13 @@ def render_profile():
                         msg["To"] = st.session_state.profile["notif_email"]
                         body = f"""
 <html>
-<body style="font-family:Georgia,serif;max-width:600px;margin:auto;padding:20px;color:var(--la-text);">
+<body style="font-family:Georgia,serif;max-width:600px;margin:auto;padding:20px;color:#1a2e4a;background:#ffffff;">
   <h2 style="color:#059669;border-bottom:2px solid #059669;padding-bottom:10px;">
     ⚖️ LexiAssist Hearing Reminder
   </h2>
   <div style="background:#f0fdf4;border-left:4px solid #059669;
-  padding:15px;border-radius:8px;margin:20px 0;">
-    <h3 style="margin:0 0 10px 0;">{esc(h['title'])}</h3>
+  padding:15px;border-radius:8px;margin:20px 0;color:#1a2e4a;">
+    <h3 style="margin:0 0 10px 0;color:#0f3d2e;">{esc(h['title'])}</h3>
     <p style="margin:5px 0;"><strong>Suit Number:</strong> {esc(h['suit'])}</p>
     <p style="margin:5px 0;"><strong>Court:</strong> {esc(h['court'])}</p>
     <p style="margin:5px 0;"><strong>Hearing Date:</strong> {esc(fmt_date(h['date']))}</p>
@@ -183,11 +183,11 @@ def render_profile():
       <span style="color:#dc2626;font-weight:bold;">{days_until(h['date'])} day(s)</span>
     </p>
   </div>
-  <p style="background:var(--la-bg2);padding:10px;border-radius:6px;">
+  <p style="background:#f4f6f9;padding:10px;border-radius:6px;color:#1a2e4a;">
     ⚠️ Please ensure all court processes, briefs, and appearances
     are prepared well in advance.
   </p>
-  <p style="color:var(--la-text2);font-size:12px;margin-top:30px;
+  <p style="color:#64748b;font-size:12px;margin-top:30px;
   border-top:1px solid #e5e7eb;padding-top:10px;">
     Sent by <strong>{esc(firm)}</strong> via LexiAssist v{__version__} ·
     {datetime.now().strftime('%d %B %Y at %H:%M')}
