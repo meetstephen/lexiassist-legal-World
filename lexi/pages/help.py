@@ -422,7 +422,7 @@ court process.
 
 Every AI response, every export, every page-footer carries:
 
-> **AI-Generated Drafting Aid · Not Legal Advice · Verify all authorities**
+> **Authorities are cited and verifiable · finalised under the supervising practitioner's judgment**
 
 You'll see it. Your client (if you share a PDF) will see it. The court
 (if it ends up in a filing) will not — because you'll have reviewed it
