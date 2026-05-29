@@ -88,6 +88,31 @@ from lexi.pages.help import render_help
 
 
 # ═══════════════════════════════════════════════════════
+# COMBINED NAVIGATION SURFACES (declutter — fewer top-level tabs)
+# ═══════════════════════════════════════════════════════
+# These thin wrappers fold closely-related pages under a single nav entry as
+# sub-tabs, reusing each page's existing render function unchanged (lowest-risk
+# way to merge without touching the page internals).
+def render_research_hub():
+    """All legal research under one entry: general case-law/statute research,
+    and research restricted to the user's own pasted sources."""
+    tab_general, tab_sources = st.tabs(["📚 Case Law & Statutes", "🔗 From My Sources"])
+    with tab_general:
+        render_research()
+    with tab_sources:
+        render_source_backed_research()
+
+
+def render_cases_hub():
+    """Matters under one entry: the case manager and the hearing calendar."""
+    tab_cases, tab_calendar = st.tabs(["📁 Case Manager", "📅 Hearing Calendar"])
+    with tab_cases:
+        render_cases()
+    with tab_calendar:
+        render_calendar()
+
+
+# ═══════════════════════════════════════════════════════
 # MAIN ENTRY POINT
 # ═══════════════════════════════════════════════════════
 def main():
@@ -316,15 +341,13 @@ def main():
         "⚖️ Practice": [
             ("🏠 Home",            render_home),
             ("🧠 AI Assistant",    render_ai),
-            ("📚 Research",        render_research),
-            ("🔗 Source Research", render_source_backed_research),
+            ("📚 Research",        render_research_hub),
             ("📝 Notes → Brief",   render_notes_converter),
         ],
         "📁 Matters": [
-            ("📁 Cases",           render_cases),
+            ("📁 Cases",           render_cases_hub),
             ("✅ Tasks",           render_tasks),
             ("📜 Pleadings",       render_pleadings),
-            ("📅 Calendar",        render_calendar),
             ("🔍 Conflict Check",  render_conflict_checker),
         ],
         "👥 Clients & Fees": [
@@ -333,12 +356,12 @@ def main():
         ],
         "🔧 Tools": [
             ("🔧 Tools",           render_tools),
+            ("📰 Practice Updates", render_legal_news),
             ("🔍 Authority Verify", render_authority_verification),
             ("🎯 Witness Prep",    render_witness_prep),
             ("🤝 Settlement",      render_settlement_advisor),
             ("🔎 Due Diligence",   render_due_diligence),
             ("📋 Templates",       render_templates),
-            ("📰 Practice Updates", render_legal_news),
             ("🔎 Search",          render_global_search),
         ],
         "👤 Account": [
