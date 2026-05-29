@@ -12,6 +12,7 @@ Public API (unchanged from the original single-file version):
   SOURCE_BACKED_RESEARCH_SYSTEM, COMPARISON_PROMPT,
   WITNESS_PREP_SYSTEM, WITNESS_PREP_PROMPT,
   NEWS_FEED_SUBJECTS, NEWS_FEED_SYSTEM, NEWS_FEED_PROMPT,
+  NEWS_SEARCH_SYSTEM, NEWS_SEARCH_PROMPT, NEWS_STRUCTURE_PROMPT,
   REEXAM_SYSTEM, REEXAM_PROMPT,
   CONTRADICTION_SYSTEM, CONTRADICTION_PROMPT,
   NEWS_DEEPDIVE_SYSTEM, NEWS_DEEPDIVE_PROMPT,
@@ -119,6 +120,15 @@ NEWS_FEED_SUBJECTS = [
 ]
 NEWS_FEED_SYSTEM = _load("news_feed_system.txt")
 NEWS_FEED_PROMPT = _load("news_feed_prompt.txt")
+
+# ── Grounded (live web search) news pipeline ──
+# Step 1: NEWS_SEARCH_* drives a Google-Search-grounded call that retrieves
+# REAL, sourced Nigerian legal developments. Step 2: NEWS_STRUCTURE_PROMPT
+# reorganises ONLY those grounded findings into the feed JSON, with no
+# invention. This is what makes the news feed real instead of hallucinated.
+NEWS_SEARCH_SYSTEM = _load("news_search_system.txt")
+NEWS_SEARCH_PROMPT = _load("news_search_prompt.txt")
+NEWS_STRUCTURE_PROMPT = _load("news_structure_prompt.txt")
 
 # ── News Deep-Dive ──
 NEWS_DEEPDIVE_SYSTEM = _load("news_deepdive_system.txt")

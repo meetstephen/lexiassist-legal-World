@@ -341,6 +341,19 @@ def render_ai():
         key="ai_query_ta",
     )
 
+    # ── Live web grounding toggle ──
+    # Off by default (uses the curated verified case/statute grounding). When
+    # on, the answer is grounded in live Google Search results and real source
+    # links are shown — useful to confirm a development is current or to check
+    # very recent changes the model may not know about.
+    st.checkbox(
+        "🌐 Search the live web for this query",
+        key="ai_use_web_search",
+        help="Ground the answer in live Google Search results and show the real "
+             "source links used. Best for confirming recent or fast-changing "
+             "developments. Verify every source before relying on it.",
+    )
+
     # ── Action Buttons ──
     bc1, bc2, bc3 = st.columns(3)
     with bc1:
@@ -363,6 +376,7 @@ def render_ai():
         st.session_state.last_response = ""
         st.session_state.original_query = ""
         st.session_state.last_reasoning_display = ""
+        st.session_state.last_grounding_display = None
         st.session_state.selected_history_idx = None
         st.session_state["comparison_result"] = ""
         st.session_state.compare_selections = []
@@ -405,7 +419,9 @@ def render_ai():
             full_prompt = f"DOCUMENT CONTEXT:\n{sanitize_doc_context(doc_context)[:8500]}\n\nQUERY:\n{query.strip()}"
 
         with st.spinner(f"🧠 Streaming {mode_info['label']} analysis…"):
-            result = generate(full_prompt, system, mode, task, stream_to=stream_container)
+            _use_web = bool(st.session_state.get("ai_use_web_search", False))
+            result = generate(full_prompt, system, mode, task,
+                              stream_to=stream_container, use_web_search=_use_web)
         elapsed = time.time() - start_t
 
         # Citation audit + confidence scoring
@@ -416,6 +432,7 @@ def render_ai():
         st.session_state.last_audit = audit
         st.session_state.last_confidence = confidence
         st.session_state.last_reasoning_display = st.session_state.get("_last_reasoning", "")
+        st.session_state.last_grounding_display = st.session_state.get("_last_grounding")
         st.session_state.original_query = query.strip()
         st.session_state.last_task = task
         st.session_state.last_mode = mode
@@ -448,6 +465,14 @@ def _render_ai_response(mode: str) -> None:
             st.markdown(render_confidence_panel(confidence), unsafe_allow_html=True)
         if audit:
             st.markdown(render_citation_audit(audit), unsafe_allow_html=True)
+
+        # ── Live web sources (when the query was web-grounded) ──
+        _grounding = st.session_state.get("last_grounding_display")
+        if _grounding and _grounding.get("sources"):
+            st.markdown(
+                render_sources_panel(_grounding, "🌐 Live web sources used for this answer"),
+                unsafe_allow_html=True,
+            )
 
         # ── Reasoning trace (the model's native "thinking") ──
         # Surfaced in a collapsed expander so the lawyer can audit HOW the

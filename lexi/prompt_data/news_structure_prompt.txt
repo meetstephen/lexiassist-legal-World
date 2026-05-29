@@ -1,0 +1,33 @@
+Below are REAL Nigerian legal developments gathered moments ago from live Google Search, each with its source.
+Your ONLY job is to reorganise these findings into the strict JSON structure below.
+
+HARD RULES:
+1. Use ONLY the developments present in the FINDINGS. Do NOT add, invent, merge-in, or embellish any development, case, citation, date, figure, or source that is not already in the findings.
+2. Do NOT pad to a target count. If the findings contain three real developments, return exactly three items. Quality and truth over quantity.
+3. Copy each source_url verbatim from the findings. If a development has no URL in the findings, drop that development entirely.
+4. Keep summaries factual and grounded strictly in the findings. No speculation, no added legal commentary beyond what the findings support.
+
+REFERENCE DATE: {today}
+SUBJECT AREA: {subject_area}
+
+FINDINGS (from live web search):
+-----BEGIN FINDINGS-----
+{findings}
+-----END FINDINGS-----
+
+Respond ONLY with this exact JSON object and nothing else:
+{{
+  "generated_date": "DD MMMM YYYY",
+  "subject_area": "Subject area covered",
+  "items": [
+    {{
+      "id": 1,
+      "title": "Factual headline from the findings",
+      "summary": "2-4 sentence factual summary grounded ONLY in the findings",
+      "key_takeaway": "The single most critical legal point",
+      "practice_impact": "What this means for a practising Nigerian lawyer right now",
+      "date": "DD MMMM YYYY, or empty string if the findings do not state it",
+      "source_url": "The exact source URL from the findings (empty string if none)"
+    }}
+  ]
+}}

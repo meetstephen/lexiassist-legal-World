@@ -42,7 +42,7 @@ import streamlit as st
 #   - IDENTITY_CORE system prompt
 #   - PDF/DOCX export footers
 #   - README.md (manually kept in sync)
-__version__ = "9.2.0"
+__version__ = "9.3.0"
 
 # ── Optional / guarded imports ────────────────────────────────────────
 # Each block defines all symbols (even on import failure) so downstream

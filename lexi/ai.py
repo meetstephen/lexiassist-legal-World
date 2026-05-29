@@ -198,13 +198,74 @@ font-size:0.82rem;line-height:1.55;">
 </div>"""
 
 
+def render_sources_panel(grounding: dict, title: str = "🌐 Live web sources") -> str:
+    """Render the REAL source URLs the model retrieved via Google Search as a
+    panel of clickable links, plus the actual search queries it ran. This is
+    the verifiable, click-to-check evidence behind a grounded answer."""
+    if not grounding or not isinstance(grounding, dict):
+        return ""
+    sources = grounding.get("sources") or []
+    queries = grounding.get("queries") or []
+    if not sources and not queries:
+        return ""
+
+    link_items = ""
+    for i, s in enumerate(sources, 1):
+        uri = esc(s.get("uri", ""))
+        ttl = esc(s.get("title") or s.get("uri", ""))
+        dom = s.get("domain") or ""
+        dom_html = (
+            f' <span style="color:var(--la-text2);font-size:0.74rem;">· {esc(dom)}</span>'
+            if dom else ""
+        )
+        link_items += (
+            f'<li style="margin:0.25rem 0;">'
+            f'<a href="{uri}" target="_blank" rel="noopener noreferrer" '
+            f'style="color:#2563eb;font-weight:600;text-decoration:none;">{ttl}</a>'
+            f'{dom_html}</li>'
+        )
+
+    queries_html = ""
+    if queries:
+        queries_html = (
+            '<div style="font-size:0.76rem;color:var(--la-text2);margin-top:0.5rem;">'
+            '🔎 Searches run: ' + esc("  ·  ".join(queries)) + '</div>'
+        )
+
+    sources_block = (
+        f'<ol style="margin:0.3rem 0 0 1.1rem;padding:0;font-size:0.84rem;line-height:1.5;">{link_items}</ol>'
+        if link_items else
+        '<div style="font-size:0.82rem;color:var(--la-text2);">No source links were returned for this query.</div>'
+    )
+
+    return f"""
+<div style="background:var(--la-bg2);color:var(--la-text2);
+border:1px solid var(--la-border);border-left:3px solid #2563eb;
+border-radius:0.6rem;padding:0.75rem 1rem;margin:0.6rem 0;font-size:0.85rem;">
+  <div style="font-weight:700;color:#2563eb;margin-bottom:0.35rem;">{esc(title)}</div>
+  <div style="font-size:0.76rem;color:var(--la-text2);margin-bottom:0.3rem;">
+    Retrieved live from Google Search. Always open and verify each source before relying on it.
+  </div>
+  {sources_block}
+  {queries_html}
+</div>"""
+
+
 # ═══════════════════════════════════════════════════════
 # CORE GENERATION
 # ═══════════════════════════════════════════════════════
 def generate(prompt: str, system: str, mode: str, task: str = "general", query: str = "",
-             stream_to: Optional[Any] = None, enable_quality_gate: bool = True) -> str:
+             stream_to: Optional[Any] = None, enable_quality_gate: bool = True,
+             use_web_search: bool = False) -> str:
     """Core generation with streaming, quality gate, retry, cost logging,
     budget enforcement, and per-user rate limiting.
+
+    When ``use_web_search=True``, the model is given Google Search as a tool so
+    its answer is GROUNDED in real, live web results instead of training-data
+    memory. The real source URLs it used are captured into
+    ``st.session_state['_last_grounding']`` so the UI can show verifiable
+    citations (this is what keeps the news feed / research factual, not
+    hallucinated).
     """
     k = _resolve_api_key()
     if not k:
@@ -337,6 +398,18 @@ def generate(prompt: str, system: str, mode: str, task: str = "general", query: 
         top_k=40,
         max_output_tokens=mode_cfg["tokens"],
     )
+    # ── Live web grounding (Google Search tool) ─────────────────────────
+    # Attaching the google_search tool makes the model actually search the
+    # web and ground its answer in real results, returning real source URLs
+    # in the response's grounding_metadata. This is the antidote to
+    # hallucinated "news" — the content is tied to live sources.
+    if use_web_search:
+        try:
+            _base_cfg["tools"] = [
+                _genai_types.Tool(google_search=_genai_types.GoogleSearch())
+            ]
+        except Exception as _ws_err:  # noqa: BLE001 — degrade to ungrounded
+            logger.warning(f"Google Search tool unavailable, proceeding ungrounded: {_ws_err}")
     # Config WITH thinking (primary) and WITHOUT (fallback if a model or
     # API version rejects thinking_config — we never want that to kill a query).
     gen_config_nothink = _genai_types.GenerateContentConfig(**_base_cfg)
@@ -356,8 +429,9 @@ def generate(prompt: str, system: str, mode: str, task: str = "general", query: 
 
     client = _get_genai_client(k)
 
-    # Reset captured reasoning for this call (surfaced in the UI afterwards).
+    # Reset captured reasoning + grounding for this call (surfaced in UI after).
     st.session_state["_last_reasoning"] = ""
+    st.session_state["_last_grounding"] = None
 
     def _split_parts(resp_or_chunk) -> tuple[str, str]:
         """Return (answer_text, thought_text) from a response/stream chunk by
@@ -383,6 +457,51 @@ def generate(prompt: str, system: str, mode: str, task: str = "general", query: 
             return "", ""
         return answer, thought
 
+    def _accumulate_grounding(resp_or_chunk) -> None:
+        """Pull real source URLs / search queries from a response or stream
+        chunk's grounding_metadata and merge (de-duped) into
+        ``st.session_state['_last_grounding']``. No-op when there's no
+        grounding (e.g. ungrounded calls)."""
+        try:
+            cands = getattr(resp_or_chunk, "candidates", None) or []
+            if not cands:
+                return
+            gm = getattr(cands[0], "grounding_metadata", None)
+            if not gm:
+                return
+            sources = []
+            for ch in (getattr(gm, "grounding_chunks", None) or []):
+                web = getattr(ch, "web", None)
+                uri = getattr(web, "uri", None) if web else None
+                if not uri:
+                    continue
+                sources.append({
+                    "uri": uri,
+                    "title": (getattr(web, "title", None) or uri),
+                    "domain": (getattr(web, "domain", None) or ""),
+                })
+            queries = list(getattr(gm, "web_search_queries", None) or [])
+            sep = getattr(gm, "search_entry_point", None)
+            search_html = getattr(sep, "rendered_content", "") if sep else ""
+            if not sources and not queries and not search_html:
+                return
+            store = st.session_state.get("_last_grounding") or {
+                "sources": [], "queries": [], "search_html": "",
+            }
+            seen = {s["uri"] for s in store["sources"]}
+            for s in sources:
+                if s["uri"] not in seen:
+                    store["sources"].append(s)
+                    seen.add(s["uri"])
+            for q in queries:
+                if q not in store["queries"]:
+                    store["queries"].append(q)
+            if search_html:
+                store["search_html"] = search_html
+            st.session_state["_last_grounding"] = store
+        except Exception:
+            return
+
     def _do_generate(use_stream: bool, config: "Any") -> str:
         """Single attempt. Streams to UI if stream_to is set. Separates the
         model's thinking (rendered live in a reasoning panel) from the final
@@ -401,6 +520,7 @@ def generate(prompt: str, system: str, mode: str, task: str = "general", query: 
                 )
                 for chunk in stream:
                     a, t = _split_parts(chunk)
+                    _accumulate_grounding(chunk)
                     if not a and not t:
                         # Fallback to the convenience accessor for SDKs/models
                         # that don't expose per-part thought flags.
@@ -450,6 +570,7 @@ def generate(prompt: str, system: str, mode: str, task: str = "general", query: 
             config=config,
         )
         answer_text, thought_text = _split_parts(resp)
+        _accumulate_grounding(resp)
         if not answer_text:
             answer_text = resp.text if resp and getattr(resp, "text", None) else ""
         if thought_text:

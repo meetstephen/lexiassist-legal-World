@@ -49,6 +49,7 @@ from .ai import (  # noqa: F401
     compute_confidence_score,
     render_confidence_panel,
     render_reasoning_panel,
+    render_sources_panel,
     _resolve_thinking_budget,
     _get_genai_client,
     _resolve_api_key,
@@ -496,6 +497,9 @@ def init_session_state():
         "_last_reasoning": "",            # Captured model thinking (latest call)
         "last_reasoning_display": "",     # Reasoning snapshot for the main answer
         "show_ai_reasoning": True,        # Toggle the reasoning panel in the UI
+        "_last_grounding": None,          # Captured live web sources (latest call)
+        "last_grounding_display": None,   # Grounding snapshot for the main answer
+        "ai_use_web_search": False,       # User toggle: ground answers on live web
         "tasks": [],                  # Task management list
         "_login_fail_count": 0,       # Failed login attempts this session
         "_login_locked_until": 0.0,   # Epoch time until login is unlocked
