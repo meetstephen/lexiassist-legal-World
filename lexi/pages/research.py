@@ -167,13 +167,16 @@ def render_research():
                     st.session_state.pop(k, None)
                 st.rerun()
     st.markdown("---")
-    st.checkbox(
-        "🌐 Search the live web (ground this research in current online sources)",
-        key="research_use_web",
-        help="Grounds the research answer in live Google Search results and shows "
-             "the real source links used. Best for confirming recent or "
-             "fast-changing positions. Verify every source before relying on it.",
-    )
+    if st.session_state.get("global_web_grounding", False):
+        st.caption("🌐 Live web grounding is ON app-wide (sidebar) — this research will search the web.")
+    else:
+        st.checkbox(
+            "🌐 Search the live web (ground this research in current online sources)",
+            key="research_use_web",
+            help="Grounds the research answer in live Google Search results and shows "
+                 "the real source links used. Best for confirming recent or "
+                 "fast-changing positions. Verify every source before relying on it.",
+        )
     rc1, rc2 = st.columns([1, 1])
     with rc1:
         research_btn = st.button(
@@ -190,7 +193,8 @@ def render_research():
         st.rerun()
 
     if research_btn and query.strip():
-        _use_web = bool(st.session_state.get("research_use_web", False))
+        _use_web = bool(st.session_state.get("research_use_web", False)
+                        or st.session_state.get("global_web_grounding", False))
         with st.spinner("📚 Researching the live web…" if _use_web else "📚 Researching…"):
             start_t = time.time()
             result = run_research(query.strip(), mode, use_web_search=_use_web)

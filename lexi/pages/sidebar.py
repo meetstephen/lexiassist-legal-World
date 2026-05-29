@@ -103,6 +103,29 @@ section[data-testid="stSidebarContent"]{display:flex!important;}
             st.session_state.response_mode = mode
         sel = RESPONSE_MODES[st.session_state.response_mode]
         st.caption(sel["desc"]); st.caption(f"Token limit: {sel['tokens']:,}")
+
+        # ── Live web grounding (app-wide) ─────────────────────────
+        # A single switch that puts EVERY AI feature online: when on, all
+        # generations (general query, analysis, drafting, research,
+        # procedural, advisory, statutory interpretation, contract review,
+        # issue-spot, follow-up, settlement, due diligence, witness, etc.)
+        # are grounded in live Google Search results with real source links,
+        # instead of the model's training memory. Verified case/statute
+        # grounding from the local database still applies on top.
+        gw = st.checkbox(
+            "🌐 Live web grounding (all AI features)",
+            value=st.session_state.get("global_web_grounding", False),
+            key="sidebar_global_web",
+            help="When ON, every AI feature searches the live web for current, "
+                 "verifiable sources and shows the real links used. Slightly "
+                 "slower; best for accuracy. Always confirm each source.",
+        )
+        if gw != st.session_state.get("global_web_grounding", False):
+            st.session_state.global_web_grounding = gw
+            st.rerun()
+        if st.session_state.get("global_web_grounding", False):
+            st.caption("🌐 Online mode: AI answers are grounded in live web sources.")
+
         st.divider()
         st.markdown("**🎨 Theme**")
         theme_names = list(THEMES.keys())

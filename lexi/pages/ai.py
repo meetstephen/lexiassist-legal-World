@@ -392,13 +392,16 @@ def render_ai():
     # on, the answer is grounded in live Google Search results and real source
     # links are shown — useful to confirm a development is current or to check
     # very recent changes the model may not know about.
-    st.checkbox(
-        "🌐 Search the live web for this query",
-        key="ai_use_web_search",
-        help="Ground the answer in live Google Search results and show the real "
-             "source links used. Best for confirming recent or fast-changing "
-             "developments. Verify every source before relying on it.",
-    )
+    if st.session_state.get("global_web_grounding", False):
+        st.caption("🌐 Live web grounding is ON app-wide (sidebar) — this query will search the web.")
+    else:
+        st.checkbox(
+            "🌐 Search the live web for this query",
+            key="ai_use_web_search",
+            help="Ground the answer in live Google Search results and show the real "
+                 "source links used. Best for confirming recent or fast-changing "
+                 "developments. Verify every source before relying on it.",
+        )
 
     # ── Action Buttons ──
     bc1, bc2, bc3 = st.columns(3)
@@ -470,7 +473,10 @@ def render_ai():
             full_prompt = f"DOCUMENT CONTEXT:\n{sanitize_doc_context(doc_context)[:MAX_DOC_CONTEXT_CHARS]}\n\nQUERY:\n{query.strip()}"
 
         with st.spinner(f"🧠 Streaming {mode_info['label']} analysis…"):
-            _use_web = bool(st.session_state.get("ai_use_web_search", False))
+            # Ground on the live web if EITHER the per-query box OR the
+            # app-wide sidebar switch is on.
+            _use_web = bool(st.session_state.get("ai_use_web_search", False)
+                            or st.session_state.get("global_web_grounding", False))
             result = generate(full_prompt, system, mode, task,
                               stream_to=stream_container, use_web_search=_use_web)
         elapsed = time.time() - start_t

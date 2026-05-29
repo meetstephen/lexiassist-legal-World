@@ -256,17 +256,35 @@ border-radius:0.6rem;padding:0.75rem 1rem;margin:0.6rem 0;font-size:0.85rem;">
 # ═══════════════════════════════════════════════════════
 def generate(prompt: str, system: str, mode: str, task: str = "general", query: str = "",
              stream_to: Optional[Any] = None, enable_quality_gate: bool = True,
-             use_web_search: bool = False) -> str:
+             use_web_search: Optional[bool] = None) -> str:
     """Core generation with streaming, quality gate, retry, cost logging,
     budget enforcement, and per-user rate limiting.
 
-    When ``use_web_search=True``, the model is given Google Search as a tool so
-    its answer is GROUNDED in real, live web results instead of training-data
-    memory. The real source URLs it used are captured into
+    Web grounding:
+      * ``use_web_search=True``  → force live Google Search grounding.
+      * ``use_web_search=False`` → force OFF (e.g. for internal/meta calls
+        like the quality-gate self-critique where web search is pointless).
+      * ``use_web_search=None`` (default) → defer to the app-wide switch
+        ``st.session_state['global_web_grounding']``. This is what lets a
+        SINGLE user-facing toggle put EVERY generating feature (all task
+        types, issue-spot, follow-up, settlement, due diligence, witness,
+        etc.) online at once, without each call site having to opt in.
+
+    When grounding is active the model is given Google Search as a tool so its
+    answer is grounded in real, live web results instead of training-data
+    memory, and the real source URLs it used are captured into
     ``st.session_state['_last_grounding']`` so the UI can show verifiable
     citations (this is what keeps the news feed / research factual, not
     hallucinated).
     """
+    # Resolve the effective grounding decision (explicit arg wins; otherwise
+    # fall back to the global app-wide switch, default off).
+    if use_web_search is None:
+        try:
+            use_web_search = bool(st.session_state.get("global_web_grounding", False))
+        except Exception:
+            use_web_search = False
+
     k = _resolve_api_key()
     if not k:
         return "⚠️ No API key configured. Please set up your key."

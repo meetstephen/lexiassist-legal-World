@@ -397,12 +397,14 @@ def run_comparison(entry_a: dict, entry_b: dict) -> str:
         f"Query: {entry_b.get('query', '')}\n"
         f"Response:\n{entry_b.get('response', '')}"
     )
-    return generate(prompt, COMPARISON_PROMPT, "standard", "analysis")
+    # Internal meta-task (compares two existing texts) — no web search needed.
+    return generate(prompt, COMPARISON_PROMPT, "standard", "analysis", use_web_search=False)
 
 
 def run_critique(query: str, analysis: str) -> str:
     prompt = f"ORIGINAL QUERY:\n{query}\n\nANALYSIS TO REVIEW:\n{analysis}"
-    return generate(prompt, CRITIQUE_PROMPT, "brief", "analysis")
+    # Internal meta-task (critiques an existing analysis) — no web search needed.
+    return generate(prompt, CRITIQUE_PROMPT, "brief", "analysis", use_web_search=False)
 
 
 def run_followup(original: str, previous: str, followup: str, mode: str) -> str:
@@ -502,6 +504,7 @@ def init_session_state():
         "_last_grounding": None,          # Captured live web sources (latest call)
         "last_grounding_display": None,   # Grounding snapshot for the main answer
         "ai_use_web_search": False,       # User toggle: ground answers on live web
+        "global_web_grounding": False,    # App-wide switch: put ALL AI features online
         "tasks": [],                  # Task management list
         "_login_fail_count": 0,       # Failed login attempts this session
         "_login_locked_until": 0.0,   # Epoch time until login is unlocked
