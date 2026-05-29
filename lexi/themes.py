@@ -233,9 +233,18 @@ def get_theme_css(
 ) -> str:
     t = get_theme(theme_name)
 
-    text_color = "#362E2EFF" if high_contrast else t["text"]
-    text_sec   = "#CCCCCC" if high_contrast else t["text_secondary"]
-    bg_color   = "#000000" if (high_contrast and int(t["bg"][1:3], 16) < 0x33) else t["bg"]
+    # High-contrast must ADAPT to whether the active theme is light or dark.
+    # The previous logic forced one fixed dark text colour, which became
+    # unreadable (dark-on-dark) on the dark themes — the opposite of the goal.
+    _theme_is_dark = int(t["bg"].lstrip("#")[0:2], 16) < 0x80
+    if high_contrast:
+        text_color = "#FFFFFF" if _theme_is_dark else "#0A0A0A"
+        text_sec   = "#DBDBDB" if _theme_is_dark else "#1F1F1F"
+        bg_color   = "#000000" if _theme_is_dark else "#FFFFFF"
+    else:
+        text_color = t["text"]
+        text_sec   = t["text_secondary"]
+        bg_color   = t["bg"]
     base_font  = round(16 * font_size_scale, 1)
     input_font = round(base_font * 0.94, 1)
     mobile_font = round(base_font * 0.92, 1)
@@ -1016,11 +1025,18 @@ div[class*="stAlert"]{{
   color:var(--la-text)!important;-webkit-font-smoothing:antialiased!important;}}
 
 /* ── Scrollbar ── */
-::-webkit-scrollbar{{width:5px;height:5px;}}
-::-webkit-scrollbar-track{{background:transparent;}}
-::-webkit-scrollbar-thumb{{background:{border};border-radius:var(--r-pill);
+/* Wider + clearly visible thumb on every theme (was a faint 5px hairline
+   that washed out on light backgrounds). Uses the theme's secondary text
+   colour so the thumb has real contrast against both light and dark pages. */
+::-webkit-scrollbar{{width:11px;height:11px;}}
+::-webkit-scrollbar-track{{background:var(--la-bg2);border-radius:var(--r-pill);}}
+::-webkit-scrollbar-thumb{{background:{text_sec}99;border-radius:var(--r-pill);
+  border:2px solid var(--la-bg2);background-clip:padding-box;
   transition:background var(--tb);}}
-::-webkit-scrollbar-thumb:hover{{background:{acc}88;}}
+::-webkit-scrollbar-thumb:hover{{background:{acc};}}
+::-webkit-scrollbar-corner{{background:var(--la-bg2);}}
+/* Firefox */
+html,body,*{{scrollbar-color:{text_sec}99 var(--la-bg2);}}
 ::selection{{background:{acc}30;color:var(--la-text);}}
 
 /* ── Reduce-motion (prefers) ── */

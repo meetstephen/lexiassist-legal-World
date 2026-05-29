@@ -30,9 +30,10 @@ def render_legal_news():
     '<div style="background:var(--la-bg2);border:1px solid #f59e0b;'
     'border-left:4px solid #f59e0b;border-radius:8px;'
     'padding:0.75rem 1rem;margin-bottom:1rem;font-size:0.85rem;">'
-    '<strong>⚠️ Private Beta Warning:</strong> This is an AI-assisted practice update generator, '
-    'not a live verified legal news service. Verify every development against primary sources, '
-    'law reports, regulator publications, or official court releases before relying on it.'
+    '<strong>🌐 Live web search:</strong> This feed now uses Google Search to ground each item in '
+    'real, current sources, shown as clickable links. It remains AI-assisted — always open each '
+    'source and confirm against the primary instrument (the judgment, gazette, or regulation) '
+    'before relying on it in practice.'
     '</div>',
     unsafe_allow_html=True,
     )
@@ -82,22 +83,50 @@ def render_legal_news():
 
         if nf_generate_btn:
             subject_val = nf_subject if nf_subject != "All Areas" else "all major practice areas of Nigerian law"
-            prompt = NEWS_FEED_PROMPT.format(
-                subject_area=subject_val,
-                today=date.today().strftime("%d %B %Y"),
-            )
-            with st.spinner(f"📰 Fetching legal developments — {nf_subject}…"):
-                raw = generate(prompt, NEWS_FEED_SYSTEM, "brief", "research")
-            try:
-                clean = raw.strip().replace("```json", "").replace("```", "").strip()
-                feed_data = json.loads(clean)
+            today_str = date.today().strftime("%d %B %Y")
+
+            # ── Step 1: LIVE web search (grounded) — fetch REAL developments ──
+            # The model actually queries Google Search; we capture the real
+            # source URLs it used. Nothing here comes from training memory.
+            search_prompt = NEWS_SEARCH_PROMPT.format(subject_area=subject_val, today=today_str)
+            with st.spinner(f"🌐 Searching the live web for real {nf_subject} developments…"):
+                findings = generate(
+                    search_prompt, NEWS_SEARCH_SYSTEM, "standard", "research",
+                    use_web_search=True, enable_quality_gate=False,
+                )
+            grounding = st.session_state.get("_last_grounding")
+
+            if not findings or findings.startswith(("⚠️", "🚫", "⏳")):
+                # Search failed / blocked / empty — never fabricate a fallback.
+                st.session_state["nf_feed_data"] = {"_raw": findings or "", "items": []}
+                st.session_state["nf_subject_loaded"] = nf_subject
+                st.session_state["nf_grounding"] = grounding
+                st.session_state["nf_deepdive"] = {}
+            else:
+                # ── Step 2: structure ONLY the grounded findings into cards ──
+                structure_prompt = NEWS_STRUCTURE_PROMPT.format(
+                    subject_area=subject_val, today=today_str, findings=findings,
+                )
+                with st.spinner("🧩 Organising verified developments into your feed…"):
+                    raw = generate(
+                        structure_prompt, NEWS_FEED_SYSTEM, "brief", "research",
+                        enable_quality_gate=False,
+                    )
+                try:
+                    clean = raw.strip().replace("```json", "").replace("```", "").strip()
+                    feed_data = json.loads(clean)
+                except Exception:
+                    feed_data = {"_raw": raw, "items": []}
+                # Attach the REAL sources captured from the live search step.
+                if isinstance(feed_data, dict):
+                    feed_data["sources"] = (grounding or {}).get("sources", [])
+                    feed_data["search_queries"] = (grounding or {}).get("queries", [])
+                    feed_data["_grounded"] = bool(grounding and grounding.get("sources"))
                 st.session_state["nf_feed_data"] = feed_data
                 st.session_state["nf_subject_loaded"] = nf_subject
+                st.session_state["nf_grounding"] = grounding
                 # Clear any stale deep-dive results
                 st.session_state["nf_deepdive"] = {}
-            except Exception:
-                st.session_state["nf_feed_data"] = {"_raw": raw, "items": []}
-                st.session_state["nf_subject_loaded"] = nf_subject
 
         feed_data = st.session_state.get("nf_feed_data", None)
         subject_loaded = st.session_state.get("nf_subject_loaded", "")
@@ -148,6 +177,19 @@ display:inline-block;font-size:0.9rem;color:var(--la-text);">
 
             st.markdown("<br>", unsafe_allow_html=True)
 
+            # ── Real sources retrieved from the live web search ──
+            nf_grounding = st.session_state.get("nf_grounding")
+            if nf_grounding and nf_grounding.get("sources"):
+                st.markdown(
+                    render_sources_panel(nf_grounding, "🌐 Live web sources for this feed"),
+                    unsafe_allow_html=True,
+                )
+            elif feed_data.get("_grounded") is False:
+                st.info(
+                    "ℹ️ The web search returned no citable source links for this run. "
+                    "Treat the items below with extra caution and verify independently."
+                )
+
             # ── Filter by search ──
             search_val = nf_search.strip().lower()
             display_items = items
@@ -169,6 +211,8 @@ display:inline-block;font-size:0.9rem;color:var(--la-text);">
                     summary = item.get("summary", "")
                     takeaway = item.get("key_takeaway", "")
                     impact = item.get("practice_impact", "")
+                    item_date = item.get("date", "")
+                    src_url = (item.get("source_url", "") or "").strip()
 
                     # Check if bookmarked
                     is_bookmarked = any(b.get("id") == item_id for b in bookmarks)
@@ -189,6 +233,26 @@ display:inline-block;font-size:0.9rem;color:var(--la-text);">
     <span style="font-size:0.93rem;color:var(--la-text);"> {esc(impact)}</span>
   </div>
 </div>""", unsafe_allow_html=True)
+
+                        # ── Date + real source link (from live web search) ──
+                        if item_date or src_url:
+                            meta_bits = []
+                            if item_date:
+                                meta_bits.append(f"📅 {esc(item_date)}")
+                            if src_url:
+                                meta_bits.append(
+                                    f'🔗 <a href="{esc(src_url)}" target="_blank" '
+                                    f'rel="noopener noreferrer" '
+                                    f'style="color:#2563eb;font-weight:600;text-decoration:none;">'
+                                    f'View source</a>'
+                                )
+                            st.markdown(
+                                '<div style="font-size:0.8rem;color:var(--la-text2);'
+                                'margin:0.5rem 0 0.2rem 0;">'
+                                + " &nbsp;·&nbsp; ".join(meta_bits)
+                                + "</div>",
+                                unsafe_allow_html=True,
+                            )
 
                         # ── Action buttons ──
                         act1, act2, act3 = st.columns(3)
@@ -224,8 +288,13 @@ display:inline-block;font-size:0.9rem;color:var(--la-text);">
                                         takeaway=takeaway, impact=impact,
                                     )
                                     with st.spinner(f"🔬 Analysing: {title[:50]}…"):
-                                        dd_result = generate(dd_prompt, NEWS_DEEPDIVE_SYSTEM, "standard", "analysis")
+                                        dd_result = generate(
+                                            dd_prompt, NEWS_DEEPDIVE_SYSTEM, "standard", "analysis",
+                                            use_web_search=True, enable_quality_gate=False,
+                                        )
                                     st.session_state["nf_deepdive"][item_id] = dd_result
+                                    st.session_state.setdefault("nf_dd_sources", {})[item_id] = \
+                                        st.session_state.get("_last_grounding")
                                     st.rerun()
                             else:
                                 if st.button("🔬 Hide Deep Dive", key=dd_key, use_container_width=True):
@@ -253,6 +322,12 @@ border-radius:0.75rem;padding:1.4rem;">
   <h5 style="margin:0 0 0.8rem 0;color:var(--la-text);">🔬 Full Legal Analysis</h5>
   <div style="white-space:pre-wrap;font-size:0.92rem;line-height:1.75;">{esc(dd_result)}</div>
 </div>""", unsafe_allow_html=True)
+                            dd_src = st.session_state.get("nf_dd_sources", {}).get(item_id)
+                            if dd_src and dd_src.get("sources"):
+                                st.markdown(
+                                    render_sources_panel(dd_src, "🌐 Sources for this analysis"),
+                                    unsafe_allow_html=True,
+                                )
                             safe_pdf_download(
                                 dd_result, f"Deep Dive — {title}",
                                 f"DeepDive_{item_id}_{datetime.now():%Y%m%d}",
@@ -287,9 +362,10 @@ border-radius:0.75rem;padding:1.4rem;">
                     )
 
         st.markdown("""<div class="disclaimer">
-            <strong>⚖️ Disclaimer:</strong> This feed is AI-generated. All case citations are
-            [CITATION TO BE VERIFIED]. Verify all developments against official law reports
-            and primary sources before relying on them in practice.
+            <strong>⚖️ Disclaimer:</strong> Items are grounded in live web search results, with
+            source links provided above each is drawn from. AI can still misread or miss context —
+            open every source and confirm against the primary instrument (judgment, gazette, or
+            regulation) before relying on any development in practice.
         </div>""", unsafe_allow_html=True)
 
     # ═══════════════════════════════════════════════════
@@ -467,13 +543,13 @@ padding:1rem 1.4rem;margin-bottom:1.2rem;">
                         si_title = si.get("title", "")
 
                         if score >= 7:
-                            score_color = "#059669"; bg = "#f0fdf4"; border = "#059669"
+                            score_color = "#10b981"; bg = "rgba(5,150,105,0.14)"; border = "#059669"
                         elif score >= 5:
-                            score_color = "#d97706"; bg = "#fffbeb"; border = "#f59e0b"
+                            score_color = "#f59e0b"; bg = "rgba(217,119,6,0.14)"; border = "#f59e0b"
                         elif score >= 1:
-                            score_color = "#64748b"; bg = "#f8fafc"; border = "#cbd5e1"
+                            score_color = "#94a3b8"; bg = "rgba(100,116,139,0.16)"; border = "#94a3b8"
                         else:
-                            score_color = "#94a3b8"; bg = "#f8fafc"; border = "#e2e8f0"
+                            score_color = "#94a3b8"; bg = "rgba(148,163,184,0.12)"; border = "#94a3b8"
 
                         fav_icons = {
                             "FAVOURABLE": "🟢 Favourable",

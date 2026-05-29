@@ -277,6 +277,63 @@ def find_relevant_verified_cases(query: str, top_k: int = 5) -> list[dict]:
     return _real(query, top_k=top_k)
 
 
+def verify_citations_online(case_names: list, citations: list = None) -> str:
+    """Confirm, via LIVE Google Search, whether the cited Nigerian cases /
+    citations are REAL reported decisions (closing the gap where a genuine
+    case simply isn't in the local verified database).
+
+    The model is grounded on real web results and instructed never to guess —
+    anything it cannot confirm from a real source is marked NOT FOUND. The real
+    source URLs it used are captured into ``st.session_state['_last_grounding']``
+    for display. Returns the verification text (or an error string).
+    """
+    generate = _get_generate()
+    names = [str(n).strip() for n in (case_names or []) if n and str(n).strip()]
+    cites = [str(c).strip() for c in (citations or []) if c and str(c).strip()]
+    # De-dupe while preserving order.
+    names = list(dict.fromkeys(names))
+    cites = list(dict.fromkeys(cites))
+    if not names and not cites:
+        return ""
+
+    name_block = "\n".join(f"{i}. {n}" for i, n in enumerate(names, 1)) or "(none)"
+    cite_block = ""
+    if cites:
+        cite_block = "\nRAW CITATIONS ALSO MENTIONED:\n" + "\n".join(f"- {c}" for c in cites)
+
+    system = (
+        "You are a meticulous Nigerian legal citation verifier with LIVE Google "
+        "Search access. Your ONLY job is to confirm, using real web search "
+        "results, whether each case or citation below is a REAL, reported "
+        "Nigerian decision. NEVER guess and NEVER invent a citation, court, "
+        "year, or source URL. Rely solely on what the search results actually "
+        "show. Be conservative: only mark a case REAL when a credible source "
+        "clearly establishes it exists. If you cannot confirm a case from a "
+        "real source, mark it NOT FOUND."
+    )
+
+    prompt = f"""Using live web search, verify each of the following Nigerian cases.
+
+CASES TO VERIFY:
+{name_block}
+{cite_block}
+
+For EACH case, output exactly one line in this format:
+- <Case name> — STATUS: [REAL | NOT FOUND | UNCERTAIN] — Correct citation (if found): <citation or "—"> — Court/Year: <or "—"> — Source: <real URL or "none">
+
+Hard rules:
+1. Base every STATUS strictly on what the web search results actually show.
+2. If no credible real source confirms a case, mark it NOT FOUND and put "none" as the source. Do NOT fabricate a citation or URL.
+3. Mark UNCERTAIN only when sources are conflicting or ambiguous.
+4. End with a one-line summary: "Summary: X REAL, Y NOT FOUND, Z UNCERTAIN."
+"""
+
+    return generate(
+        prompt, system, "standard", "research",
+        use_web_search=True, enable_quality_gate=False,
+    )
+
+
 def build_case_context(query: str, top_k: int = 6) -> str:
     """Retrieve the most relevant verified Nigerian cases for a query and
     format as grounding context. Mirrors ``build_rag_context()`` (which does
@@ -375,7 +432,7 @@ def render_online_case_card(idx: int, case: dict) -> str:
   <div style="color:var(--la-text2);">
     <strong>Why relevant:</strong> {relevance}
   </div>
-  <div style="margin-top:0.4rem;font-size:0.78rem;color:{badge_color};">
+  <div style="margin-top:0.4rem;font-size:0.78rem;color:var(--la-text2);">
     {esc(note)}
   </div>
 </div>"""

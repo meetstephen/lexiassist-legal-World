@@ -1,0 +1,14 @@
+Using live Google Search, find the most recent REAL developments in Nigerian law for: {subject_area}.
+
+Reference date: {today}. Strongly prioritise developments from the last 30-90 days.
+
+Find between 4 and 7 concrete, real, sourced developments. These can be: new Supreme Court or Court of Appeal judgments, newly passed or amended legislation, new practice directions or court rules, regulatory circulars or guidelines, or notable tribunal rulings.
+
+For EACH development, report in plain prose:
+- HEADLINE: a short factual headline.
+- WHAT HAPPENED: 2-4 sentences describing only what the source actually says.
+- WHY IT MATTERS: 1-2 sentences on the impact for a practising Nigerian lawyer.
+- DATE: the actual date stated in the source (or "date not stated").
+- SOURCE(S): the exact URL(s) you used for this development.
+
+Do not include any development you could not find a real, current source for. If you found fewer than four solid items, return only the ones you can support with a real source, and state clearly that recent verifiable developments were limited.

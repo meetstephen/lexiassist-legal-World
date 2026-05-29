@@ -29,9 +29,65 @@ from .runtime import (
 from .constants import (
     SUPPORTED_MODELS, DEFAULT_MODEL,
     COST_PER_1M_INPUT, COST_PER_1M_OUTPUT,
-    RESPONSE_MODES, USD_TO_NGN,
+    RESPONSE_MODES, THINKING_BUDGETS, USD_TO_NGN,
 )
 from .database import get_db
+
+
+# ═══════════════════════════════════════════════════════
+# NATIVE THINKING / REASONING BUDGET RESOLUTION
+# ═══════════════════════════════════════════════════════
+def _resolve_thinking_budget(model: str, mode: str) -> Optional[int]:
+    """Resolve the native ``thinking_budget`` for a given model + response mode.
+
+    The base budget comes from ``THINKING_BUDGETS[mode]`` (calibrated for
+    gemini-2.5-flash) and is then clamped to the specific model's supported
+    range. This is what lets a lightweight Flash model *reason internally*
+    before answering — the reasoning lives in the model's thinking phase,
+    not in the prompt string.
+
+    Returns:
+        * an ``int`` budget (``-1`` = dynamic, ``0`` = disabled), or
+        * ``None`` when the model is not known to support a thinking budget,
+          in which case the caller MUST NOT attach a ``thinking_config``.
+
+    Per-model ranges (Gemini 2.5 series, April 2026):
+        Pro        : 128–32,768  (cannot be disabled)
+        Flash      : 0–24,576    (0 disables)
+        Flash-Lite : 512–24,576  (off by default; -1/0 allowed)
+    """
+    base = THINKING_BUDGETS.get(mode, THINKING_BUDGETS["standard"])
+    m = (model or "").lower()
+
+    # Only the Gemini 2.5 / 3 reasoning families accept a thinking budget.
+    # Attaching thinking_config to an older model (1.5 / 2.0 non-thinking)
+    # raises an API error, so we signal "don't attach" with None.
+    supports_thinking = (
+        "2.5" in m
+        or "gemini-3" in m
+        or "2.0-flash-thinking" in m
+    )
+    if not supports_thinking:
+        return None
+
+    # Pro: thinking cannot be disabled; clamp to 128–32768 (or dynamic).
+    if "pro" in m:
+        if base == -1:
+            return -1
+        return max(128, min(int(base), 32768))
+
+    # Flash-Lite: thinking is off by default; when enabling, min 512.
+    if "flash-lite" in m or "flash_lite" in m:
+        if base == -1:
+            return -1
+        if base <= 0:
+            return 0
+        return max(512, min(int(base), 24576))
+
+    # Flash (and any other 2.5/3 model): 0–24576, or dynamic.
+    if base == -1:
+        return -1
+    return max(0, min(int(base), 24576))
 
 
 # ═══════════════════════════════════════════════════════
@@ -117,12 +173,99 @@ def estimate_cost(input_text: str, output_text: str) -> float:
 
 
 # ═══════════════════════════════════════════════════════
+# REASONING PANEL (renders the model's native "thinking")
+# ═══════════════════════════════════════════════════════
+def render_reasoning_panel(reasoning: str, streaming: bool = False) -> str:
+    """Render the model's internal reasoning (thought summary) as a styled,
+    theme-aware panel. This makes the "think before answering" step visible
+    and verifiable to the lawyer, without cluttering the final answer box.
+
+    ``streaming=True`` adds a subtle live indicator while thoughts arrive.
+    """
+    text = (reasoning or "").strip()
+    if not text:
+        return ""
+    header = "🧠 Reasoning" + ("  ·  thinking…" if streaming else "")
+    cursor = '<span style="opacity:0.5;">▌</span>' if streaming else ""
+    return f"""
+<div style="background:var(--la-bg2);color:var(--la-text2);
+border:1px dashed var(--la-border);border-left:3px solid #6366f1;
+border-radius:0.6rem;padding:0.7rem 1rem;margin:0.6rem 0;
+font-size:0.82rem;line-height:1.55;">
+  <div style="font-weight:700;color:#6366f1;margin-bottom:0.35rem;
+  letter-spacing:0.02em;">{header}</div>
+  <div style="white-space:pre-wrap;">{esc(text)}{cursor}</div>
+</div>"""
+
+
+def render_sources_panel(grounding: dict, title: str = "🌐 Live web sources") -> str:
+    """Render the REAL source URLs the model retrieved via Google Search as a
+    panel of clickable links, plus the actual search queries it ran. This is
+    the verifiable, click-to-check evidence behind a grounded answer."""
+    if not grounding or not isinstance(grounding, dict):
+        return ""
+    sources = grounding.get("sources") or []
+    queries = grounding.get("queries") or []
+    if not sources and not queries:
+        return ""
+
+    link_items = ""
+    for i, s in enumerate(sources, 1):
+        uri = esc(s.get("uri", ""))
+        ttl = esc(s.get("title") or s.get("uri", ""))
+        dom = s.get("domain") or ""
+        dom_html = (
+            f' <span style="color:var(--la-text2);font-size:0.74rem;">· {esc(dom)}</span>'
+            if dom else ""
+        )
+        link_items += (
+            f'<li style="margin:0.25rem 0;">'
+            f'<a href="{uri}" target="_blank" rel="noopener noreferrer" '
+            f'style="color:#2563eb;font-weight:600;text-decoration:none;">{ttl}</a>'
+            f'{dom_html}</li>'
+        )
+
+    queries_html = ""
+    if queries:
+        queries_html = (
+            '<div style="font-size:0.76rem;color:var(--la-text2);margin-top:0.5rem;">'
+            '🔎 Searches run: ' + esc("  ·  ".join(queries)) + '</div>'
+        )
+
+    sources_block = (
+        f'<ol style="margin:0.3rem 0 0 1.1rem;padding:0;font-size:0.84rem;line-height:1.5;">{link_items}</ol>'
+        if link_items else
+        '<div style="font-size:0.82rem;color:var(--la-text2);">No source links were returned for this query.</div>'
+    )
+
+    return f"""
+<div style="background:var(--la-bg2);color:var(--la-text2);
+border:1px solid var(--la-border);border-left:3px solid #2563eb;
+border-radius:0.6rem;padding:0.75rem 1rem;margin:0.6rem 0;font-size:0.85rem;">
+  <div style="font-weight:700;color:#2563eb;margin-bottom:0.35rem;">{esc(title)}</div>
+  <div style="font-size:0.76rem;color:var(--la-text2);margin-bottom:0.3rem;">
+    Retrieved live from Google Search. Always open and verify each source before relying on it.
+  </div>
+  {sources_block}
+  {queries_html}
+</div>"""
+
+
+# ═══════════════════════════════════════════════════════
 # CORE GENERATION
 # ═══════════════════════════════════════════════════════
 def generate(prompt: str, system: str, mode: str, task: str = "general", query: str = "",
-             stream_to: Optional[Any] = None, enable_quality_gate: bool = True) -> str:
+             stream_to: Optional[Any] = None, enable_quality_gate: bool = True,
+             use_web_search: bool = False) -> str:
     """Core generation with streaming, quality gate, retry, cost logging,
     budget enforcement, and per-user rate limiting.
+
+    When ``use_web_search=True``, the model is given Google Search as a tool so
+    its answer is GROUNDED in real, live web results instead of training-data
+    memory. The real source URLs it used are captured into
+    ``st.session_state['_last_grounding']`` so the UI can show verifiable
+    citations (this is what keeps the news feed / research factual, not
+    hallucinated).
     """
     k = _resolve_api_key()
     if not k:
@@ -167,11 +310,20 @@ def generate(prompt: str, system: str, mode: str, task: str = "general", query: 
                 )
 
             # Predictive check — worst-case cost of this specific call.
+            # Thinking tokens are billed as output tokens, so include the
+            # resolved thinking budget in the worst-case output projection
+            # (dynamic/-1 is estimated conservatively) — otherwise enabling
+            # native reasoning could silently overshoot a near-empty budget.
             mode_tokens = RESPONSE_MODES.get(mode, RESPONSE_MODES["standard"]).get("tokens", 32000)
+            _think_b = _resolve_thinking_budget(st.session_state.gemini_model, mode) or 0
+            if _think_b == -1:
+                _think_tokens = 4096   # conservative estimate for "dynamic"
+            else:
+                _think_tokens = max(0, _think_b)
             input_tokens = (len(prompt) + len(system)) / 4
             projected_usd = (
                 (input_tokens / 1_000_000) * COST_PER_1M_INPUT
-                + (mode_tokens / 1_000_000) * COST_PER_1M_OUTPUT
+                + ((mode_tokens + _think_tokens) / 1_000_000) * COST_PER_1M_OUTPUT
             )
             projected_ngn = projected_usd * USD_TO_NGN
 
@@ -230,56 +382,237 @@ def generate(prompt: str, system: str, mode: str, task: str = "general", query: 
         pass
 
     mode_cfg = RESPONSE_MODES.get(mode, RESPONSE_MODES["standard"])
-    gen_config = _genai_types.GenerateContentConfig(
+
+    # ── Native "thinking loop" ──────────────────────────────────────────
+    # We push the reasoning out of the prompt string and into the model's
+    # native thinking phase: before emitting any final answer, the model
+    # spends a budget of private reasoning tokens working through the law.
+    # include_thoughts=True asks the API to return summarised reasoning so
+    # we can surface "how it reasoned" to the lawyer for verification.
+    thinking_budget = _resolve_thinking_budget(st.session_state.gemini_model, mode)
+
+    _base_cfg = dict(
         system_instruction=system,
         temperature=mode_cfg["temp"],
         top_p=0.92,
         top_k=40,
         max_output_tokens=mode_cfg["tokens"],
     )
+    # ── Live web grounding (Google Search tool) ─────────────────────────
+    # Attaching the google_search tool makes the model actually search the
+    # web and ground its answer in real results, returning real source URLs
+    # in the response's grounding_metadata. This is the antidote to
+    # hallucinated "news" — the content is tied to live sources.
+    _tools = None
+    if use_web_search:
+        try:
+            _tools = [_genai_types.Tool(google_search=_genai_types.GoogleSearch())]
+        except Exception as _ws_err:  # noqa: BLE001 — degrade to ungrounded
+            logger.warning(f"Google Search tool unavailable, proceeding ungrounded: {_ws_err}")
+
+    def _build_cfg(with_thinking: bool, with_tools: bool) -> Any:
+        """Compose a GenerateContentConfig, degrading gracefully if the
+        thinking_config can't be constructed."""
+        kw = dict(_base_cfg)
+        if with_tools and _tools:
+            kw["tools"] = _tools
+        if with_thinking and thinking_budget is not None:
+            try:
+                return _genai_types.GenerateContentConfig(
+                    thinking_config=_genai_types.ThinkingConfig(
+                        thinking_budget=thinking_budget,
+                        include_thoughts=True,
+                    ),
+                    **kw,
+                )
+            except Exception as _tc_err:  # noqa: BLE001 — degrade gracefully
+                logger.warning(f"ThinkingConfig unavailable, proceeding without it: {_tc_err}")
+        return _genai_types.GenerateContentConfig(**kw)
+
+    # Three layers, tried in order on the relevant failure:
+    #   gen_config         → thinking + (optional) web search   [primary]
+    #   gen_config_nothink → web search only  (thinking rejected)
+    #   gen_config_plain   → neither          (search tool rejected)
+    gen_config         = _build_cfg(with_thinking=True,  with_tools=True)
+    gen_config_nothink = _build_cfg(with_thinking=False, with_tools=True)
+    gen_config_plain   = _build_cfg(with_thinking=False, with_tools=False)
+
     client = _get_genai_client(k)
 
-    def _do_generate(use_stream: bool) -> str:
-        """Single attempt. Streams to UI if stream_to is set."""
+    # Reset captured reasoning + grounding for this call (surfaced in UI after).
+    st.session_state["_last_reasoning"] = ""
+    st.session_state["_last_grounding"] = None
+
+    def _split_parts(resp_or_chunk: Any) -> tuple[str, str]:
+        """Return (answer_text, thought_text) from a response/stream chunk by
+        inspecting candidate parts. Falls back to ('', '') when the structure
+        isn't present so callers can use the convenience .text accessor."""
+        answer = ""
+        thought = ""
+        try:
+            cands = getattr(resp_or_chunk, "candidates", None) or []
+            if not cands:
+                return "", ""
+            content = getattr(cands[0], "content", None)
+            parts = getattr(content, "parts", None) or []
+            for part in parts:
+                ptext = getattr(part, "text", None)
+                if not ptext:
+                    continue
+                if getattr(part, "thought", False):
+                    thought += ptext
+                else:
+                    answer += ptext
+        except Exception:
+            return "", ""
+        return answer, thought
+
+    def _accumulate_grounding(resp_or_chunk: Any) -> None:
+        """Pull real source URLs / search queries from a response or stream
+        chunk's grounding_metadata and merge (de-duped) into
+        ``st.session_state['_last_grounding']``. No-op when there's no
+        grounding (e.g. ungrounded calls)."""
+        try:
+            cands = getattr(resp_or_chunk, "candidates", None) or []
+            if not cands:
+                return
+            gm = getattr(cands[0], "grounding_metadata", None)
+            if not gm:
+                return
+            sources = []
+            for ch in (getattr(gm, "grounding_chunks", None) or []):
+                web = getattr(ch, "web", None)
+                uri = getattr(web, "uri", None) if web else None
+                if not uri:
+                    continue
+                sources.append({
+                    "uri": uri,
+                    "title": (getattr(web, "title", None) or uri),
+                    "domain": (getattr(web, "domain", None) or ""),
+                })
+            queries = list(getattr(gm, "web_search_queries", None) or [])
+            sep = getattr(gm, "search_entry_point", None)
+            search_html = getattr(sep, "rendered_content", "") if sep else ""
+            if not sources and not queries and not search_html:
+                return
+            store = st.session_state.get("_last_grounding") or {
+                "sources": [], "queries": [], "search_html": "",
+            }
+            seen = {s["uri"] for s in store["sources"]}
+            for s in sources:
+                if s["uri"] not in seen:
+                    store["sources"].append(s)
+                    seen.add(s["uri"])
+            for q in queries:
+                if q not in store["queries"]:
+                    store["queries"].append(q)
+            if search_html:
+                store["search_html"] = search_html
+            st.session_state["_last_grounding"] = store
+        except Exception:
+            return
+
+    def _do_generate(use_stream: bool, config: "Any") -> str:
+        """Single attempt. Streams to UI if stream_to is set. Separates the
+        model's thinking (rendered live in a reasoning panel) from the final
+        answer (rendered in the response box), and stashes the reasoning in
+        ``st.session_state['_last_reasoning']`` for later display."""
         if use_stream and stream_to is not None:
-            full_text = ""
-            placeholder = stream_to.empty()
+            answer_text = ""
+            thought_text = ""
+            reason_ph = stream_to.empty()
+            answer_ph = stream_to.empty()
             try:
                 stream = client.models.generate_content_stream(
                     model=st.session_state.gemini_model,
                     contents=prompt,
-                    config=gen_config,
+                    config=config,
                 )
                 for chunk in stream:
-                    if chunk.text:
-                        full_text += chunk.text
-                        placeholder.markdown(
-                            f'<div class="response-box">{esc(full_text)}<span style="opacity:0.5;">▌</span></div>',
+                    a, t = _split_parts(chunk)
+                    _accumulate_grounding(chunk)
+                    if not a and not t:
+                        # Fallback to the convenience accessor for SDKs/models
+                        # that don't expose per-part thought flags.
+                        try:
+                            if chunk.text:
+                                a = chunk.text
+                        except Exception:
+                            a = ""
+                    if t:
+                        thought_text += t
+                    if a:
+                        answer_text += a
+                    if thought_text:
+                        reason_ph.markdown(
+                            render_reasoning_panel(thought_text, streaming=True),
                             unsafe_allow_html=True,
                         )
-                placeholder.markdown(
-                    f'<div class="response-box">{esc(full_text)}</div>',
+                    answer_ph.markdown(
+                        f'<div class="response-box">{esc(answer_text)}<span style="opacity:0.5;">▌</span></div>',
+                        unsafe_allow_html=True,
+                    )
+                # Final render (drop the cursor)
+                if thought_text:
+                    reason_ph.markdown(
+                        render_reasoning_panel(thought_text, streaming=False),
+                        unsafe_allow_html=True,
+                    )
+                else:
+                    reason_ph.empty()
+                answer_ph.markdown(
+                    f'<div class="response-box">{esc(answer_text)}</div>',
                     unsafe_allow_html=True,
                 )
-                return full_text
+                st.session_state["_last_reasoning"] = thought_text
+                return answer_text
             except Exception as e:
+                # Re-raise thinking-related errors so the caller can retry
+                # without thinking_config; otherwise fall back to non-stream.
+                _e = str(e).lower()
+                if "think" in _e or "thought" in _e or "budget" in _e:
+                    raise
                 logger.warning(f"Streaming failed, falling back to non-stream: {e}")
         # Non-streaming path
         resp = client.models.generate_content(
             model=st.session_state.gemini_model,
             contents=prompt,
-            config=gen_config,
+            config=config,
         )
-        return resp.text if resp and resp.text else ""
+        answer_text, thought_text = _split_parts(resp)
+        _accumulate_grounding(resp)
+        if not answer_text:
+            answer_text = resp.text if resp and getattr(resp, "text", None) else ""
+        if thought_text:
+            st.session_state["_last_reasoning"] = thought_text
+        return answer_text
 
     result = ""
+    active_config = gen_config
     for attempt in range(3):
         try:
-            result = _do_generate(use_stream=(stream_to is not None))
+            result = _do_generate(use_stream=(stream_to is not None), config=active_config)
             if result:
                 break
         except Exception as e:
             err_str = str(e)
+            el = err_str.lower()
+            # If the model/API rejected the thinking_config, drop it and retry
+            # immediately (don't burn an attempt or sleep on a config mismatch).
+            if active_config is gen_config and any(
+                tok in el for tok in ("think", "thought", "budget")
+            ):
+                logger.warning(f"Thinking config rejected by model; retrying without it: {err_str[:160]}")
+                active_config = gen_config_nothink
+                continue
+            # If the Google Search tool was rejected (model/tier doesn't allow
+            # grounding), degrade to an ungrounded call rather than hard-failing.
+            if _tools and active_config is not gen_config_plain and any(
+                tok in el for tok in ("search", "tool", "grounding", "function", "not supported", "unsupported")
+            ):
+                logger.warning(f"Web-search tool rejected; retrying ungrounded: {err_str[:160]}")
+                active_config = gen_config_plain
+                continue
             if attempt == 2:
                 return f"⚠️ Generation error after 3 attempts: {err_str[:200]}"
             time.sleep(2 * (attempt + 1))
@@ -293,7 +626,7 @@ def generate(prompt: str, system: str, mode: str, task: str = "general", query: 
         if quality_score < 5:
             logger.info(f"Quality gate triggered (score {quality_score}/10) — regenerating")
             try:
-                regen = _do_generate(use_stream=False)
+                regen = _do_generate(use_stream=False, config=active_config)
                 if regen:
                     new_score = _assess_response_quality(regen, prompt)
                     if new_score > quality_score:

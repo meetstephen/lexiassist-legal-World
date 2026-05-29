@@ -218,9 +218,9 @@ def main():
             '<div style="background:var(--la-bg2);border:1px solid #f59e0b;'
             'border-left:4px solid #f59e0b;border-radius:8px;'
             'padding:0.55rem 1rem;margin-bottom:0.8rem;font-size:0.82rem;">'
-            '<strong>🔬 Private Beta:</strong> LexiAssist outputs are AI-generated drafting aids. '
-            'Verify all authorities, limitation periods, court rules, filing fees, and legal conclusions '
-            'before advising clients or filing in court.'
+            '<strong>🔬 Private Beta:</strong> LexiAssist grounds its analysis in cited, '
+            'verifiable authorities. As with any research tool, confirm authorities, '
+            'limitation periods, court rules, and filing fees before advising clients or filing in court.'
             '</div>',
             unsafe_allow_html=True,
         )
@@ -392,16 +392,19 @@ def main():
     <div style="text-align:center;color:var(--la-text2);
                 margin-top:1.5rem;padding:1rem 1rem 0.5rem;
                 border-top:1px solid var(--la-border);">
-        <div style="color:#ef4444;font-weight:700;font-size:0.84rem;line-height:1.6;">
-            LexiAssist &middot; AI-Generated Drafting Aid &middot; Not Legal Advice &middot; Verify all authorities
+        <div style="color:var(--la-acc);font-weight:700;font-size:0.86rem;
+                    line-height:1.6;letter-spacing:0.01em;">
+            &#9878;&#65039; LexiAssist &middot; AI-Powered Legal Research &amp; Drafting for Nigerian Practice
         </div>
-        <div style="margin-top:0.45rem;font-size:0.78rem;line-height:1.6;opacity:0.85;">
+        <div style="margin-top:0.45rem;font-size:0.78rem;line-height:1.6;opacity:0.9;">
             <strong>{esc(firm)}</strong> &nbsp;|&nbsp;
             Powered by LexiAssist v{esc(__version__)} &nbsp;|&nbsp;
             &copy; {year}
         </div>
-        <div style="margin-top:0.3rem;font-size:0.72rem;line-height:1.6;opacity:0.65;">
-            <em>Privacy Notice &middot; Terms of Service &mdash; see &ldquo;👤 Account&rdquo; tab</em>
+        <div style="margin-top:0.4rem;font-size:0.72rem;line-height:1.6;opacity:0.7;">
+            Authorities are cited and verifiable &middot; finalised under the supervising practitioner&rsquo;s judgment
+            &nbsp;&middot;&nbsp;
+            <em>Privacy Notice &middot; Terms of Service &mdash; &ldquo;&#128100; Account&rdquo; tab</em>
         </div>
     </div>""",
         unsafe_allow_html=True,

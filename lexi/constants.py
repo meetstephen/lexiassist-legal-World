@@ -63,7 +63,44 @@ RESPONSE_MODES = {
     "comprehensive": {"label": "🔬 Comprehensive",  "desc": "Full CREAC + Strategy + Risk Ranking",  "tokens": 131072, "temp": 0.2},
 }
 
+# ═══════════════════════════════════════════════════════
+# THINKING / REASONING BUDGETS (Gemini 2.5 "thinking" tokens)
+# ═══════════════════════════════════════════════════════
+# These move the *reasoning intelligence* out of the prompt string and into
+# the model's native internal "thinking" phase. Before emitting a single word
+# of the final answer, the model is given a budget of private reasoning tokens
+# to work through the Nigerian legal framework, spot issues, and self-check
+# its citations — pushing a lightweight Flash model toward Pro-level accuracy
+# by architecture rather than by a longer prompt.
+#
+# Values below are the BASE budgets calibrated for gemini-2.5-flash. They are
+# clamped to each model's supported range at call time by
+# ``lexi.ai._resolve_thinking_budget`` (Pro: 128-32768 and cannot be disabled;
+# Flash: 0-24576; Flash-Lite: off by default, 512-24576 when enabled).
+#
+#   -1  → "dynamic": let the model decide how much to think (used for the
+#         heaviest Comprehensive mode where deep reasoning matters most).
+#    0  → thinking disabled (fastest, cheapest).
+#
+# Tuning rationale:
+#   brief         → light reasoning, keep latency low for quick answers.
+#   standard      → solid reasoning for everyday structured analysis.
+#   comprehensive → dynamic, so complex multi-issue matters get maximum thought.
+THINKING_BUDGETS = {
+    "brief":         1024,
+    "standard":      6144,
+    "comprehensive": -1,
+}
+
 UPLOAD_TYPES = ["pdf", "docx", "doc", "txt", "xlsx", "xls", "csv", "json", "rtf"]
+
+# Max characters of an uploaded document fed into the model as context.
+# Gemini 2.5 models have a ~1M-token window (~4M chars), so the old 8,500-char
+# cap (~3 pages) silently dropped most of a real contract/judgment. 200k chars
+# is ~50 pages / ~50k tokens — comfortably inside the window while keeping
+# per-query cost bounded. The predictive budget check in ai.generate() still
+# guards against runaway spend on very large inputs.
+MAX_DOC_CONTEXT_CHARS = 200_000
 
 # Cost per 1M tokens (approx Gemini 2.5 Flash pricing)
 COST_PER_1M_INPUT = 0.15

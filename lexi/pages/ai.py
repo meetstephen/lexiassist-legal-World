@@ -39,7 +39,15 @@ def render_ai():
     if st.session_state.imported_doc:
         with st.expander(f"📎 Imported: {st.session_state.imported_doc['name']}", expanded=False):
             doc = st.session_state.imported_doc
-            st.caption(f"Type: {doc['type'].upper()} · Size: {doc['size']:,} bytes")
+            _full = doc.get("full_text", "") or ""
+            st.caption(f"Type: {doc['type'].upper()} · Size: {doc['size']:,} bytes · {len(_full):,} characters extracted")
+            if len(_full) > MAX_DOC_CONTEXT_CHARS:
+                st.warning(
+                    f"⚠️ This document is large ({len(_full):,} chars). Only the first "
+                    f"{MAX_DOC_CONTEXT_CHARS:,} characters (~{MAX_DOC_CONTEXT_CHARS // 4000} pages) "
+                    "will be sent to the AI. For very long files, analyse the most relevant "
+                    "section by section."
+                )
             st.text_area("Preview", doc["preview"], height=120, disabled=True, key="doc_preview_ta")
             dc1, dc2 = st.columns(2)
             with dc1:
@@ -222,12 +230,15 @@ def render_ai():
                 # Style the diff table inline
                 styled_diff = (
                     '<style>'
+                    '.diff{overflow-x:auto;}'
+                    '.diff table{font-size:0.75rem;font-family:monospace;width:100%;'
+                    'color:var(--la-text);}'
+                    '.diff td,.diff th{color:var(--la-text)!important;}'
                     '.diff_header{background:#1e3a5f;color:#fff;padding:2px 6px;font-size:0.78rem;}'
                     '.diff_next{background:#374151;color:#fff;}'
-                    'td.diff_add{background:#d1fae5;}'
-                    'td.diff_chg{background:var(--la-bg2);}'
-                    'td.diff_sub{background:#fee2e2;}'
-                    '.diff table{font-size:0.75rem;font-family:monospace;width:100%;}'
+                    'td.diff_add{background:rgba(5,150,105,0.22)!important;}'
+                    'td.diff_chg{background:rgba(217,119,6,0.20)!important;}'
+                    'td.diff_sub{background:rgba(220,38,38,0.20)!important;}'
                     '</style>'
                     f'<div class="diff">{diff_html}</div>'
                 )
@@ -341,6 +352,19 @@ def render_ai():
         key="ai_query_ta",
     )
 
+    # ── Live web grounding toggle ──
+    # Off by default (uses the curated verified case/statute grounding). When
+    # on, the answer is grounded in live Google Search results and real source
+    # links are shown — useful to confirm a development is current or to check
+    # very recent changes the model may not know about.
+    st.checkbox(
+        "🌐 Search the live web for this query",
+        key="ai_use_web_search",
+        help="Ground the answer in live Google Search results and show the real "
+             "source links used. Best for confirming recent or fast-changing "
+             "developments. Verify every source before relying on it.",
+    )
+
     # ── Action Buttons ──
     bc1, bc2, bc3 = st.columns(3)
     with bc1:
@@ -362,6 +386,10 @@ def render_ai():
     if clear_btn:
         st.session_state.last_response = ""
         st.session_state.original_query = ""
+        st.session_state.last_reasoning_display = ""
+        st.session_state.last_grounding_display = None
+        st.session_state.pop("citation_verify_result", None)
+        st.session_state.pop("citation_verify_grounding", None)
         st.session_state.selected_history_idx = None
         st.session_state["comparison_result"] = ""
         st.session_state.compare_selections = []
@@ -401,10 +429,12 @@ def render_ai():
         system = build_system_prompt(task, mode, query.strip())
         full_prompt = query.strip()
         if doc_context:
-            full_prompt = f"DOCUMENT CONTEXT:\n{sanitize_doc_context(doc_context)[:8500]}\n\nQUERY:\n{query.strip()}"
+            full_prompt = f"DOCUMENT CONTEXT:\n{sanitize_doc_context(doc_context)[:MAX_DOC_CONTEXT_CHARS]}\n\nQUERY:\n{query.strip()}"
 
         with st.spinner(f"🧠 Streaming {mode_info['label']} analysis…"):
-            result = generate(full_prompt, system, mode, task, stream_to=stream_container)
+            _use_web = bool(st.session_state.get("ai_use_web_search", False))
+            result = generate(full_prompt, system, mode, task,
+                              stream_to=stream_container, use_web_search=_use_web)
         elapsed = time.time() - start_t
 
         # Citation audit + confidence scoring
@@ -414,6 +444,11 @@ def render_ai():
         st.session_state.last_response = result
         st.session_state.last_audit = audit
         st.session_state.last_confidence = confidence
+        st.session_state.last_reasoning_display = st.session_state.get("_last_reasoning", "")
+        st.session_state.last_grounding_display = st.session_state.get("_last_grounding")
+        # Fresh answer → drop any prior web citation-check result.
+        st.session_state.pop("citation_verify_result", None)
+        st.session_state.pop("citation_verify_grounding", None)
         st.session_state.original_query = query.strip()
         st.session_state.last_task = task
         st.session_state.last_mode = mode
@@ -446,6 +481,68 @@ def _render_ai_response(mode: str) -> None:
             st.markdown(render_confidence_panel(confidence), unsafe_allow_html=True)
         if audit:
             st.markdown(render_citation_audit(audit), unsafe_allow_html=True)
+
+            # ── One-click LIVE web verification of cited cases ──
+            # Closes the gap where a genuine case isn't in the local DB: a
+            # grounded Google Search confirms whether each cited case is real.
+            _cited = [vc.get("name") or vc.get("raw") for vc in audit.get("verified_cases", [])]
+            _cited += list(audit.get("unverified_cases", []))
+            _cited = [c for c in _cited if c]
+            if _cited:
+                if st.button(
+                    f"🔎 Verify {len(_cited)} cited case(s) on the live web",
+                    key="verify_cites_web_btn",
+                    help="Run a live Google Search to confirm each cited case is a "
+                         "real, reported Nigerian decision — with source links.",
+                ):
+                    from ..web_search import verify_citations_online
+                    _raw_cites = [c.get("raw") for c in audit.get("citations", []) if c.get("raw")]
+                    with st.spinner("🔎 Checking each citation against live web sources…"):
+                        _vr = verify_citations_online(_cited, _raw_cites)
+                    st.session_state["citation_verify_result"] = _vr or ""
+                    st.session_state["citation_verify_grounding"] = st.session_state.get("_last_grounding")
+                    st.rerun()
+
+            _cv = st.session_state.get("citation_verify_result", "")
+            if _cv and _cv.strip():
+                if _cv.startswith(("⚠️", "🚫", "⏳")):
+                    st.warning(_cv)
+                else:
+                    st.markdown("##### 🔎 Live Web Citation Check")
+                    st.markdown(f'<div class="response-box">{esc(_cv)}</div>',
+                                unsafe_allow_html=True)
+                    _cvg = st.session_state.get("citation_verify_grounding")
+                    if _cvg and _cvg.get("sources"):
+                        st.markdown(render_sources_panel(_cvg, "🌐 Sources checked"),
+                                    unsafe_allow_html=True)
+                if st.button("🗑️ Clear citation check", key="clear_cite_verify_btn"):
+                    st.session_state.pop("citation_verify_result", None)
+                    st.session_state.pop("citation_verify_grounding", None)
+                    st.rerun()
+
+        # ── Live web sources (when the query was web-grounded) ──
+        _grounding = st.session_state.get("last_grounding_display")
+        if _grounding and _grounding.get("sources"):
+            st.markdown(
+                render_sources_panel(_grounding, "🌐 Live web sources used for this answer"),
+                unsafe_allow_html=True,
+            )
+
+        # ── Reasoning trace (the model's native "thinking") ──
+        # Surfaced in a collapsed expander so the lawyer can audit HOW the
+        # model reached its conclusion before relying on it — collapsed by
+        # default to keep the answer front-and-centre.
+        _reasoning = st.session_state.get("last_reasoning_display", "")
+        if _reasoning and _reasoning.strip() and st.session_state.get("show_ai_reasoning", True):
+            with st.expander("🧠 How LexiAssist reasoned (internal analysis)", expanded=False):
+                st.caption(
+                    "This is the model's own reasoning trace, generated before the "
+                    "final answer. Use it to verify the logic — it is not legal advice."
+                )
+                st.markdown(
+                    render_reasoning_panel(_reasoning, streaming=False),
+                    unsafe_allow_html=True,
+                )
 
         # Export row
         fname = f"LexiAssist_Analysis_{datetime.now():%Y%m%d_%H%M}"
