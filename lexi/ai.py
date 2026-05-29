@@ -403,29 +403,39 @@ def generate(prompt: str, system: str, mode: str, task: str = "general", query: 
     # web and ground its answer in real results, returning real source URLs
     # in the response's grounding_metadata. This is the antidote to
     # hallucinated "news" — the content is tied to live sources.
+    _tools = None
     if use_web_search:
         try:
-            _base_cfg["tools"] = [
-                _genai_types.Tool(google_search=_genai_types.GoogleSearch())
-            ]
+            _tools = [_genai_types.Tool(google_search=_genai_types.GoogleSearch())]
         except Exception as _ws_err:  # noqa: BLE001 — degrade to ungrounded
             logger.warning(f"Google Search tool unavailable, proceeding ungrounded: {_ws_err}")
-    # Config WITH thinking (primary) and WITHOUT (fallback if a model or
-    # API version rejects thinking_config — we never want that to kill a query).
-    gen_config_nothink = _genai_types.GenerateContentConfig(**_base_cfg)
-    gen_config = gen_config_nothink
-    if thinking_budget is not None:
-        try:
-            gen_config = _genai_types.GenerateContentConfig(
-                thinking_config=_genai_types.ThinkingConfig(
-                    thinking_budget=thinking_budget,
-                    include_thoughts=True,
-                ),
-                **_base_cfg,
-            )
-        except Exception as _tc_err:  # noqa: BLE001 — degrade gracefully
-            logger.warning(f"ThinkingConfig unavailable, proceeding without it: {_tc_err}")
-            gen_config = gen_config_nothink
+
+    def _build_cfg(with_thinking: bool, with_tools: bool):
+        """Compose a GenerateContentConfig, degrading gracefully if the
+        thinking_config can't be constructed."""
+        kw = dict(_base_cfg)
+        if with_tools and _tools:
+            kw["tools"] = _tools
+        if with_thinking and thinking_budget is not None:
+            try:
+                return _genai_types.GenerateContentConfig(
+                    thinking_config=_genai_types.ThinkingConfig(
+                        thinking_budget=thinking_budget,
+                        include_thoughts=True,
+                    ),
+                    **kw,
+                )
+            except Exception as _tc_err:  # noqa: BLE001 — degrade gracefully
+                logger.warning(f"ThinkingConfig unavailable, proceeding without it: {_tc_err}")
+        return _genai_types.GenerateContentConfig(**kw)
+
+    # Three layers, tried in order on the relevant failure:
+    #   gen_config         → thinking + (optional) web search   [primary]
+    #   gen_config_nothink → web search only  (thinking rejected)
+    #   gen_config_plain   → neither          (search tool rejected)
+    gen_config         = _build_cfg(with_thinking=True,  with_tools=True)
+    gen_config_nothink = _build_cfg(with_thinking=False, with_tools=True)
+    gen_config_plain   = _build_cfg(with_thinking=False, with_tools=False)
 
     client = _get_genai_client(k)
 
@@ -586,13 +596,22 @@ def generate(prompt: str, system: str, mode: str, task: str = "general", query: 
                 break
         except Exception as e:
             err_str = str(e)
+            el = err_str.lower()
             # If the model/API rejected the thinking_config, drop it and retry
             # immediately (don't burn an attempt or sleep on a config mismatch).
             if active_config is gen_config and any(
-                tok in err_str.lower() for tok in ("think", "thought", "budget")
+                tok in el for tok in ("think", "thought", "budget")
             ):
                 logger.warning(f"Thinking config rejected by model; retrying without it: {err_str[:160]}")
                 active_config = gen_config_nothink
+                continue
+            # If the Google Search tool was rejected (model/tier doesn't allow
+            # grounding), degrade to an ungrounded call rather than hard-failing.
+            if _tools and active_config is not gen_config_plain and any(
+                tok in el for tok in ("search", "tool", "grounding", "function", "not supported", "unsupported")
+            ):
+                logger.warning(f"Web-search tool rejected; retrying ungrounded: {err_str[:160]}")
+                active_config = gen_config_plain
                 continue
             if attempt == 2:
                 return f"⚠️ Generation error after 3 attempts: {err_str[:200]}"
