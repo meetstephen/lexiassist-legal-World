@@ -53,6 +53,18 @@ LexiAssist is built so a lawyer can **verify** what the AI says, not just trust 
 3. **Verified Nigerian database grounding** — 150+ landmark Supreme Court / Court of Appeal decisions and 18+ core statute provisions are retrieved and injected into the prompt, and every answer is scanned so cited cases are checked against this database.
 4. **Citation audit + one-click verifier** — every response is scanned for citations and labelled ✅ Verified / ⚠️ Unverified; one click then runs a **live web check** on the cited cases (REAL / NOT FOUND / UNCERTAIN, with links).
 
+### How online-sourced cases are labelled (authenticity, honestly)
+
+When the **Quick Precedent Finder** returns cases, each one is tagged by **how strongly its authenticity was actually evidenced** — the labels never overstate what was checked:
+
+| Badge | Meaning | What you must do |
+|---|---|---|
+| ✅ **Verified (in database)** | The case name matches LexiAssist's hand-verified local database of real Nigerian decisions. | Safe to rely on the existence; still confirm it's on-point. |
+| 🌐 **Web-sourced — confirm source** | Not in the local DB, but a **live web search actually returned it** with a valid Nigerian-report citation shape, and a **clickable source link** is provided. | **Open the source link and confirm** the report (NWLR/LPELR/LawPavilion) before citing. |
+| ⚠️ **Needs Verification** | The live search returned no confirming source (possibly model memory), or the citation shape is invalid. | Treat as unconfirmed — verify independently before any reliance. |
+
+This deliberately replaced an earlier "high confidence" label that was based only on a citation's *format* — a hallucinated citation can have a perfectly valid shape, so format alone is never treated as proof of existence. **Relevance** is handled separately: results are retrieved with a precision-gated matcher (a single incidental shared word can no longer surface an off-topic case), and the model is instructed to silently ignore any candidate that is not genuinely on-point.
+
 > **"I used Practice Updates and it really went online — it gave me a source link I clicked and it was true. Does that mean it's working?"**
 > **Yes — that is exactly the design, and it confirms grounding is working end-to-end on your setup.** The Practice Updates feed forces live web search **on by default** (it does not depend on the sidebar switch), so it always fetches real, current developments and shows you the real source link for each. The fact that you clicked through and the source was genuine means: (a) your Gemini API key has Google Search grounding enabled and within quota, and (b) the source links the model returns are the real ones it used. The general AI features are **off by default** for web grounding — flip the sidebar switch **🌐 Live web grounding** to put those online too.
 

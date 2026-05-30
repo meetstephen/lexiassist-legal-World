@@ -357,3 +357,52 @@ class TestFindRelevantVerifiedCases:
         # These criminal cases share no real land concept and must not appear.
         assert "Akpan v The State" not in names
         assert "Sunday v The State" not in names
+
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# verify_online_case — honest authenticity tiering for online-sourced cases
+# ─────────────────────────────────────────────────────────────────────────────
+class TestVerifyOnlineCaseAuthenticity:
+    """An online-sourced case must never be over-stated. The tier must reflect
+    what was ACTUALLY checked: DB match (verified), live-web sourced + valid
+    citation shape (web_sourced, confirm-the-source), or otherwise
+    needs_verification. A valid citation *shape* alone must NOT be promoted."""
+
+    def test_known_db_case_is_verified(self):
+        from lexi.web_search import verify_online_case
+        v = verify_online_case("Madukolu v Nkemdilim", "(1962) 2 SCNLR 341", "1962",
+                               grounded=False)
+        assert v["confidence_tier"] == "verified"
+        assert v["verified"] is True
+
+    def test_grounded_valid_shape_is_web_sourced_not_verified(self):
+        from lexi.web_search import verify_online_case
+        v = verify_online_case("Some New Co v Another Co",
+                               "(2021) 12 NWLR (Pt. 1234) 56", "2021", grounded=True)
+        assert v["confidence_tier"] == "web_sourced"
+        assert v["verified"] is False
+
+    def test_ungrounded_valid_shape_is_needs_verification(self):
+        # The key fix: a valid citation FORMAT with no live grounding must NOT
+        # be labelled high-confidence — a hallucinated citation can have the
+        # right shape. It must drop to needs_verification.
+        from lexi.web_search import verify_online_case
+        v = verify_online_case("Some New Co v Another Co",
+                               "(2021) 12 NWLR (Pt. 1234) 56", "2021", grounded=False)
+        assert v["confidence_tier"] == "needs_verification"
+
+    def test_invalid_citation_is_needs_verification_even_if_grounded(self):
+        from lexi.web_search import verify_online_case
+        v = verify_online_case("Fake v Nobody", "not a real citation", "",
+                               grounded=True)
+        assert v["confidence_tier"] == "needs_verification"
+
+    def test_no_legacy_high_confidence_tier(self):
+        # The misleading 'high_confidence' tier (format-only) must be gone.
+        from lexi.web_search import verify_online_case
+        tiers = {
+            verify_online_case("A v B", "(2020) 1 NWLR (Pt. 1) 1", "2020", grounded=g)["confidence_tier"]
+            for g in (True, False)
+        }
+        assert "high_confidence" not in tiers
