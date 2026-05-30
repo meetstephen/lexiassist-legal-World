@@ -42,7 +42,7 @@ import streamlit as st
 #   - IDENTITY_CORE system prompt
 #   - PDF/DOCX export footers
 #   - README.md (manually kept in sync)
-__version__ = "9.10.0"
+__version__ = "9.11.0"
 
 # ── Public-facing brand version ───────────────────────────────────────
 # The internal semver above keeps climbing with every change, which looks

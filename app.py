@@ -433,4 +433,25 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    # Global error boundary: never show end users (or a room of lawyers) a raw
+    # Python traceback. Any unexpected error is logged for debugging but the
+    # user sees a calm, branded message with a recovery action.
+    try:
+        main()
+    except Exception as _fatal:  # noqa: BLE001 — last line of defence
+        try:
+            import logging
+            logging.getLogger("lexiassist").exception("Unhandled error in main(): %s", _fatal)
+        except Exception:
+            pass
+        try:
+            st.error(
+                "⚠️ Something went wrong while loading this view. Your data is safe. "
+                "Please refresh the page or use the sidebar to open another section. "
+                "If it persists, sign out and back in."
+            )
+            if st.button("🔄 Reload"):
+                st.rerun()
+        except Exception:
+            # If even Streamlit rendering fails, fall back to a plain message.
+            print(f"FATAL: {_fatal}")
