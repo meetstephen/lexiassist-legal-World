@@ -808,10 +808,15 @@ class Database:
         rows = cur.fetchall() or []
         q_set = {w.lower() for w in query_keywords if len(w) > 3}
         for row in rows:
-            chunk_kw = set(row[4].lower().split(","))
+            chunk_kw = {k.strip() for k in row[4].lower().split(",") if k.strip()}
             content_words = set(row[3].lower().split())
-            score = len(q_set & chunk_kw) * 3 + len(q_set & content_words)
-            if score > 0:
+            kw_hits = len(q_set & chunk_kw)
+            content_hits = len(q_set & content_words)
+            score = kw_hits * 3 + content_hits
+            # Precision gate: require a tagged-keyword hit or >=2 distinct
+            # content-term overlaps, so a single incidental word (e.g. "act",
+            # "person") does not surface an unrelated statute provision.
+            if kw_hits >= 1 or content_hits >= 2:
                 results.append({
                     "source": row[1], "section": row[2],
                     "content": row[3], "score": score,

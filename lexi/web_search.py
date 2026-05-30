@@ -38,63 +38,86 @@ def _get_identity_core():
     return IDENTITY_CORE
 
 
-def verify_online_case(case_name: str, citation: str = "", year: str = "") -> dict:
-    """Verify a case against the local verified database and apply heuristic
-    checks on the citation format.
+def verify_online_case(case_name: str, citation: str = "", year: str = "",
+                       grounded: bool = False) -> dict:
+    """Classify an online-sourced case by how strongly its AUTHENTICITY is
+    actually evidenced — never overstating what was checked.
 
-    Returns a dict with:
-      - verified: bool (True if found in local DB)
-      - confidence_tier: "verified" | "high_confidence" | "needs_verification"
-      - local_match: dict or None (the matching DB entry if found)
-      - citation_format_valid: bool
-      - notes: str
+    Honest tiers (the previous version wrongly called a regex-shape match
+    "high confidence", which would pass a hallucinated citation that merely
+    had the right format):
+      - "verified"        → the case name matches LexiAssist's hand-verified
+                            local database. This is a genuine real-case match.
+      - "web_sourced"     → NOT in the local DB, but it came from a search that
+                            actually reached the live web (``grounded=True``)
+                            AND the citation has a valid Nigerian-report shape.
+                            This means "a live web search surfaced it" — the
+                            lawyer must still open the cited source/report to
+                            confirm. It is NOT a guarantee of existence.
+      - "needs_verification" → anything else: no live grounding occurred (the
+                            model may have used memory), or the citation shape
+                            is invalid. MUST be independently verified.
+
+    Returns: verified(bool), confidence_tier, local_match, citation_format_valid,
+    grounded(bool), notes.
     """
     from .citations import verify_case_name
 
     # Check local DB
     local_match = verify_case_name(case_name)
 
-    # Citation format heuristic for Nigerian law reports
+    # Citation format heuristic for Nigerian law reports (shape ONLY — this
+    # proves nothing about whether the case actually exists).
     citation_valid = False
     if citation:
-        # Common Nigerian citation formats:
-        # (YYYY) NN NWLR (Pt. NNN) NNN
-        # (YYYY) N SC NNN
-        # (YYYY) N SCNLR NNN
-        # (YYYY) LPELR-NNNNN(SC)
         nwlr_pattern = r"\(\d{4}\)\s+\d+\s+NWLR\s+\(Pt\.\s*\d+\)"
         sc_pattern = r"\(\d{4}\)\s+\d+\s+SC\s+\d+"
         scnlr_pattern = r"\(\d{4}\)\s+\d+\s+SCNLR\s+\d+"
         lpelr_pattern = r"LPELR[-\s]*\d+"
         other_pattern = r"\(\d{4}\)\s+\d+\s+(NWLR|WLR|FWLR|All NLR|ANLR)"
-
         if any(re.search(p, citation, re.IGNORECASE) for p in [
             nwlr_pattern, sc_pattern, scnlr_pattern, lpelr_pattern, other_pattern
         ]):
             citation_valid = True
 
-    # Determine confidence tier
+    year_ok = False
+    if year:
+        try:
+            year_ok = int(year) <= datetime.now().year
+        except (ValueError, TypeError):
+            year_ok = False
+
+    # Determine the honest confidence tier.
     if local_match:
         tier = "verified"
-        notes = "Found in LexiAssist verified Nigerian case database."
-    elif citation_valid and year and int(year) <= datetime.now().year:
-        tier = "high_confidence"
+        notes = "Found in LexiAssist verified Nigerian case database — genuine, real case."
+    elif grounded and citation_valid and year_ok:
+        tier = "web_sourced"
         notes = (
-            "Not in local DB but citation format is valid and consistent. "
-            "High confidence — verify on NWLR/LPELR before citing in court."
+            "Surfaced by a LIVE web search with a valid citation format. This is "
+            "NOT a guarantee it exists — open the linked source(s) below and "
+            "confirm the report (NWLR/LPELR/LawPavilion) before citing."
         )
     else:
         tier = "needs_verification"
-        notes = (
-            "Not in local DB and citation format could not be validated. "
-            "MUST verify on NWLR/LPELR/LawPavilion before relying."
-        )
+        if not grounded:
+            notes = (
+                "The live web search returned no confirming sources for this case "
+                "(it may be from model memory). Treat as UNVERIFIED — confirm on "
+                "NWLR/LPELR/LawPavilion before relying."
+            )
+        else:
+            notes = (
+                "Citation format could not be validated. MUST verify on "
+                "NWLR/LPELR/LawPavilion before relying."
+            )
 
     return {
         "verified": bool(local_match),
         "confidence_tier": tier,
         "local_match": local_match,
         "citation_format_valid": citation_valid,
+        "grounded": bool(grounded),
         "notes": notes,
     }
 
@@ -143,7 +166,7 @@ def search_cases_online(
             "court": lc.get("court", ""),
             "year": str(lc.get("year", "")),
             "ratio": lc.get("principle", ""),
-            "relevance": "Verified Nigerian authority directly relevant to this legal issue.",
+            "relevance": "Verified Nigerian authority from the local database, retrieved as a possible match — confirm it is on-point for your specific issue.",
             "confidence_tier": "verified",
             "verification": {
                 "verified": True,
@@ -201,19 +224,25 @@ Respond ONLY in this exact JSON format:
       "court": "Supreme Court | Court of Appeal | Federal High Court | NIC",
       "year": "YYYY",
       "ratio": "The legal principle established in this case",
-      "relevance": "Why this case is directly relevant to the legal issue"
+      "relevance": "Why this case is directly relevant to the legal issue",
+      "source_url": "The exact web URL where you found/confirmed this case (empty string if none)"
     }}
   ],
   "research_notes": "Any important context about the state of law on this issue",
   "suggested_statutes": ["Relevant statutes to also consider"]
 }}
+
+Rule: if you cannot give a real source_url for a case from your search results, do not include that case.
 """
 
     # Go ONLINE for real: ground the search in live Google Search results so
     # the "online" cases are sourced from the web, not training memory. The
     # real source URLs are captured for display alongside the results.
     raw = generate(prompt, identity, "standard", "research", use_web_search=True)
-    st.session_state["_prec_grounding"] = st.session_state.get("_last_grounding")
+    _grounding = st.session_state.get("_last_grounding")
+    st.session_state["_prec_grounding"] = _grounding
+    # Did the search actually reach the web? (real sources were returned)
+    _did_ground = bool(_grounding and _grounding.get("sources"))
 
     if raw and not raw.startswith(("⚠️", "🚫", "⏳")):
         data = safe_json_loads(raw, fallback={"cases": []})
@@ -227,6 +256,7 @@ Respond ONLY in this exact JSON format:
             year = (case.get("year") or "").strip()
             ratio = (case.get("ratio") or "").strip()
             relevance = (case.get("relevance") or "").strip()
+            source_url = (case.get("source_url") or "").strip()
 
             if not name:
                 continue
@@ -236,8 +266,9 @@ Respond ONLY in this exact JSON format:
                 continue
             seen_names.add(name.lower())
 
-            # Run verification against local DB
-            verification = verify_online_case(name, citation, year)
+            # Run verification against local DB, grounding-aware so we never
+            # overstate authenticity for an ungrounded (memory-only) result.
+            verification = verify_online_case(name, citation, year, grounded=_did_ground)
 
             # If verified locally, use the canonical citation from DB
             if verification["local_match"]:
@@ -255,6 +286,7 @@ Respond ONLY in this exact JSON format:
                 "year": year,
                 "ratio": ratio,
                 "relevance": relevance,
+                "source_url": source_url,
                 "confidence_tier": verification["confidence_tier"],
                 "verification": verification,
                 "source": "online",
@@ -268,8 +300,8 @@ Respond ONLY in this exact JSON format:
         st.session_state["_online_research_notes"] = ""
         st.session_state["_online_suggested_statutes"] = []
 
-    # Sort: verified first, then high_confidence, then needs_verification
-    tier_order = {"verified": 0, "high_confidence": 1, "needs_verification": 2}
+    # Sort: verified first, then web_sourced, then needs_verification
+    tier_order = {"verified": 0, "web_sourced": 1, "needs_verification": 2}
     combined_results.sort(key=lambda x: tier_order.get(x["confidence_tier"], 3))
 
     return combined_results
@@ -360,12 +392,16 @@ def build_case_context(query: str, top_k: int = 6) -> str:
         return ""
 
     lines = [
-        "═══ VERIFIED NIGERIAN CASE AUTHORITIES (from LexiAssist verified database) ═══",
-        "The following cases are directly relevant to this query and are GUARANTEED",
-        "to exist (citations have been hand-verified). Prefer these over any case",
-        "you might recall from memory. Use the citations EXACTLY as shown.",
-        "If you cite any case NOT in this list, you must be highly confident it is real",
-        "(landmark Nigerian decisions only — never invent obscure citations).",
+        "═══ CANDIDATE VERIFIED NIGERIAN CASES (from LexiAssist verified database) ═══",
+        "These cases are REAL (citations hand-verified) and were retrieved as",
+        "POSSIBLY relevant to the query by keyword match. You MUST judge each one's",
+        "actual relevance yourself:",
+        "  • Cite a case ONLY if it genuinely supports the legal point at hand.",
+        "  • SILENTLY IGNORE any listed case that is not on-point — do not mention",
+        "    or cite an irrelevant case just because it appears here.",
+        "  • When you do cite one, use its citation EXACTLY as shown below.",
+        "  • You may also cite other landmark Nigerian cases you are confident are",
+        "    real, but never invent or guess a citation.",
         "",
     ]
     for i, c in enumerate(matches, 1):
@@ -383,7 +419,8 @@ def build_case_context(query: str, top_k: int = 6) -> str:
 
 
 def render_online_case_card(idx: int, case: dict) -> str:
-    """Render a single online case result as styled HTML."""
+    """Render a single online case result as styled HTML, with an honest
+    authenticity badge and a clickable source link when one is available."""
     tier = case.get("confidence_tier", "needs_verification")
     name = esc(case.get("name", ""))
     citation = esc(case.get("citation", ""))
@@ -391,26 +428,32 @@ def render_online_case_card(idx: int, case: dict) -> str:
     year = esc(case.get("year", ""))
     ratio = esc(case.get("ratio", ""))
     relevance = esc(case.get("relevance", ""))
+    source_url = (case.get("source_url") or "").strip()
+    note = esc(case.get("verification", {}).get("note", "") or case.get("verification", {}).get("notes", ""))
 
-    # Tier-based styling
+    # Tier-based styling (translucent tints → readable on light AND dark themes)
     if tier == "verified":
-        badge_label = "✅ Verified"
-        badge_bg = "#dcfce7"
+        badge_label = "✅ Verified (in database)"
+        badge_bg = "rgba(22,163,74,0.14)"
         badge_border = "#16a34a"
-        badge_color = "#14532d"
-        note = "Confirmed in LexiAssist verified Nigerian case database."
-    elif tier == "high_confidence":
-        badge_label = "🟡 High Confidence"
-        badge_bg = "#fef3c7"
-        badge_border = "#d97706"
-        badge_color = "#92400e"
-        note = "Valid citation format. Verify on NWLR/LPELR before citing."
+        badge_color = "#16a34a"
+        if not note:
+            note = "Confirmed in LexiAssist verified Nigerian case database — genuine, real case."
+    elif tier == "web_sourced":
+        badge_label = "🌐 Web-sourced — confirm source"
+        badge_bg = "rgba(37,99,235,0.14)"
+        badge_border = "#2563eb"
+        badge_color = "#2563eb"
+        if not note:
+            note = ("Surfaced by a live web search with a valid citation format. "
+                    "Open the source below and confirm the report before citing.")
     else:
         badge_label = "⚠️ Needs Verification"
-        badge_bg = "#fef2f2"
+        badge_bg = "rgba(220,38,38,0.12)"
         badge_border = "#dc2626"
-        badge_color = "#991b1b"
-        note = "MUST verify on NWLR/LPELR/LawPavilion before relying."
+        badge_color = "#dc2626"
+        if not note:
+            note = "MUST verify on NWLR/LPELR/LawPavilion before relying."
 
     # Court badge
     if "Supreme" in court:
@@ -419,6 +462,22 @@ def render_online_case_card(idx: int, case: dict) -> str:
         court_badge = "badge-warn"
     else:
         court_badge = "badge-ok"
+
+    # Per-case source link (real evidence the lawyer can click)
+    source_html = ""
+    if source_url:
+        safe_url = esc(source_url)
+        source_html = (
+            f'<div style="margin-top:0.4rem;font-size:0.82rem;">'
+            f'🔗 <a href="{safe_url}" target="_blank" rel="noopener noreferrer" '
+            f'style="color:#2563eb;font-weight:600;text-decoration:none;">'
+            f'Open source to confirm</a></div>'
+        )
+    elif tier != "verified":
+        source_html = (
+            '<div style="margin-top:0.4rem;font-size:0.78rem;color:#dc2626;">'
+            '⚠️ No source link returned for this case — treat as unconfirmed.</div>'
+        )
 
     return f"""
 <div class="custom-card">
@@ -438,7 +497,8 @@ def render_online_case_card(idx: int, case: dict) -> str:
   <div style="color:var(--la-text2);">
     <strong>Why relevant:</strong> {relevance}
   </div>
+  {source_html}
   <div style="margin-top:0.4rem;font-size:0.78rem;color:var(--la-text2);">
-    {esc(note)}
+    {note}
   </div>
 </div>"""

@@ -311,9 +311,17 @@ def build_rag_context(query: str, top_k: int = 6) -> str:
     scored = []
     for c in chunks:
         kw_field = set(c.get("keywords", "").lower().split(","))
+        kw_field = {k.strip() for k in kw_field if k.strip()}
         content_words = set(c.get("content", "").lower().split())
-        score = len(kw_set & kw_field) * 3 + len(kw_set & content_words)
-        if score > 0:
+        kw_hits = len(kw_set & kw_field)
+        content_hits = len(kw_set & content_words)
+        score = kw_hits * 3 + content_hits
+        # Precision gate (mirrors the case matcher): a statute provision only
+        # qualifies if it hits a tagged KEYWORD, or shares >=2 distinct content
+        # terms with the query. A single incidental content-word overlap (e.g.
+        # "person", "act") is not enough — that produced unrelated statute
+        # blocks being injected as "directly relevant".
+        if kw_hits >= 1 or content_hits >= 2:
             scored.append((score, c))
 
     # Also try DB chunks
@@ -331,9 +339,11 @@ def build_rag_context(query: str, top_k: int = 6) -> str:
         return ""
 
     lines = [
-        "═══ VERIFIED STATUTORY GROUNDING (retrieved from primary Nigerian law) ═══",
-        "The following provisions are directly relevant to this query.",
-        "You MUST cite these sections explicitly in your analysis — do not paraphrase around them.",
+        "═══ CANDIDATE STATUTORY PROVISIONS (retrieved from primary Nigerian law) ═══",
+        "These provisions were retrieved as POSSIBLY relevant to the query. They are",
+        "real and quoted accurately. Cite a provision ONLY if it genuinely applies to",
+        "the issue; silently ignore any that is not on-point. When you cite one, quote",
+        "the section exactly — do not paraphrase around it.",
         "",
     ]
     for i, c in enumerate(top, 1):

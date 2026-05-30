@@ -90,7 +90,7 @@ def render_research():
             if online_results:
                 # Summary stats
                 verified_n = sum(1 for r in online_results if r["confidence_tier"] == "verified")
-                high_conf_n = sum(1 for r in online_results if r["confidence_tier"] == "high_confidence")
+                web_sourced_n = sum(1 for r in online_results if r["confidence_tier"] == "web_sourced")
                 needs_ver_n = sum(1 for r in online_results if r["confidence_tier"] == "needs_verification")
                 local_n = sum(1 for r in online_results if r.get("source") == "local_db")
                 online_n = sum(1 for r in online_results if r.get("source") == "online")
@@ -98,8 +98,8 @@ def render_research():
                 summary_parts = []
                 if verified_n:
                     summary_parts.append(f"✅ {verified_n} verified")
-                if high_conf_n:
-                    summary_parts.append(f"🟡 {high_conf_n} high confidence")
+                if web_sourced_n:
+                    summary_parts.append(f"🌐 {web_sourced_n} web-sourced")
                 if needs_ver_n:
                     summary_parts.append(f"⚠️ {needs_ver_n} needs verification")
 
