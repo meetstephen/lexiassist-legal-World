@@ -1029,52 +1029,164 @@ def verify_case_name(name: str) -> Optional[dict]:
     return best_match
 
 
+# ── Relevance retrieval tuning ───────────────────────────────────────
+# Words that are common in BOTH legal queries and case principles but carry
+# almost no topical signal — matching on these alone produced wildly
+# irrelevant "verified" cases (e.g. a query about employment termination
+# surfacing a land case because both mentioned "without" or "liability").
+_RELEVANCE_STOPWORDS = {
+    # generic english
+    "the","a","an","and","or","but","in","on","at","to","for","of","is","are",
+    "was","were","be","been","being","have","has","had","do","does","did","will",
+    "would","could","should","may","might","shall","this","that","these","those",
+    "what","when","where","which","who","how","if","not","no","can","with","from",
+    "by","about","as","into","through","during","before","after","above","below",
+    "between","out","off","over","under","again","further","then","once","there",
+    "here","than","too","very","just","also","any","all","each","more","most",
+    "such","some","other","only","own","same","both","because","while","against",
+    # legal-but-topically-empty filler (these caused the false matches)
+    "client","matter","case","cases","issue","issues","situation","problem",
+    "question","advice","legal","law","laws","nigerian","nigeria","court","courts",
+    "claim","claims","action","suit","party","parties","plaintiff","defendant",
+    "applicant","respondent","whether","liable","liability","duty","right","rights",
+    "principle","principles","ratio","decision","judgment","ruling","held",
+    "section","act","cap","lfn","please","need","want","help","find","relevant",
+    "regarding","concerning","respect","apply","applies","applicable",
+}
+
+# Synonym / concept expansion so a lawyer's natural phrasing connects to the
+# vocabulary used in the curated principle text. Each query keyword that hits
+# a key here also contributes the mapped concept tokens to the match set.
+_CONCEPT_SYNONYMS = {
+    "sack": "dismissal", "sacked": "dismissal", "fired": "dismissal",
+    "termination": "dismissal", "terminated": "dismissal", "dismissed": "dismissal",
+    "dismissal": "dismissal", "employee": "employment", "employer": "employment",
+    "employment": "employment", "salary": "employment", "wages": "employment",
+    "redundancy": "employment", "tenant": "tenancy", "landlord": "tenancy",
+    "rent": "tenancy", "lease": "tenancy", "eject": "tenancy", "ejection": "tenancy",
+    "possession": "land", "land": "land", "title": "land", "trespass": "land",
+    "occupancy": "land", "property": "land", "boundary": "land",
+    "company": "company", "director": "company", "shareholder": "company",
+    "share": "company", "veil": "company", "incorporation": "company",
+    "bail": "bail", "remand": "bail",
+    "murder": "criminal", "theft": "criminal", "stealing": "criminal",
+    "fraud": "criminal", "robbery": "criminal", "rape": "criminal",
+    "charge": "criminal", "accused": "criminal", "conviction": "criminal",
+    "confession": "evidence", "confessional": "evidence", "hearsay": "evidence",
+    "admissibility": "evidence", "evidence": "evidence", "witness": "evidence",
+    "contract": "contract", "agreement": "contract", "breach": "contract",
+    "consideration": "contract", "negligence": "tort", "defamation": "tort",
+    "election": "election", "petition": "election", "votes": "election",
+    "marriage": "family", "divorce": "family", "custody": "family",
+    "inheritance": "inheritance", "succession": "inheritance", "estate": "inheritance",
+    "will": "inheritance", "arbitration": "arbitration", "award": "arbitration",
+    "tax": "tax", "vat": "tax",
+    "jurisdiction": "jurisdiction", "locus": "jurisdiction", "standi": "jurisdiction",
+    "fundamental": "fundamental rights", "detention": "fundamental rights",
+    "arrest": "fundamental rights", "constitutional": "constitutional",
+    "bank": "banking", "banker": "banking", "loan": "banking", "guarantee": "banking",
+    "mortgage": "land", "insurance": "insurance", "oil": "oil", "pollution": "oil",
+}
+
+
+def _relevance_keywords(text: str) -> set:
+    """Extract topical keywords from text, dropping low-signal stopwords and
+    expanding common legal synonyms into shared concept tokens."""
+    words = re.findall(r"\b[a-zA-Z]{3,}\b", (text or "").lower())
+    kws = {w for w in words if w not in _RELEVANCE_STOPWORDS}
+    # expand synonyms (add concept tokens without removing the originals)
+    expanded = set(kws)
+    for w in kws:
+        concept = _CONCEPT_SYNONYMS.get(w)
+        if concept:
+            expanded.update(concept.split())
+    return expanded
+
+
 def find_relevant_verified_cases(query: str, top_k: int = 8) -> list[dict]:
     """Retrieval helper for grounded precedent finding.
 
-    Searches ``VERIFIED_NIGERIAN_CASES`` for cases whose ``principle`` field
-    most strongly overlaps the query keywords. Returns up to ``top_k`` matches
-    sorted by overlap score, each as a dict ready to inject into a prompt.
+    Searches ``VERIFIED_NIGERIAN_CASES`` for cases whose ``principle`` field is
+    GENUINELY relevant to the query, and returns up to ``top_k`` matches sorted
+    by relevance. Precision is the priority: it is far better to return NOTHING
+    than to surface an unrelated "verified" case, which destroys user trust.
 
-    The scoring is intentionally simple (token-overlap, no embeddings) because:
-      * the verified DB is small and curated (every entry is a landmark);
-      * we only need a candidate set, not a final ranking — the AI re-ranks; and
-      * it has zero external deps and works offline.
+    How relevance is decided (and why the old version failed):
+      * The old matcher kept any case sharing a single word with the query
+        (``score > 0``) and did not filter low-signal words like "without" or
+        "liability" — so a query about employment termination would surface a
+        land case. This is fixed by:
+        1. Dropping topically-empty stopwords (incl. legal filler).
+        2. Expanding common legal synonyms to a shared concept vocabulary.
+        3. Scoring ONLY on overlap with the case's ``principle`` (the topical
+           field); name overlap alone never qualifies a case.
+        4. Requiring a MINIMUM of 2 distinct overlapping concept terms (or 1
+           strong term that is itself a recognised legal concept), so a single
+           incidental word can no longer qualify a case.
 
-    Returns empty list if query is empty or no candidates score > 0.
+    Returns empty list if query is empty or nothing clears the threshold.
     """
     if not query or not query.strip():
         return []
-    stopwords = {
-        "the","a","an","and","or","but","in","on","at","to","for","of","is","are",
-        "was","were","be","been","being","have","has","had","do","does","did","will",
-        "would","could","should","may","might","shall","this","that","these","those",
-        "what","when","where","which","who","how","if","not","no","can","client",
-        "matter","case","issue","situation","problem","question","advice","legal","law",
-        "nigerian","nigeria","under","about",
-    }
-    words = re.findall(r"\b[a-zA-Z]{3,}\b", query.lower())
-    keywords = {w for w in words if w not in stopwords}
-    if not keywords:
+
+    q_kws = _relevance_keywords(query)
+    if not q_kws:
+        return []
+    # The set of recognised "concept" anchor tokens (the values side of the
+    # synonym map). A single overlap that is one of these is meaningful enough.
+    concept_anchors = {tok for v in _CONCEPT_SYNONYMS.values() for tok in v.split()}
+
+    scored: list[tuple[float, int, str, dict]] = []
+    for name, val in VERIFIED_NIGERIAN_CASES.items():
+        principle = val.get("principle") or ""
+        p_kws = _relevance_keywords(principle)
+        if not p_kws:
+            continue
+
+        overlap = q_kws & p_kws
+        n_overlap = len(overlap)
+        if n_overlap == 0:
+            continue
+
+        # Gate: require either >=2 distinct overlapping topical terms, OR a
+        # single overlap that is a strong legal-concept anchor. This is what
+        # stops one incidental shared word from qualifying an unrelated case.
+        strong = bool(overlap & concept_anchors)
+        if n_overlap < 2 and not strong:
+            continue
+
+        # Score: overlap count, with a bonus for hitting concept anchors and a
+        # small normalisation by principle length (favours focused principles).
+        anchor_hits = len(overlap & concept_anchors)
+        score = n_overlap + 1.5 * anchor_hits
+        scored.append((score, n_overlap, name, val))
+
+    if not scored:
         return []
 
-    scored: list[tuple[int, str, dict]] = []
-    for name, val in VERIFIED_NIGERIAN_CASES.items():
-        principle = (val.get("principle") or "").lower()
-        name_low = name.lower()
-        principle_tokens = set(re.findall(r"\b[a-zA-Z]{3,}\b", principle))
-        name_tokens = set(re.findall(r"\b[a-zA-Z]{3,}\b", name_low))
-        score = (
-            3 * len(keywords & principle_tokens)
-            + 1 * len(keywords & name_tokens)
-        )
-        if score > 0:
-            scored.append((score, name, val))
+    # Sort by score desc, then overlap desc, then name for stable ordering.
+    scored.sort(key=lambda t: (-t[0], -t[1], t[2]))
 
-    scored.sort(key=lambda t: (-t[0], t[1]))
+    # Precision gate: anchor the result set to the BEST match's strength.
+    # Weak single-overlap candidates (score 2.5 here = exactly one concept
+    # anchor and no second supporting term) are only allowed through when the
+    # query genuinely has no stronger matches. This stops a query about, say,
+    # "bail" from trailing an unrelated case that merely shared "custody" or
+    # "damages" beneath several solidly-relevant ones.
+    best = scored[0][0]
+    if best >= 4.0:
+        # Strong matches exist → keep only solid ones (drop bare single-anchor).
+        kept = [t for t in scored if t[0] >= 3.5]
+    elif best >= 3.0:
+        kept = [t for t in scored if t[0] >= 3.0]
+    else:
+        # Only weak matches exist at all → return the single best couple, so we
+        # never flood the lawyer with marginally-related cases.
+        kept = scored[:2]
+
     return [
-        {"name": n, **v, "_score": s}
-        for s, n, v in scored[:top_k]
+        {"name": n, **v, "_score": round(s, 2)}
+        for s, _ov, n, v in kept[:top_k]
     ]
 
 

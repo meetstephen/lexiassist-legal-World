@@ -316,3 +316,44 @@ class TestFindRelevantVerifiedCases:
             assert scores == sorted(scores, reverse=True), (
                 f"results not sorted by score: {scores}"
             )
+
+    def test_no_cross_domain_leakage(self):
+        """Regression: a query in one legal domain must NOT surface a case
+        whose principle is in an unrelated domain just because of one shared
+        incidental word (the bug where an employment query returned land
+        cases). The TOP result must be on-domain.
+        """
+        domain_terms = {
+            "employment": {"employment", "dismissal", "master", "servant",
+                           "wrongful", "termination"},
+            "company": {"corporate", "veil", "company", "incorporation",
+                        "shareholder", "salomon"},
+            "criminal": {"murder", "criminal", "confession", "intent",
+                         "provocation", "proof", "trial"},
+            "contract": {"contract", "damages", "sale", "goods", "warranty",
+                         "performance", "consideration"},
+        }
+        cases = [
+            ("employee dismissed without notice unfair termination", "employment"),
+            ("director personal liability for company debts lifting the veil", "company"),
+            ("bail pending trial murder accused person", "criminal"),
+            ("breach of contract damages for non-delivery of goods", "contract"),
+        ]
+        for query, domain in cases:
+            results = find_relevant_verified_cases(query, top_k=5)
+            assert results, f"expected matches for {query!r}"
+            top_principle = results[0]["principle"].lower().replace(";", " ")
+            top_tokens = set(top_principle.split())
+            assert domain_terms[domain] & top_tokens, (
+                f"top result for {query!r} is off-domain: "
+                f"{results[0]['name']} :: {results[0]['principle']}"
+            )
+
+    def test_irrelevant_case_not_returned_for_unrelated_query(self):
+        """A pure land query must not return a confessional-statement /
+        criminal case, and vice-versa."""
+        land = find_relevant_verified_cases("proof of title to land trespass", top_k=8)
+        names = {r["name"] for r in land}
+        # These criminal cases share no real land concept and must not appear.
+        assert "Akpan v The State" not in names
+        assert "Sunday v The State" not in names

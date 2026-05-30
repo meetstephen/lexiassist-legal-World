@@ -143,7 +143,7 @@ def search_cases_online(
             "court": lc.get("court", ""),
             "year": str(lc.get("year", "")),
             "ratio": lc.get("principle", ""),
-            "relevance": "Verified Nigerian authority directly relevant to this legal issue.",
+            "relevance": "Verified Nigerian authority from the local database, retrieved as a possible match — confirm it is on-point for your specific issue.",
             "confidence_tier": "verified",
             "verification": {
                 "verified": True,
@@ -360,12 +360,16 @@ def build_case_context(query: str, top_k: int = 6) -> str:
         return ""
 
     lines = [
-        "═══ VERIFIED NIGERIAN CASE AUTHORITIES (from LexiAssist verified database) ═══",
-        "The following cases are directly relevant to this query and are GUARANTEED",
-        "to exist (citations have been hand-verified). Prefer these over any case",
-        "you might recall from memory. Use the citations EXACTLY as shown.",
-        "If you cite any case NOT in this list, you must be highly confident it is real",
-        "(landmark Nigerian decisions only — never invent obscure citations).",
+        "═══ CANDIDATE VERIFIED NIGERIAN CASES (from LexiAssist verified database) ═══",
+        "These cases are REAL (citations hand-verified) and were retrieved as",
+        "POSSIBLY relevant to the query by keyword match. You MUST judge each one's",
+        "actual relevance yourself:",
+        "  • Cite a case ONLY if it genuinely supports the legal point at hand.",
+        "  • SILENTLY IGNORE any listed case that is not on-point — do not mention",
+        "    or cite an irrelevant case just because it appears here.",
+        "  • When you do cite one, use its citation EXACTLY as shown below.",
+        "  • You may also cite other landmark Nigerian cases you are confident are",
+        "    real, but never invent or guess a citation.",
         "",
     ]
     for i, c in enumerate(matches, 1):
