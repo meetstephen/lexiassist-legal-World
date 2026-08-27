@@ -15,6 +15,8 @@ jobs:
     timeout-minutes: 5
     steps:
       - name: Request Supabase Auth health endpoint
+        env:
+          SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
         run: |
           curl \
             --fail \
@@ -24,4 +26,6 @@ jobs:
             --retry-all-errors \
             --connect-timeout 20 \
             --max-time 60 \
+            -H "apikey: $SUPABASE_ANON_KEY" \
+            -H "Authorization: Bearer $SUPABASE_ANON_KEY" \
             https://muywyqrcogqprziijugl.supabase.co/auth/v1/health
