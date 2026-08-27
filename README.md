@@ -287,6 +287,9 @@ python-dateutil>=2.8.2
 - Set in `.streamlit/secrets.toml`: the **Gemini API key**, the **database URL**, and the **`ENCRYPTION_KEY`** (needed before the first user saves notification settings)
 - **Live web grounding** requires the Gemini API key to have **Google Search grounding** enabled (standard Google AI Studio keys include a free daily allowance, then billable). The app falls back to verified-database grounding if a search is unavailable.
 - On free Streamlit infrastructure, occasional cold-start delays are normal; the database connection auto-reconnects after a sleep cycle
+- The app's persistent database is PostgreSQL configured through `DATABASE_URL` (for example, Neon); Supabase is not required by the application.
+- The deployed app exposes a lightweight health check at `/?healthcheck=1`. It returns `OK` before loading the AI or database layers and is suitable for uptime monitoring.
+- The repository includes `.github/workflows/supabase-keep-alive.yml`, which calls the separate Supabase project's authenticated health endpoint daily. Set the GitHub Actions repository secret `SUPABASE_ANON_KEY` if you use that Supabase project. This workflow helps reduce inactivity-pausing risk but is not a substitute for a paid Supabase plan.
 
 ---
 
