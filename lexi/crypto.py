@@ -66,7 +66,10 @@ def encrypt_secret(plaintext: str) -> str:
         token = f.encrypt(plaintext.encode())
         return "enc:" + token.decode()
     except Exception as e:
-        logger.warning(f"Encryption failed: {e}")
+        if is_production() or is_beta():
+            logger.error("Encryption failed in a protected environment; refusing to persist plaintext.")
+            raise RuntimeError("Secret encryption failed; plaintext storage is disabled.") from e
+        logger.warning(f"Encryption failed in development: {e}")
         return plaintext
 
 
