@@ -90,6 +90,8 @@ def render_user_management():
                                     st.error("Min 6 characters.")
                                 else:
                                     db.update_user(uid, {"password_hash": hash_password(new_temp_pw)})
+                                    # Resetting a password must invalidate all existing sessions.
+                                    db.revoke_all_user_sessions(uid)
                                     db.append_audit("PASSWORD_RESET", f"target_user={user['username']}")
                                     st.success(f"✅ Password reset for @{user['username']}.")
 
