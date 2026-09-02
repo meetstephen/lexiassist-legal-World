@@ -109,9 +109,9 @@ logger = logging.getLogger("LexiAssist")
 def app_env() -> str:
     """Return current app environment: development, beta, or production."""
     try:
-        return str(st.secrets.get("APP_ENV", os.getenv("APP_ENV", "development"))).lower().strip()
+        return str(st.secrets.get("APP_ENV", os.getenv("APP_ENV", "production"))).lower().strip()
     except Exception:
-        return os.getenv("APP_ENV", "development").lower().strip()
+        return os.getenv("APP_ENV", "production").lower().strip()
 
 def is_production() -> bool:
     return app_env() == "production"

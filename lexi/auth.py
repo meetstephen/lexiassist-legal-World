@@ -13,7 +13,7 @@ from .crypto import encrypt_secret, decrypt_secret
 from .constants import SUPPORTED_MODELS
 from .themes import get_theme_css
 from .database import get_db, load_user_data
-from .cookies import set_session_cookie, delete_session_cookie
+from .cookies import delete_session_cookie
 
 
 def manual_connect(key: str) -> bool:
@@ -109,12 +109,10 @@ def do_login(username: str, password: str, remember_me: bool = True) -> bool:
     db.append_audit("LOGIN", f"user={uname_clean}")
     load_user_data()
     st.session_state.user_data_loaded = True
-    # ── Session token: stored in HttpOnly-like cookie, NOT in URL ──
-    if remember_me:
-        token = db.create_session_token(uid, days=30)
-        st.session_state["_session_token"] = token
-        st.session_state["_cookie_token"] = token
-        set_session_cookie(token)
+    # Persistent browser tokens are disabled until a server-set HttpOnly
+    # cookie is available.  This avoids leaking bearer tokens via URLs or
+    # JavaScript-readable cookies.
+    del remember_me
     return True
 
 def _record_login_failure(uname_clean: str) -> None:
@@ -139,24 +137,9 @@ def _record_login_failure(uname_clean: str) -> None:
 
 
 def do_auto_login_from_token(token: str) -> bool:
-    """Silently restore a session from a persistent cookie token. Returns True if valid."""
-    if not token:
-        return False
-    db = get_db()
-    db.cleanup_expired_sessions()
-    user = db.validate_session_token(token)
-    if not user:
-        return False  # Token invalid/expired
-    uid = user["user_id"]
-    st.session_state.authenticated = True
-    st.session_state.current_user_id = uid
-    st.session_state.current_username = user["username"]
-    st.session_state.current_user_role = user["role"]
-    st.session_state["_session_token"] = token
-    st.session_state["_cookie_token"] = token
-    load_user_data()
-    st.session_state.user_data_loaded = True
-    return True
+    """Disabled pending an HttpOnly server-side session implementation."""
+    del token
+    return False
 
 
 def render_reauth_screen(token: str, username: str) -> None:
@@ -375,7 +358,8 @@ Position-taking &middot; Strategy-driven &middot; Risk-ranked &middot; Litigator
             with st.form("login_form", clear_on_submit=False):
                 username_inp = st.text_input("Username", placeholder="your.username", key="login_username_inp")
                 password_inp = st.text_input("Password", type="password", key="login_password_inp")
-                remember_me  = st.checkbox("Stay signed in for 30 days", value=True, key="login_remember_me")
+                st.caption("For your protection, sign-in is limited to this browser session.")
+                remember_me = False
                 if st.form_submit_button("🔒 Sign In", type="primary", use_container_width=True):
                     import time as _time
                     _locked_until = st.session_state.get("_login_locked_until", 0.0)
@@ -942,6 +926,9 @@ def _verify_reset_code(username: str, code: str, new_password: str) -> dict:
         return {"ok": False, "message": "Reset request is malformed. Try again."}
 
     db.update_user(user_id, {"password_hash": hash_password(new_password)})
+    # A reset must invalidate every previously issued session, including
+    # potentially stolen bearer tokens.
+    db.revoke_all_user_sessions(user_id)
     db._save_list_raw(f"pwreset:{uname_clean}", [])
     # Clear any login lockout so the user can sign in immediately
     db._save_list_raw(f"login_lock:{uname_clean}", [])
