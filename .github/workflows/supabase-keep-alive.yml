@@ -2,9 +2,13 @@ name: Keep Supabase project active
 
 on:
   schedule:
-    # Run daily to leave margin around Supabase's inactivity window.
-    - cron: "17 5 * * *"
+    # Four database checks per day; avoid the top-of-hour scheduler peak.
+    - cron: "17 2,8,14,20 * * *"
   workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/supabase-keep-alive.yml"
 
 permissions:
   contents: read
@@ -14,18 +18,36 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
-      - name: Request Supabase Auth health endpoint
+      - name: Check Supabase database through the Data API
         env:
           SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
+        shell: bash
         run: |
-          curl \
-            --fail \
-            --show-error \
+          set -euo pipefail
+          if [ -z "$SUPABASE_ANON_KEY" ]; then
+            echo "::error::Set the SUPABASE_ANON_KEY repository secret."
+            exit 1
+          fi
+          # Query an existing table through PostgREST, respecting its RLS.
+          # HEAD returns no records. An empty RLS-filtered result is valid.
+          # Do not disable RLS or use a service-role key for this check.
+          STATUS=$(curl \
+            --head \
             --silent \
-            --retry 3 \
-            --retry-all-errors \
-            --connect-timeout 20 \
-            --max-time 60 \
+            --show-error \
+            --fail \
+            --retry 2 \
+            --retry-max-time 150 \
+            --connect-timeout 15 \
+            --max-time 45 \
+            --output /dev/null \
+            --write-out "%{http_code}" \
             -H "apikey: $SUPABASE_ANON_KEY" \
-            -H "Authorization: Bearer $SUPABASE_ANON_KEY" \
-            https://muywyqrcogqprziijugl.supabase.co/auth/v1/health
+            "https://muywyqrcogqprziijugl.supabase.co/rest/v1/statute_chunks?select=id&limit=1") || {
+              echo "::error::Database check failed. Check Data API availability, the statute_chunks table, and anonymous SELECT privileges; preserve RLS."
+              exit 1
+            }
+          case "$STATUS" in
+            200|206) echo "Database check succeeded (HTTP $STATUS)." ;;
+            *) echo "::error::Unexpected database response: HTTP $STATUS"; exit 1 ;;
+          esac
