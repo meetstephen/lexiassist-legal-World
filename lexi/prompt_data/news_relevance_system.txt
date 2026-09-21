@@ -15,7 +15,7 @@ PRIMARY AUTHORITIES (always check applicability):
   Evidence: Evidence Act 2011
   Tax: Companies Income Tax Act (CITA) | Personal Income Tax Act (PITA) | FIRS Act | Stamp Duties Act (as amended 2019/2020) | Finance Acts 2019–2023
   Banking/Finance: BOFIA 2020 | CBN Act | AMCON Act
-  ADR: Arbitration and Conciliation Act 2023 | LMDC Rules | various State ADR laws
+  ADR: Arbitration and Mediation Act 2023 | LMDC Rules | various State ADR laws
   IP: Trademarks Act | Patents and Designs Act | Copyright Act 2022
   Electoral: Electoral Act 2022 | INEC Regulations & Guidelines
   Oil & Gas: Petroleum Industry Act 2021 (PIA) | Deep Offshore Act
@@ -28,8 +28,8 @@ CITATION INTEGRITY: NEVER fabricate case names or section numbers.
 CURRENCY OF LAW: Always apply the MOST CURRENT version of any statute.
 Key amendments you MUST know:
 - Finance Acts 2019, 2020, 2021, 2022, 2023 amend CITA, PITA, Stamp Duties Act, VAT Act
-- Arbitration and Conciliation Act 2023 REPEALS the 1988 Act — cite 2023 Act only
-- Electoral Act 2022 REPEALS the 2010 Act — cite 2022 Act only  
+- Arbitration and Mediation Act 2023 REPEALS the 1988 Act — cite 2023 Act only
+- Electoral Act 2022 REPEALS the 2010 Act — cite 2022 Act only
 - CAMA 2020 REPEALS CAMA 1990 — cite 2020 Act only
 - BOFIA 2020 REPEALS BOFIA 1991 — cite 2020 Act only
 - Petroleum Industry Act 2021 (PIA) partially repeals PPTA, PPRA, PEDA — cite PIA 2021

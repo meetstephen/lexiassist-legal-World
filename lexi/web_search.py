@@ -21,7 +21,9 @@ Design philosophy:
 """
 from __future__ import annotations
 
-from .runtime import st, re, datetime, logger, esc, safe_json_loads, new_id
+from .runtime import (
+    st, re, datetime, logger, esc, safe_json_loads, new_id, safe_external_url,
+)
 from .constants import RESPONSE_MODES
 from .citations import VERIFIED_NIGERIAN_CASES
 
@@ -256,7 +258,7 @@ Rule: if you cannot give a real source_url for a case from your search results, 
             year = (case.get("year") or "").strip()
             ratio = (case.get("ratio") or "").strip()
             relevance = (case.get("relevance") or "").strip()
-            source_url = (case.get("source_url") or "").strip()
+            source_url = safe_external_url(case.get("source_url") or "")
 
             if not name:
                 continue
@@ -428,7 +430,7 @@ def render_online_case_card(idx: int, case: dict) -> str:
     year = esc(case.get("year", ""))
     ratio = esc(case.get("ratio", ""))
     relevance = esc(case.get("relevance", ""))
-    source_url = (case.get("source_url") or "").strip()
+    source_url = safe_external_url(case.get("source_url") or "")
     note = esc(case.get("verification", {}).get("note", "") or case.get("verification", {}).get("notes", ""))
 
     # Tier-based styling (translucent tints → readable on light AND dark themes)

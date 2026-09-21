@@ -232,35 +232,18 @@ _STATUTE_SEEDS = [
         ),
         "keywords": "PIA,petroleum industry act,upstream,licence,lease,permit,commission,revoke,grant,oil,gas,2021",
     },
-    # Arbitration and Conciliation Act 2023
+    # Arbitration and Mediation Act 2023
     {
-        "id": "aca_29", "source": "Arbitration and Conciliation Act 2023", "section": "Section 29",
+        "id": "ama_37", "source": "Arbitration and Mediation Act 2023", "section": "Section 37",
         "content": (
-            "Section 29 Arbitration and Conciliation Act 2023: The arbitral tribunal may award "
-            "any remedy or relief that could have been ordered by a court including: "
-            "a declaration as to any matter to be determined in the proceedings; "
-            "an injunction; an order for specific performance; an order for the rectification, "
+            "Section 37 Arbitration and Mediation Act 2023: The parties may agree on the "
+            "powers exercisable by the arbitral tribunal as regards remedies. Unless otherwise "
+            "agreed by the parties, the tribunal may make a declaration, order payment of a sum "
+            "of money, order a party to do or refrain from doing anything, order specific "
+            "performance of a contract other than one relating to land, and order rectification, "
             "setting aside or cancellation of a deed or other document. "
-            "An award is final and binding on the parties and any person claiming through them."
         ),
-        "keywords": "arbitration,award,remedy,relief,injunction,specific performance,final,binding,ACA 2023,tribunal",
-    },
-    # Limitation Law
-    {
-        "id": "lim_tort", "source": "Limitation Act / Limitation Laws (various States)", "section": "General Limitation Periods",
-        "content": (
-            "General Limitation Periods under Nigerian Law: "
-            "Simple contract: 6 years from date of breach (Limitation Act). "
-            "Tort (general): 6 years. "
-            "Personal injury claims: 3 years. "
-            "Land: 12 years (Limitation Act s.16). "
-            "Judgment debt: 12 years. "
-            "Actions against government/public officers: pre-action notice required — "
-            "typically 3 months under the Public Officers Protection Act. "
-            "Fundamental rights enforcement: no strict limitation but unreasonable delay is fatal. "
-            "Election petition: 21 days from declaration of results (Electoral Act 2022 s.132)."
-        ),
-        "keywords": "limitation,period,statute of limitations,6 years,12 years,3 years,time bar,lapse,contract,tort,land,personal injury,POPA,21 days,election petition",
+        "keywords": "arbitration,award,remedy,relief,injunction,specific performance,AMA 2023,tribunal,section 37",
     },
 ]
 
@@ -339,11 +322,12 @@ def build_rag_context(query: str, top_k: int = 6) -> str:
         return ""
 
     lines = [
-        "═══ CANDIDATE STATUTORY PROVISIONS (retrieved from primary Nigerian law) ═══",
+        "═══ CANDIDATE STATUTORY REFERENCES (curated retrieval index) ═══",
         "These provisions were retrieved as POSSIBLY relevant to the query. They are",
-        "real and quoted accurately. Cite a provision ONLY if it genuinely applies to",
-        "the issue; silently ignore any that is not on-point. When you cite one, quote",
-        "the section exactly — do not paraphrase around it.",
+        "retrieval aids, not certified copies of legislation. Cite a provision ONLY if it",
+        "genuinely applies; silently ignore anything off-point. Do not present this text",
+        "as a verbatim quotation. Verify wording, amendments, commencement, jurisdiction,",
+        "and currency against an official or otherwise reliable current copy before reliance.",
         "",
     ]
     for i, c in enumerate(top, 1):

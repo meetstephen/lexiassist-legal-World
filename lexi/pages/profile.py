@@ -233,13 +233,18 @@ def render_profile():
                     st.error("❌ Current password is incorrect.")
                 elif not new_pw:
                     st.error("❌ New password cannot be empty.")
-                elif len(new_pw) < 6:
-                    st.error("❌ Password must be at least 6 characters.")
+                elif password_error := validate_new_password(
+                    new_pw, st.session_state.get("current_username", "")
+                ):
+                    st.error(f"❌ {password_error}")
                 elif new_pw != confirm_pw:
                     st.error("❌ New passwords do not match.")
                 else:
                     st.session_state.profile["password_hash"] = hash_password(new_pw)
                     persist_profile()
+                    get_db().revoke_all_user_sessions(
+                        st.session_state.get("current_user_id", "")
+                    )
                     st.success("✅ Password updated successfully!")
                     st.rerun()
 

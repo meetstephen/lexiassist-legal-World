@@ -86,8 +86,11 @@ def render_user_management():
                         with st.form(f"reset_pw_{uid}"):
                             new_temp_pw = st.text_input("New Password", type="password", key=f"tmp_pw_{uid}")
                             if st.form_submit_button("✅ Set Password"):
-                                if len(new_temp_pw) < 6:
-                                    st.error("Min 6 characters.")
+                                password_error = validate_new_password(
+                                    new_temp_pw, user.get("username", "")
+                                )
+                                if password_error:
+                                    st.error(password_error)
                                 else:
                                     db.update_user(uid, {"password_hash": hash_password(new_temp_pw)})
                                     # Resetting a password must invalidate all existing sessions.
@@ -302,7 +305,7 @@ def render_user_management():
                 with rc1:
                     old_act = st.text_input("Repealed Act", placeholder="e.g. Arbitration Act 1988")
                 with rc2:
-                    new_act = st.text_input("Replaced by", placeholder="e.g. Arbitration and Conciliation Act 2023")
+                    new_act = st.text_input("Replaced by", placeholder="e.g. Arbitration and Mediation Act 2023")
                 rep_note = st.text_input("Note", placeholder="e.g. Fully repealed — cite 2023 Act only")
                 if st.form_submit_button("➕ Add", type="primary"):
                     if old_act.strip():

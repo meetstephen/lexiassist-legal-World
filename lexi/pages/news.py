@@ -110,7 +110,7 @@ def render_legal_news():
                 with st.spinner("🧩 Organising verified developments into your feed…"):
                     raw = generate(
                         structure_prompt, NEWS_FEED_SYSTEM, "brief", "research",
-                        enable_quality_gate=False,
+                        enable_quality_gate=False, use_web_search=False,
                     )
                 try:
                     clean = raw.strip().replace("```json", "").replace("```", "").strip()
@@ -290,7 +290,8 @@ display:inline-block;font-size:0.9rem;color:var(--la-text);">
                                     with st.spinner(f"🔬 Analysing: {title[:50]}…"):
                                         dd_result = generate(
                                             dd_prompt, NEWS_DEEPDIVE_SYSTEM, "standard", "analysis",
-                                            use_web_search=True, enable_quality_gate=False,
+                                            use_web_search=True, require_grounding=True,
+                                            enable_quality_gate=False,
                                         )
                                     st.session_state["nf_deepdive"][item_id] = dd_result
                                     st.session_state.setdefault("nf_dd_sources", {})[item_id] = \

@@ -13,7 +13,10 @@ import hashlib
 
 import pytest
 
-from lexi.auth import hash_password, hash_session_token, verify_password
+from lexi.auth import (
+    hash_password, hash_session_token, verify_password, validate_new_password,
+)
+from lexi.runtime import safe_external_url
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -158,3 +161,36 @@ class TestHashSessionToken:
         # No truncation, no crash.
         h = hash_session_token("x" * 10_000)
         assert len(h) == 64
+
+
+class TestNewPasswordPolicy:
+    def test_accepts_long_passphrase(self):
+        assert validate_new_password("correct horse battery staple", "amaka") == ""
+
+    def test_rejects_short_and_common_passwords(self):
+        assert "12 characters" in validate_new_password("short", "amaka")
+        assert "too common" in validate_new_password("Password123!", "amaka")
+
+    def test_rejects_username_inside_password(self):
+        assert "username" in validate_new_password("Amaka-is-my-passphrase", "amaka")
+
+
+class TestExternalUrlPolicy:
+    @pytest.mark.parametrize(
+        "value",
+        [
+            "javascript:alert(1)",
+            "data:text/html,boom",
+            "https://user:pass@example.com/case",
+            "https://example.com/has space",
+            "//example.com/no-scheme",
+        ],
+    )
+    def test_rejects_unsafe_navigation_targets(self, value):
+        assert safe_external_url(value) == ""
+
+    def test_accepts_https_and_removes_fragment(self):
+        assert (
+            safe_external_url("https://example.com/case?id=7#model-output")
+            == "https://example.com/case?id=7"
+        )

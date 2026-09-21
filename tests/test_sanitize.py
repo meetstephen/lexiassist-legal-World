@@ -17,10 +17,34 @@ Tests are pure — no DB, no AI, no streamlit interaction.
 from __future__ import annotations
 
 import logging
+from io import BytesIO
+import zipfile
 
 import pytest
 
-from lexi.helpers import sanitize_doc_context
+from lexi.helpers import extract_file_text, sanitize_doc_context
+
+
+class _Upload:
+    def __init__(self, name: str, data: bytes):
+        self.name = name
+        self._data = data
+
+    def getvalue(self):
+        return self._data
+
+
+def test_legacy_office_formats_are_rejected_instead_of_misparsed():
+    with pytest.raises(ValueError, match="Unsupported file type"):
+        extract_file_text(_Upload("brief.doc", b"not-a-docx"))
+
+
+def test_office_archive_with_parent_path_is_rejected():
+    payload = BytesIO()
+    with zipfile.ZipFile(payload, "w") as archive:
+        archive.writestr("../outside.xml", "malicious")
+    with pytest.raises(ValueError, match="unsafe path"):
+        extract_file_text(_Upload("brief.docx", payload.getvalue()))
 
 
 # ─────────────────────────────────────────────────────────────────────────────

@@ -499,7 +499,10 @@ def render_ai():
         st.session_state.selected_history_idx = None
         add_to_history(query.strip(), result, task, mode)
 
-        get_db().append_audit("AI_QUERY", f"task={task} mode={mode} words={len(result.split())} q={query.strip()[:120]}")
+        get_db().append_audit(
+            "AI_QUERY",
+            f"task={task} mode={mode} words={len(result.split())} query_chars={len(query.strip())}",
+        )
         st.caption(f"⏱️ Generated in {elapsed:.1f}s · {len(result.split()):,} words · "
                    f"Confidence: {confidence['overall']}/10")
 

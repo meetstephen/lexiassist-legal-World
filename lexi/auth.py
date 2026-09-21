@@ -55,6 +55,30 @@ def verify_password(password: str, stored: str) -> bool:
     return _hmac.compare_digest(candidate, stored)
 
 
+def validate_new_password(password: str, username: str = "") -> str:
+    """Return an actionable validation error, or an empty string if valid.
+
+    Length is the primary control; composition rules are intentionally avoided
+    because they encourage predictable substitutions. Existing passwords keep
+    working, while registrations and password changes use the stronger policy.
+    """
+    if len(password or "") < 12:
+        return "Password must be at least 12 characters. A passphrase is recommended."
+    if len(password) > 256:
+        return "Password must be 256 characters or fewer."
+    normalised = re.sub(r"[^a-z0-9]", "", password.lower())
+    weak = {
+        "password", "password123", "123456789012", "qwertyuiop12",
+        "letmeinplease", "changeme123", "lexiassist123",
+    }
+    if normalised in weak:
+        return "That password is too common. Choose a unique passphrase."
+    uname = re.sub(r"[^a-z0-9]", "", (username or "").lower())
+    if len(uname) >= 3 and uname in normalised:
+        return "Password must not contain the username."
+    return ""
+
+
 def is_allow_registration() -> bool:
     try:
         return str(st.secrets.get("ALLOW_REGISTRATION", "false")).lower() == "true"
@@ -473,8 +497,9 @@ def render_register_form(key_prefix: str, admin_mode: bool = False):
             if reg_pw != reg_confirm:
                 st.error("❌ Passwords do not match.")
                 return False
-            if len(reg_pw) < 6:
-                st.error("❌ Password must be at least 6 characters.")
+            password_error = validate_new_password(reg_pw, uname)
+            if password_error:
+                st.error(f"❌ {password_error}")
                 return False
             if db.get_user_by_username(uname):
                 st.error(f"❌ Username '{uname}' is already taken.")
@@ -878,8 +903,9 @@ def _verify_reset_code(username: str, code: str, new_password: str) -> dict:
     code_clean = code.strip()
     if not uname_clean or not code_clean:
         return {"ok": False, "message": "Please enter both username and code."}
-    if len(new_password) < 6:
-        return {"ok": False, "message": "New password must be at least 6 characters."}
+    password_error = validate_new_password(new_password, uname_clean)
+    if password_error:
+        return {"ok": False, "message": password_error}
 
     rec_list = db._load_list_raw(f"pwreset:{uname_clean}") or []
     if not rec_list:
@@ -996,7 +1022,7 @@ def render_forgot_password_section():
                 )
                 pwr_new = st.text_input(
                     "New Password", type="password",
-                    placeholder="Minimum 6 characters", key="pwr_new_inp",
+                    placeholder="Minimum 12 characters", key="pwr_new_inp",
                 )
                 pwr_confirm = st.text_input(
                     "Confirm New Password", type="password",
@@ -1020,8 +1046,8 @@ def render_forgot_password_section():
             if verify_btn:
                 if pwr_new != pwr_confirm:
                     st.error("❌ Passwords do not match.")
-                elif len(pwr_new) < 6:
-                    st.error("❌ Password must be at least 6 characters.")
+                elif password_error := validate_new_password(pwr_new, saved_username):
+                    st.error(f"❌ {password_error}")
                 elif not pwr_code.strip():
                     st.error("❌ Enter the 6-digit code from your email.")
                 else:

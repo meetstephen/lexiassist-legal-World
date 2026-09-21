@@ -26,7 +26,7 @@ def _get_db_url() -> str:
 # GEMINI MODELS (Best Free Tier – April 2026)
 # ═══════════════════════════════════════════════════════
 def _parse_models_config():
-    models_str = "" 
+    models_str = ""
     try:
         models_str = st.secrets["GEMINI_MODELS"]
     except Exception:
@@ -92,7 +92,9 @@ THINKING_BUDGETS = {
     "comprehensive": -1,
 }
 
-UPLOAD_TYPES = ["pdf", "docx", "doc", "txt", "xlsx", "xls", "csv", "json", "rtf"]
+# Legacy .doc and .xls need parsers that are not installed. Only advertise
+# formats the application can validate and parse safely.
+UPLOAD_TYPES = ["pdf", "docx", "txt", "xlsx", "csv", "json", "rtf"]
 
 # Max characters of an uploaded document fed into the model as context.
 # Gemini 2.5 models have a ~1M-token window (~4M chars), so the old 8,500-char

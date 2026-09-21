@@ -251,7 +251,7 @@ LEGAL_DATA_VERSION = {
     "notes": (
         "Finance Act 2023 amends Stamp Duties Act — stamp duty rates updated. "
         "Electoral Act 2022 (all election petition provisions). "
-        "Arbitration and Conciliation Act 2023 now governs all arbitrations. "
+        "Arbitration and Mediation Act 2023 now governs all arbitrations. "
         "PIA 2021 fully in force — governs all upstream/midstream petroleum operations."
     ),
 }

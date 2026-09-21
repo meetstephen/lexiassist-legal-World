@@ -431,7 +431,7 @@ def render_source_backed_research():
         "Research Question",
         height=120,
         key="sbr_query",
-        placeholder="E.g. What is the current position on setting aside arbitral awards under the Arbitration and Conciliation Act 2023?",
+        placeholder="E.g. What is the current position on setting aside arbitral awards under the Arbitration and Mediation Act 2023?",
     )
 
     sources = st.text_area(
@@ -441,7 +441,7 @@ def render_source_backed_research():
         placeholder=(
             "Paste source extracts here.\n\n"
             "Example:\n"
-            "SOURCE 1: Arbitration and Conciliation Act 2023, section ...\n"
+            "SOURCE 1: Arbitration and Mediation Act 2023, section ...\n"
             "Extract: ...\n\n"
             "SOURCE 2: Supreme Court case extract ...\n"
             "Extract: ...\n\n"
@@ -474,7 +474,10 @@ def render_source_backed_research():
             "7. Verification Checklist"
         )
         with st.spinner("🔗 Analysing provided sources..."):
-            result = generate(prompt, SOURCE_BACKED_RESEARCH_SYSTEM, mode, "analysis")
+            result = generate(
+                prompt, SOURCE_BACKED_RESEARCH_SYSTEM, mode, "analysis",
+                use_web_search=False,
+            )
 
         st.session_state["sbr_result"] = result
         add_to_history(f"[Source-Backed Research] {query[:100]}", result, "analysis", mode)

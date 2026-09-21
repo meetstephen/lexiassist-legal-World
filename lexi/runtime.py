@@ -18,6 +18,7 @@ import json
 import logging
 import os
 import re
+from urllib.parse import urlsplit, urlunsplit
 try:
     import psycopg2
 except ImportError:
@@ -42,7 +43,7 @@ import streamlit as st
 #   - IDENTITY_CORE system prompt
 #   - PDF/DOCX export footers
 #   - README.md (manually kept in sync)
-__version__ = "9.11.0"
+__version__ = "9.12.0"
 
 # ── Public-facing brand version ───────────────────────────────────────
 # The internal semver above keeps climbing with every change, which looks
@@ -293,6 +294,27 @@ def esc(text: str) -> str:
     if not text:
         return ""
     return html_mod.escape(str(text))
+
+
+def safe_external_url(value: str) -> str:
+    """Return a display-safe external HTTP(S) URL, or an empty string.
+
+    HTML escaping does not neutralise dangerous URL schemes. Grounding
+    metadata and model-produced JSON can reach clickable UI elements, so
+    validate the navigation target before rendering it.
+    """
+    raw = str(value or "").strip()
+    if not raw or len(raw) > 4096 or re.search(r"[\x00-\x20\x7f]", raw):
+        return ""
+    try:
+        parts = urlsplit(raw)
+        if parts.scheme.lower() not in {"http", "https"}:
+            return ""
+        if not parts.hostname or parts.username is not None or parts.password is not None:
+            return ""
+        return urlunsplit((parts.scheme.lower(), parts.netloc, parts.path, parts.query, ""))
+    except (TypeError, ValueError):
+        return ""
 
 
 def new_id() -> str:
